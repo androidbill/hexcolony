@@ -1,9 +1,9 @@
-# CatanX
+# HexColony
 
 An online multiplayer island-trading board game, built as an installable PWA for
 phones. Create a room, share a four-letter code, and settle the island.
 
-> CatanX is an independent hobby project inspired by the classic island-trading board
+> HexColony is an independent hobby project inspired by the classic island-trading board
 > game. It is not affiliated with or endorsed by the rights holders of that game.
 
 ## Playing
@@ -24,7 +24,7 @@ No build step. It is plain ES modules served as static files:
 python -m http.server 5208 --directory public
 ```
 
-The workspace `.claude/launch.json` has a `catanx` entry that does exactly this.
+The workspace `.claude/launch.json` has a `hexcolony` entry that does exactly this.
 
 To test with two players on one machine, open `localhost:5208` in one tab and
 `127.0.0.1:5208` in another — different origins mean different `localStorage`, hence

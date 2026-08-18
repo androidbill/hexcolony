@@ -1,13 +1,13 @@
-// CatanX sound. Every effect is synthesised from oscillators at play time — no audio
+// HexColony sound. Every effect is synthesised from oscillators at play time — no audio
 // files, nothing to download, and the whole module is under a hundred lines.
 
 let ctx = null;
-let enabled = localStorage.getItem('catanx_sound') !== 'off';
+let enabled = localStorage.getItem('hexcolony_sound') !== 'off';
 
 export function soundEnabled() { return enabled; }
 export function setSound(on) {
   enabled = !!on;
-  localStorage.setItem('catanx_sound', enabled ? 'on' : 'off');
+  localStorage.setItem('hexcolony_sound', enabled ? 'on' : 'off');
 }
 
 // Browsers only allow audio to start inside a gesture, so this is called from the
@@ -80,6 +80,6 @@ export const sfx = {
 };
 
 export function buzz(pattern) {
-  if (localStorage.getItem('catanx_haptics') === 'off') return;
+  if (localStorage.getItem('hexcolony_haptics') === 'off') return;
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* fine */ }
 }

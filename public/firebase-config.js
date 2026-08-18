@@ -1,4 +1,4 @@
-// Firebase web config for CatanX. These values are public by design — a web API key
+// Firebase web config for HexColony. These values are public by design — a web API key
 // identifies the project, it does not authorise anything. Access is controlled by the
 // Firestore rules in ../firestore.rules.
 export const firebaseConfig = {

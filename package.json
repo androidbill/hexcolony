@@ -1,7 +1,7 @@
 {
-  "name": "catanx",
+  "name": "hexcolony",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "CatanX - online multiplayer island-trading board game PWA"
+  "description": "HexColony - online multiplayer island-trading board game PWA"
 }

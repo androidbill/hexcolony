@@ -1,4 +1,4 @@
-name: Deploy CatanX to GitHub Pages
+name: Deploy HexColony to GitHub Pages
 
 on:
   push:

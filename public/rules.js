@@ -1,4 +1,4 @@
-// CatanX rules engine.
+// HexColony rules engine.
 //
 // Pure and headless: no DOM, no network, no randomness that isn't handed in. Every
 // move goes through `applyMove(game, playerId, move)`, which clones the state, applies

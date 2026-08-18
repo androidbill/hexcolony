@@ -1,4 +1,4 @@
-// CatanX — room sync and interface.
+// HexColony — room sync and interface.
 //
 // The whole game lives in one Firestore document per room. Turn-based play means
 // contention is rare, and every move goes through a transaction, so a move either
@@ -42,8 +42,8 @@ function withTimeout(promise, ms) {
 
 // ---------------------------------------------------------------- identity
 const rid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-let playerId = localStorage.getItem('catanx_pid');
-if (!playerId) { playerId = rid(); localStorage.setItem('catanx_pid', playerId); }
+let playerId = localStorage.getItem('hexcolony_pid');
+if (!playerId) { playerId = rid(); localStorage.setItem('hexcolony_pid', playerId); }
 
 const AVATARS = [
   '🐺', '🦊', '🦅', '🐗', '🦌', '🐻', '🦉', '🐍', '🦂', '🐙',
@@ -51,7 +51,7 @@ const AVATARS = [
   '⚔️', '🛡️', '🏹', '⚒️', '👑', '🗿', '⛵', '🧭', '🗺️', '⚓',
   '🔥', '🌋', '⛰️', '🌾', '🌲', '🧱', '🐑', '💎', '🏰', '🎲',
 ];
-let myAvatar = localStorage.getItem('catanx_avatar') || AVATARS[Math.floor(Math.random() * AVATARS.length)];
+let myAvatar = localStorage.getItem('hexcolony_avatar') || AVATARS[Math.floor(Math.random() * AVATARS.length)];
 
 // ---------------------------------------------------------------- dom helpers
 const $ = (id) => document.getElementById(id);
@@ -147,14 +147,14 @@ function faceFor(pid) { return room?.players?.[pid]?.avatar || '🎲'; }
 view.colorOf = colorFor;
 
 // ---------------------------------------------------------------- landing screen
-$('name-input').value = localStorage.getItem('catanx_name') || '';
+$('name-input').value = localStorage.getItem('hexcolony_name') || '';
 $('avatar-face').textContent = myAvatar;
 
 $('avatar-big').addEventListener('click', () => {
   // A tap rolls to the next unused-looking avatar. No picker grid: it's one control.
   const i = AVATARS.indexOf(myAvatar);
   myAvatar = AVATARS[(i + 1 + Math.floor(Math.random() * 3)) % AVATARS.length];
-  localStorage.setItem('catanx_avatar', myAvatar);
+  localStorage.setItem('hexcolony_avatar', myAvatar);
   $('avatar-face').textContent = myAvatar;
   unlock(); sfx.tap();
   if (roomRef) updateDoc(roomRef, { [`players.${playerId}.avatar`]: myAvatar }).catch(() => {});
@@ -185,7 +185,7 @@ async function createRoom() {
   unlock();
   const name = myName();
   if (!name) return toast('Enter your name first.');
-  localStorage.setItem('catanx_name', name);
+  localStorage.setItem('hexcolony_name', name);
   $('btn-create').disabled = true;
   try {
     let code = null;
@@ -229,7 +229,7 @@ async function joinRoom() {
   const code = ($('code-input').value || '').trim().toUpperCase();
   if (!name) return toast('Enter your name first.');
   if (code.length !== 4) return toast('Room codes are four letters.');
-  localStorage.setItem('catanx_name', name);
+  localStorage.setItem('hexcolony_name', name);
   $('btn-join').disabled = true;
   try {
     const ref = doc(db, 'rooms', code);
@@ -322,7 +322,7 @@ function pulseUnavailable() {
   if (pulseMode === 'room') return;
   pulseMode = 'room';
   if (unsubPulse) { unsubPulse(); unsubPulse = null; }
-  console.warn('CatanX: pulses/ is not writable — falling back to an in-room heartbeat. '
+  console.warn('HexColony: pulses/ is not writable — falling back to an in-room heartbeat. '
     + 'Deploy firestore.rules to restore the cheap path.');
 }
 
@@ -460,7 +460,7 @@ function enterRoom(code) {
   roomCode = code;
   roomRef = doc(db, 'rooms', code);
   pulseRef = doc(db, 'pulses', code);
-  localStorage.setItem('catanx_room', code);
+  localStorage.setItem('hexcolony_room', code);
   const now = Date.now();
   lastFreshAt = now; lastPulseSeenAt = now;
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
@@ -520,7 +520,7 @@ async function leaveRoom(removeSelf = true) {
   setConnBadge(false);
   roomCode = null; roomRef = null; pulseRef = null; room = null;
   board = null; boardSeed = null; intent = null;
-  localStorage.removeItem('catanx_room');
+  localStorage.removeItem('hexcolony_room');
   keepAwake(false);
   closeSheet();
   showScreen('screen-home');
@@ -571,10 +571,10 @@ async function copyCode() {
 }
 
 async function shareRoom() {
-  const text = `Join my CatanX game — room code ${roomCode}`;
+  const text = `Join my HexColony game — room code ${roomCode}`;
   const url = location.href.split('?')[0];
   if (navigator.share) {
-    try { await navigator.share({ title: 'CatanX', text, url }); return; } catch { /* cancelled */ }
+    try { await navigator.share({ title: 'HexColony', text, url }); return; } catch { /* cancelled */ }
   }
   copyCode();
 }
@@ -1522,8 +1522,8 @@ function openSettings() {
 
 function togState(key) {
   if (key === 'sound') return soundEnabled();
-  if (key === 'haptics') return localStorage.getItem('catanx_haptics') !== 'off';
-  return localStorage.getItem('catanx_awake') === 'on';
+  if (key === 'haptics') return localStorage.getItem('hexcolony_haptics') !== 'off';
+  return localStorage.getItem('hexcolony_awake') === 'on';
 }
 function syncToggles() {
   for (const t of document.querySelectorAll('[data-tog]')) {
@@ -1535,8 +1535,8 @@ for (const t of document.querySelectorAll('[data-tog]')) {
     const key = t.dataset.tog;
     const now = !togState(key);
     if (key === 'sound') { setSound(now); if (now) { unlock(); sfx.tap(); } }
-    else if (key === 'haptics') { localStorage.setItem('catanx_haptics', now ? 'on' : 'off'); if (now) buzz(40); }
-    else { localStorage.setItem('catanx_awake', now ? 'on' : 'off'); keepAwake(now); }
+    else if (key === 'haptics') { localStorage.setItem('hexcolony_haptics', now ? 'on' : 'off'); if (now) buzz(40); }
+    else { localStorage.setItem('hexcolony_awake', now ? 'on' : 'off'); keepAwake(now); }
     syncToggles();
   });
 }
@@ -1551,7 +1551,7 @@ async function keepAwake(on) {
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
-    if (localStorage.getItem('catanx_awake') === 'on') keepAwake(true);
+    if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
     // Coming back from a locked screen is exactly when the stream is likely wedged.
     if (roomRef) { resubscribe(true); pullFromServer(true); }
   }
@@ -1585,7 +1585,7 @@ $('brand-mark').innerHTML = `
 
 // ---------------------------------------------------------------- PWA
 $('ver-home').textContent = `v${APP_VERSION}`;
-$('ver-about').textContent = `CatanX v${APP_VERSION}`;
+$('ver-about').textContent = `HexColony v${APP_VERSION}`;
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
@@ -1630,12 +1630,12 @@ $('btn-install').addEventListener('click', async () => {
 });
 
 // ---------------------------------------------------------------- test hook
-// Exposed on purpose. A game of CatanX takes four people and half an hour, which is a
+// Exposed on purpose. A game of HexColony takes four people and half an hour, which is a
 // terrible way to find out that Longest Road recounts wrong. This lets a full game be
 // driven from the console against the real Firestore document — the same reason Tetrix
 // exposes its frame stepper. It posts moves through `send`, so everything still goes
 // through the engine and the transaction; there is no privileged path here.
-window.CATANX = {
+window.HEXCOLONY = {
   get room() { return room; },
   get game() { return game(); },
   get me() { return playerId; },
@@ -1661,11 +1661,11 @@ window.addEventListener('beforeunload', () => {
 
 (async function boot() {
   showScreen('screen-home');
-  if (localStorage.getItem('catanx_awake') === 'on') keepAwake(true);
+  if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
 
   // Rejoin the room this device was last in — a locked phone killing the tab mid-game
   // should not cost you your settlements.
-  const last = localStorage.getItem('catanx_room');
+  const last = localStorage.getItem('hexcolony_room');
   if (!last) return;
   try {
     const snap = await withTimeout(getDoc(doc(db, 'rooms', last)), 5000);
@@ -1673,9 +1673,9 @@ window.addEventListener('beforeunload', () => {
       enterRoom(last);
       toast(`Back in room ${last}`);
     } else {
-      localStorage.removeItem('catanx_room');
+      localStorage.removeItem('hexcolony_room');
     }
   } catch {
-    localStorage.removeItem('catanx_room');
+    localStorage.removeItem('hexcolony_room');
   }
 })();

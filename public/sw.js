@@ -1,6 +1,6 @@
-// CatanX service worker — the ?v= in the registration URL busts the cache on deploy.
+// HexColony service worker — the ?v= in the registration URL busts the cache on deploy.
 const VERSION = new URL(self.location).searchParams.get('v') || 'dev';
-const CACHE = `catanx-${VERSION}`;
+const CACHE = `hexcolony-${VERSION}`;
 
 const CORE = [
   './',

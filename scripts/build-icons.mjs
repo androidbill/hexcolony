@@ -1,4 +1,4 @@
-// Generates the CatanX app icons as real PNG files with no image library — the pixels
+// Generates the HexColony app icons as real PNG files with no image library — the pixels
 // are computed here and the PNG container is written by hand (zlib ships with Node).
 // Run with:  node scripts/build-icons.mjs
 //

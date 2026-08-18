@@ -1,4 +1,4 @@
-// CatanX board renderer.
+// HexColony board renderer.
 //
 // Everything on the board is drawn with maths — no bitmaps, no sprite sheets, no
 // fonts beyond the system stack. Same rule as the other games in this collection:

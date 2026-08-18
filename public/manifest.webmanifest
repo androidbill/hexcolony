@@ -1,6 +1,6 @@
 {
-  "name": "CatanX",
-  "short_name": "CatanX",
+  "name": "HexColony",
+  "short_name": "HexColony",
   "description": "Settle the island with friends. Online multiplayer, no accounts, join by room code.",
   "start_url": "./index.html",
   "scope": "./",

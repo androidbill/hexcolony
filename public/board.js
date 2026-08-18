@@ -1,4 +1,4 @@
-// CatanX board geometry.
+// HexColony board geometry.
 //
 // The whole board is derived from one thing: 19 hex centres. Every vertex, edge,
 // adjacency and coastline below is *computed* from those centres by generating the
