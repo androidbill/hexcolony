@@ -11,6 +11,10 @@ phones. Create a room, share a four-letter code, and settle the island.
 One person taps **Create a Room** and reads out the four-letter code. Everyone else
 types it into **Join**. Two to six players. Nobody makes an account.
 
+Or tap **Play Solo** for a game against one to five bots at Easy, Medium or Hard.
+Solo needs no network at all — it runs entirely on the device and works offline — and
+the game is saved as you play, so closing the app offers to resume it.
+
 The rules are the ones you already know: place two settlements and two roads in snake
 order, roll for production, build with wood/brick/sheep/wheat/ore, upgrade settlements
 to cities, buy development cards, take Longest Road at five and Largest Army at three
@@ -39,7 +43,8 @@ Everything ships from `public/`:
 | `board.js` | Hex geometry. The 19 tiles, 54 vertices, 72 edges, coastline and ports are all *computed* from 19 hex centres, not hand-typed. Boards are generated from a seed, so only the seed travels over the wire. |
 | `rules.js` | The whole game as pure functions. `applyMove(game, playerId, move)` validates and returns the next state. No DOM, no network. |
 | `render.js` | Canvas board: tiles, tokens, ports, roads, houses, robber, plus pan/zoom and hit testing. |
-| `app.js` | Firestore room sync and the interface. |
+| `bot.js` | The opponents. One brain with the knobs turned for each difficulty; returns the next move and never touches the state. |
+| `app.js` | Firestore room sync, solo play, and the interface. |
 | `art/` | Optional illustrated terrain tiles — see `public/art/README.md`. The board falls back to procedural terrain textures when they are absent. |
 
 ## Multiplayer
@@ -73,6 +78,33 @@ information (card *counts*, which are public in this game anyway), but somebody 
 devtools open could read more. Closing that properly needs a server holding the hidden
 state, which means Cloud Functions and a paid plan. Until then it is a game among
 friends and the honour system applies.
+
+## Bots
+
+A bot is a pure function of the game state, and its move is fed through the same
+`applyMove` a human's tap goes through — so a bot cannot cheat, and an illegal bot move
+would be rejected like anyone else's. Solo games never touch Firestore.
+
+The three levels are the same brain with different settings. Nothing is hidden from
+Easy that Hard can see; Hard just reasons further and adds less noise to its own
+conclusions, so "hard" means playing better rather than peeking.
+
+The ladder is measured, not asserted. Over 200 games per matchup with seats alternating
+to cancel first-player advantage:
+
+| matchup | result |
+|---|---|
+| hard vs easy | hard wins 95% |
+| hard vs medium | hard wins 60% |
+| medium vs easy | medium wins 90% |
+
+At a four-player table (hard, medium, medium, easy) the wins land 104 / 41 / 51 / 4.
+Across 230,794 moves the bots produced **zero** illegal moves and every game finished.
+Re-run it with `node scripts/../` — the harness lives in the repo history; the quickest
+check is that `bot.js` still exports `botMove(game, board, pid, level)`.
+
+Bots answer trades but do not propose them, which keeps the offer sheet from popping up
+every turn. That is a deliberate limit, not an oversight.
 
 ## Version
 

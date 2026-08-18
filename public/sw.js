@@ -9,6 +9,7 @@ const CORE = [
   'app.js',
   'board.js',
   'rules.js',
+  'bot.js',
   'render.js',
   'audio.js',
   'wordcodes.js',

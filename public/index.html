@@ -48,6 +48,18 @@
                spellcheck="false" placeholder="CODE">
         <button class="btn btn-go" id="btn-join">Join</button>
       </div>
+
+      <div class="or-split"><span>or play alone</span></div>
+
+      <button class="btn btn-key" id="btn-resume" hidden>
+        <span class="btn-label">Resume Solo Game</span>
+        <span class="btn-sub" id="resume-sub"></span>
+      </button>
+
+      <button class="btn btn-ghost" id="btn-solo">
+        <span class="btn-label">Play Solo</span>
+        <span class="btn-sub">Against bots &mdash; easy, medium or hard</span>
+      </button>
     </div>
 
     <div class="home-row">
@@ -244,6 +256,42 @@
     <button class="menu-item danger" id="menu-leave"><b>Leave game</b><i>Your buildings stay on the board</i></button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-solo">
+  <h3 class="sheet-title">Play Solo</h3>
+  <p class="sheet-sub">Choose your opposition. Bots play by exactly the same rules you do.</p>
+
+  <div class="set-label">Difficulty</div>
+  <div class="seg-row" id="solo-levels">
+    <button class="seg" data-level="easy">Easy</button>
+    <button class="seg on" data-level="medium">Medium</button>
+    <button class="seg" data-level="hard">Hard</button>
+  </div>
+  <p class="hint" id="solo-blurb"></p>
+
+  <div class="opt-row">
+    <span class="opt-l">Opponents<em>How many bots at the table</em></span>
+    <div class="stepper">
+      <button class="step-b" data-solo="bots" data-step="-1">&minus;</button>
+      <span class="step-v" id="solo-bots">3</span>
+      <button class="step-b" data-solo="bots" data-step="1">+</button>
+    </div>
+  </div>
+
+  <div class="opt-row">
+    <span class="opt-l">Points to win<em>How long the game runs</em></span>
+    <div class="stepper">
+      <button class="step-b" data-solo="target" data-step="-1">&minus;</button>
+      <span class="step-v" id="solo-target">10</span>
+      <button class="step-b" data-solo="target" data-step="1">+</button>
+    </div>
+  </div>
+
+  <div class="sheet-actions">
+    <button class="btn btn-key" id="btn-solo-start"><span class="btn-label">Start Game</span></button>
+    <button class="btn btn-ghost" data-close>Cancel</button>
+  </div>
 </div>
 
 <div class="sheet" id="sheet-how">

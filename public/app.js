@@ -23,6 +23,7 @@ import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES } from './board.js';
 import { BoardView, RES_COLOR, RES_ICON, loadTerrainArt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import * as R from './rules.js';
+import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
 const app = initializeApp(firebaseConfig);
 // Some phones (iOS Safari behind content blockers, certain captive wifi) silently
@@ -118,6 +119,13 @@ let roomRef = null;
 let pulseRef = null;
 let room = null;
 let unsub = null;
+
+// Solo play is a whole game with no network at all: the same room shape lives in
+// memory, `send` applies moves locally, and the bots take their turns on a timer. Every
+// screen, sheet and renderer below is untouched by it — they only ever read `room`.
+let solo = false;
+let soloTimer = null;
+const SOLO_KEY = 'hexcolony_solo';
 
 const view = new BoardView($('board-cv'));
 // Illustrated terrain tiles load in the background. Until they arrive (or if they are
@@ -476,6 +484,7 @@ function enterRoom(code) {
 }
 
 async function leaveRoom(removeSelf = true) {
+  if (solo) { exitSolo(); return; }
   const wasPlaying = room?.state === 'playing' && game();
   const ref = roomRef;
   const others = Object.keys(room?.players || {}).filter((id) => id !== playerId);
@@ -532,6 +541,7 @@ async function leaveRoom(removeSelf = true) {
  * is actually on the server, so two people acting at once cannot both win the race.
  */
 async function send(move) {
+  if (solo) return sendLocal(move);
   if (!roomRef || sending) return false;
   sending = true;
   let rejected = null;
@@ -557,6 +567,267 @@ async function send(move) {
   nudgeCount = 0;
   return true;
 }
+
+// ---------------------------------------------------------------- solo play
+const isBot = (pid) => !!room?.players?.[pid]?.bot;
+
+/** The local twin of `send` — same engine, same validation, no server. */
+function sendLocal(move) {
+  const g = room?.game;
+  if (!g) return false;
+  const res = R.applyMove(g, playerId, move);
+  if (!res.ok) { toast(res.error); sfx.error(); return false; }
+  room.game = res.game;
+  saveSolo();
+  render();
+  scheduleBots();
+  return true;
+}
+
+/** Which bot, if any, the game is currently waiting on. */
+function botActor(g) {
+  if (!g || g.phase === 'over') return null;
+  if (g.phase === 'discard') return Object.keys(g.pending.discard).find(isBot) || null;
+  if (g.trade) {
+    // Everyone still to answer an offer, then the proposer closing it out.
+    const pending = g.seats.filter((s) => s !== g.trade.from && !g.trade.replies[s]);
+    const waiting = pending.find(isBot);
+    if (waiting) return waiting;
+    if (!pending.length && isBot(g.trade.from)) return g.trade.from;
+    return null;
+  }
+  const up = R.currentPid(g);
+  return isBot(up) ? up : null;
+}
+
+// Bots think instantly, which is unreadable. Pace each kind of move so you can follow
+// what happened — the dice in particular need a beat to be seen.
+function paceFor(move) {
+  switch (move?.type) {
+    case 'roll': return 1100;
+    case 'moveRobber': return 900;
+    case 'steal': return 800;
+    case 'build': return move.what === 'city' ? 800 : 650;
+    case 'playDev': return 900;
+    case 'endTurn': return 500;
+    default: return 620;
+  }
+}
+
+function scheduleBots(delay = 620) {
+  clearTimeout(soloTimer);
+  if (!solo) return;
+  const who = botActor(room?.game);
+  if (!who) return;
+  soloTimer = setTimeout(() => runBot(who), delay);
+}
+
+/**
+ * A guaranteed-legal move for whatever the game is waiting on.
+ *
+ * The bot brain returns null when it has nothing it wants to do, which is the right
+ * answer to "do you want anything?" but a terrible one to "it is your turn". A solo
+ * game freezing is the worst failure it has — there is no other player to nudge it —
+ * so every phase that demands an action has a dumb, always-valid answer here.
+ */
+function fallbackMove(g, pid) {
+  switch (g.phase) {
+    case 'setup': {
+      if (g.setup.need === 's') {
+        const spots = R.legalSettlements(g, pid, true);
+        return spots.length ? { type: 'setupSettlement', v: spots[0] } : null;
+      }
+      const roads = R.legalRoads(g, pid, g.setup.lastV);
+      return roads.length ? { type: 'setupRoad', e: roads[0] } : null;
+    }
+    case 'roll':
+      return { type: 'roll' };
+    case 'discard': {
+      const owed = g.pending.discard[pid];
+      if (!owed) return null;                    // someone else owes; nothing to do
+      const res = {};
+      let left = owed;
+      for (const r of RESOURCES) {
+        const take = Math.min(left, g.players[pid].res[r] || 0);
+        if (take > 0) { res[r] = take; left -= take; }
+        if (!left) break;
+      }
+      return { type: 'discard', res };
+    }
+    case 'robber': {
+      const hex = HEXES.map((h) => h.i).find((i) => i !== g.robber);
+      return hex === undefined ? null : { type: 'moveRobber', hex };
+    }
+    case 'steal':
+      return g.pending.stealFrom.length ? { type: 'steal', from: g.pending.stealFrom[0] } : null;
+    case 'build': {
+      if (g.turn.freeRoads > 0) {
+        const roads = R.legalRoads(g, pid);
+        if (roads.length) return { type: 'build', what: 'road', e: roads[0] };
+      }
+      return { type: 'endTurn' };
+    }
+    default:
+      return null;
+  }
+}
+
+function runBot(pid) {
+  if (!solo || !room?.game) return;
+  const g = room.game;
+  const board = ensureBoard();
+  const level = room.players[pid]?.level || 'medium';
+
+  let move = null;
+  try { move = botMove(g, board, pid, level); } catch (e) { console.error('bot brain failed', e); }
+  if (!move) move = fallbackMove(g, pid);
+  if (!move) return;
+
+  let res = R.applyMove(g, pid, move);
+  if (!res.ok) {
+    // A bot must never be able to wedge the game, and in solo there is nobody else to
+    // unstick it. Fall back to the always-legal move for this phase before giving up.
+    console.warn('bot move rejected:', move.type, res.error);
+    const safe = fallbackMove(g, pid);
+    res = safe ? R.applyMove(g, pid, safe) : res;
+  }
+  if (!res.ok) { console.error('bot could not act at all in phase', g.phase); return; }
+  room.game = res.game;
+  saveSolo();
+  render();
+  scheduleBots(paceFor(move));
+}
+
+// ---- persistence: a solo game survives closing the app
+function saveSolo() {
+  if (!solo || !room) return;
+  try {
+    localStorage.setItem(SOLO_KEY, JSON.stringify({
+      players: room.players, order: room.order, game: room.game,
+      settings: room.settings, level: room.level, bots: room.bots,
+    }));
+  } catch { /* storage full or blocked — the game still plays, it just won't resume */ }
+}
+function loadSolo() {
+  try { return JSON.parse(localStorage.getItem(SOLO_KEY) || 'null'); } catch { return null; }
+}
+function clearSolo() { try { localStorage.removeItem(SOLO_KEY); } catch { /* fine */ } }
+
+function enterSolo(saved) {
+  solo = true;
+  roomCode = null; roomRef = null; pulseRef = null;
+  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null;
+  room = {
+    code: 'SOLO', hostId: playerId, state: 'playing', solo: true,
+    players: saved.players, order: saved.order, game: saved.game,
+    settings: saved.settings, level: saved.level, bots: saved.bots,
+  };
+  boardSeed = null;
+  showScreen('screen-game');
+  view.resetView();
+  render();
+  // Skip the audio replay of everything that already happened on a resume.
+  lastSeq = Math.max(0, ...(room.game.log || []).map((e) => e.i || 0));
+  scheduleBots(900);
+}
+
+function startSolo(level, botCount, targetVP) {
+  const bots = makeBots(botCount, level);
+  const me = myName() || 'You';
+  const players = {
+    [playerId]: { name: me, avatar: myAvatar, colorIdx: 0, joinedAt: Date.now() },
+  };
+  for (const b of bots) {
+    players[b.id] = {
+      name: b.name, avatar: b.avatar, colorIdx: b.colorIdx,
+      joinedAt: Date.now(), bot: true, level: b.level,
+    };
+  }
+  // Seat order is shuffled, so you don't always open the board.
+  const order = [playerId, ...bots.map((b) => b.id)].sort(() => Math.random() - 0.5);
+  const settings = { targetVP, discardLimit: 7, boardMode: 'random' };
+  const game = R.newGame(order, settings);
+  enterSolo({ players, order, game, settings, level, bots: botCount });
+  saveSolo();
+  sfx.yourTurn();
+}
+
+function exitSolo() {
+  clearTimeout(soloTimer);
+  solo = false;
+  room = null;
+  board = null; boardSeed = null; intent = null;
+  clearSolo();
+  closeSheet();
+  keepAwake(false);
+  showScreen('screen-home');
+  refreshResume();
+}
+
+/** Offer to pick up an unfinished solo game. */
+function refreshResume() {
+  const saved = loadSolo();
+  const btn = $('btn-resume');
+  if (!saved?.game || saved.game.phase === 'over') { btn.hidden = true; return; }
+  const g = saved.game;
+  const mine = R.publicVP(g, playerId);
+  const best = Math.max(...g.seats.map((s) => R.publicVP(g, s)));
+  const lvl = BOT_LEVELS[saved.level]?.label || saved.level;
+  $('resume-sub').textContent = `Turn ${g.turn.num} · ${lvl} · you ${mine}, best ${best}`;
+  btn.hidden = false;
+}
+
+// ---- solo setup sheet
+let soloLevel = localStorage.getItem('hexcolony_solo_level') || 'medium';
+let soloBots = Number(localStorage.getItem('hexcolony_solo_bots') || 3);
+let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
+
+function drawSoloSheet() {
+  for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
+    b.classList.toggle('on', b.dataset.level === soloLevel);
+  }
+  $('solo-blurb').textContent = BOT_LEVELS[soloLevel]?.blurb || '';
+  $('solo-bots').textContent = String(soloBots);
+  $('solo-target').textContent = String(soloTarget);
+}
+
+$('btn-solo').addEventListener('click', () => { unlock(); sfx.tap(); drawSoloSheet(); sheet('sheet-solo'); });
+$('btn-resume').addEventListener('click', () => {
+  unlock();
+  const saved = loadSolo();
+  if (!saved?.game) { refreshResume(); return; }
+  // A finished game is not something to resume into; drop it so the offer stops.
+  if (saved.game.phase === 'over') { clearSolo(); refreshResume(); return; }
+  sfx.tap();
+  enterSolo(saved);
+});
+
+for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
+  b.addEventListener('click', () => {
+    soloLevel = b.dataset.level;
+    localStorage.setItem('hexcolony_solo_level', soloLevel);
+    sfx.tap();
+    drawSoloSheet();
+  });
+}
+for (const b of document.querySelectorAll('[data-solo]')) {
+  b.addEventListener('click', () => {
+    const step = Number(b.dataset.step);
+    if (b.dataset.solo === 'bots') {
+      soloBots = Math.max(1, Math.min(5, soloBots + step));
+      localStorage.setItem('hexcolony_solo_bots', String(soloBots));
+    } else {
+      soloTarget = Math.max(5, Math.min(15, soloTarget + step));
+      localStorage.setItem('hexcolony_solo_target', String(soloTarget));
+    }
+    sfx.tap();
+    drawSoloSheet();
+  });
+}
+$('btn-solo-start').addEventListener('click', () => {
+  closeSheet();
+  startSolo(soloLevel, soloBots, soloTarget);
+});
 
 // ---------------------------------------------------------------- lobby
 $('lobby-back').addEventListener('click', () => leaveRoom(true));
@@ -1481,6 +1752,11 @@ function renderOver(g) {
 }
 
 $('btn-again').addEventListener('click', async () => {
+  if (solo) {
+    closeSheet();
+    startSolo(room.level, room.bots, room.settings.targetVP);
+    return;
+  }
   if (!isHost()) return toast('Only the host can start a new game.');
   closeSheet();
   try {
@@ -1661,6 +1937,7 @@ window.addEventListener('beforeunload', () => {
 
 (async function boot() {
   showScreen('screen-home');
+  refreshResume();
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
 
   // Rejoin the room this device was last in — a locked phone killing the tab mid-game
