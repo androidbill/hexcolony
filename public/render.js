@@ -43,6 +43,12 @@ const TILE_ART = {
 const ART_EXT = ['jpg', 'png', 'webp', 'jpeg'];
 const artImages = {};   // terrain -> HTMLImageElement once decoded
 
+// Tiles are keyed by terrain but ports are keyed by the resource they trade, so the
+// two-for-one badges need the mapping the other way round: 'wood' -> 'forest'.
+const TERRAIN_BY_RES = Object.fromEntries(
+  Object.entries(TILE_ART).map(([terrain, res]) => [res, terrain])
+);
+
 /**
  * Kick off loading the terrain art. Safe to call repeatedly; each terrain is only
  * fetched once. `onLoad` fires per successful image so the caller can redraw.
@@ -519,19 +525,64 @@ export class BoardView {
       }
       c.restore();
 
-      const rad = R * 0.31;
+      const rad = R * 0.33;
+      const art = p.kind === 'any' ? null : artImages[TERRAIN_BY_RES[p.kind]];
+
+      if (art && art.naturalWidth) {
+        // A two-for-one port wears a picture of what it trades in.
+        //
+        // Scaling by WIDTH is exact rather than approximate: the tile images are
+        // cropped to a pointy-top hexagon's bounding box, and the incircle of a
+        // pointy-top hexagon has a diameter equal to that width. So a circle fitted to
+        // the image width is precisely the hexagon's incircle — it grazes the six edges
+        // and cannot reach the corner areas that lie outside the hexagon.
+        c.save();
+        c.beginPath(); c.arc(sx, sy, rad, 0, Math.PI * 2);
+        c.clip();
+        const scale = (rad * 2) / art.naturalWidth;
+        const w = art.naturalWidth * scale;
+        const h = art.naturalHeight * scale;
+        c.drawImage(art, sx - w / 2, sy - h / 2, w, h);
+        c.restore();
+      } else {
+        // No art loaded (yet, or at all) — the flat colour still says which resource.
+        c.beginPath(); c.arc(sx, sy, rad, 0, Math.PI * 2);
+        c.fillStyle = p.kind === 'any' ? '#e8d6b2' : RES_COLOR[p.kind];
+        c.fill();
+      }
+
+      // A cream ring reads as a life buoy and separates the badge from the sea.
       c.beginPath(); c.arc(sx, sy, rad, 0, Math.PI * 2);
-      c.fillStyle = p.kind === 'any' ? '#e8d6b2' : RES_COLOR[p.kind];
-      c.fill();
-      c.strokeStyle = 'rgba(10,20,32,0.6)';
-      c.lineWidth = Math.max(1, R * 0.03);
+      c.strokeStyle = 'rgba(232, 214, 178, 0.92)';
+      c.lineWidth = Math.max(1.2, R * 0.05);
+      c.stroke();
+      c.beginPath(); c.arc(sx, sy, rad + Math.max(1, R * 0.03), 0, Math.PI * 2);
+      c.strokeStyle = 'rgba(10,20,32,0.55)';
+      c.lineWidth = Math.max(1, R * 0.022);
       c.stroke();
 
-      c.fillStyle = p.kind === 'any' ? '#2a2118' : '#0d1b28';
-      c.font = `800 ${rad * 0.72}px ui-rounded, "Segoe UI", system-ui, sans-serif`;
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      c.fillText(p.kind === 'any' ? '3:1' : '2:1', sx, sy);
+      if (p.kind === 'any') {
+        c.fillStyle = '#2a2118';
+        c.font = `800 ${rad * 0.72}px ui-rounded, "Segoe UI", system-ui, sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText('3:1', sx, sy);
+      } else if (rad > 15) {
+        // The rate only fits once the board is zoomed in. Below that the picture is the
+        // label — a resource port is always 2:1 — and stamping tiny text over a photo
+        // would be noise rather than information.
+        const bandH = rad * 0.52;
+        c.save();
+        c.beginPath(); c.arc(sx, sy, rad, 0, Math.PI * 2); c.clip();
+        c.fillStyle = 'rgba(8, 18, 30, 0.72)';
+        c.fillRect(sx - rad, sy + rad - bandH, rad * 2, bandH);
+        c.restore();
+        c.fillStyle = '#f3e6cb';
+        c.font = `800 ${bandH * 0.78}px ui-rounded, "Segoe UI", system-ui, sans-serif`;
+        c.textAlign = 'center';
+        c.textBaseline = 'middle';
+        c.fillText('2:1', sx, sy + rad - bandH / 2);
+      }
     }
   }
 
