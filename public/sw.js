@@ -19,11 +19,11 @@ const CORE = [
   'icons/icon-512.png',
 ];
 
-// Terrain illustrations, precached so the board looks right offline. Each entry is
-// fetched with a tolerant catch below, so extensions that do not exist cost one failed
-// request at install and nothing else.
-const ART = ['wood', 'brick', 'sheep', 'wheat', 'ore']
-  .flatMap((n) => [`art/${n}.jpg`, `art/${n}.png`, `art/${n}.webp`]);
+// Terrain illustrations, precached so the board looks right offline. Only the format
+// actually shipped is listed — the fetch handler is network-first with a cache
+// fallback, so art in any other format still gets cached the first time it is used;
+// precaching every extension would just mean ten 404s on every install.
+const ART = ['wood', 'brick', 'sheep', 'wheat', 'ore'].map((n) => `art/${n}.jpg`);
 
 self.addEventListener('install', (e) => {
   // cache:'reload' so a new VERSION always pulls fresh bytes. Plain addAll() may answer

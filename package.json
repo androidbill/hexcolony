@@ -3,5 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "HexColony - online multiplayer island-trading board game PWA"
+  "description": "HexColony - online multiplayer island-trading board game PWA",
+  "devDependencies": {
+    "sharp": "^0.35.3"
+  }
 }

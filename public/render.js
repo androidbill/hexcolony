@@ -363,17 +363,20 @@ export class BoardView {
   /**
    * Paint an illustrated tile inside the current hex clip.
    *
-   * The source art is a flat-top hex and the board draws pointy-top ones, so the
-   * shapes are deliberately NOT aligned: the image is scaled to cover the hex and
-   * centred, which uses the middle of the illustration and crops whatever decorative
-   * border the source had. A vignette at the end keeps the number token readable over
-   * a busy picture.
+   * The art is cropped to the artwork hexagon's exact bounding box (see
+   * scripts/slice-tiles.mjs), and those tiles are pointy-top — the same orientation the
+   * board draws — so the illustration lines up with the hex instead of being an
+   * arbitrary texture behind it. The four corners of the image lie outside the hexagon
+   * and are simply masked away by the caller's clip.
+   *
+   * The small overscan covers the pixel or two of slop in measuring where the printed
+   * border ends, so no sliver of it can appear along an edge. A vignette at the end
+   * keeps the number token readable over a busy picture.
    */
   drawTerrainArt(img, cx, cy, R) {
     const c = this.ctx;
-    // The hex's bounding box, plus a margin so no corner can fall outside the image.
-    const boxW = R * Math.sqrt(3) * 1.04;
-    const boxH = R * 2 * 1.04;
+    const boxW = R * Math.sqrt(3) * 1.02;
+    const boxH = R * 2 * 1.02;
     const scale = Math.max(boxW / img.naturalWidth, boxH / img.naturalHeight);
     const w = img.naturalWidth * scale;
     const h = img.naturalHeight * scale;
