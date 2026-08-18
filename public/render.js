@@ -25,8 +25,18 @@ const RES_COLOR = {
 const RES_ICON = { wood: '🌲', brick: '🧱', sheep: '🐑', wheat: '🌾', ore: '⛰️' };
 export { RES_COLOR, RES_ICON };
 
-const WATER_A = '#123a5c';
-const WATER_B = '#0b2540';
+// A bright, shallow-lagoon blue. The board chrome (topbar, tray, sheets) stays dark,
+// so the sea reads as a lit map inset rather than the app changing theme.
+const WATER_A = '#bfe7f7';   // horizon
+const WATER_B = '#7cc2e4';   // foreground
+// Wave layers drawn over that gradient: a deeper blue for the troughs and a white
+// highlight for the crests, drifting in opposite directions so the sea never looks
+// like a repeating pattern.
+const WAVE_LAYERS = [
+  { colour: '#2f86b8', alpha: 0.30, amp: 3.4, len: 118, rows: 7, speed: 0.055, phase: 0.0, width: 2.0 },
+  { colour: '#1d6d9c', alpha: 0.20, amp: 2.4, len: 71,  rows: 9, speed: -0.085, phase: 1.7, width: 1.5 },
+  { colour: '#ffffff', alpha: 0.40, amp: 2.0, len: 93,  rows: 8, speed: 0.038, phase: 3.1, width: 1.6 },
+];
 
 // ---------------------------------------------------------------- terrain art
 // Illustrated tiles, if they are present in art/. Each terrain is tried in extension
@@ -270,7 +280,7 @@ export class BoardView {
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     c.clearRect(0, 0, this.w, this.h);
 
-    this.drawWater();
+    this.drawWater(t);
     this.drawCoast();
     for (const tile of this.board.tiles) this.drawHex(tile);
     this.drawPorts();
@@ -282,7 +292,7 @@ export class BoardView {
     this.drawVertexHighlights();
   }
 
-  drawWater() {
+  drawWater(t = 0) {
     const c = this.ctx;
     const g = c.createLinearGradient(0, 0, 0, this.h);
     g.addColorStop(0, WATER_A);
@@ -290,19 +300,27 @@ export class BoardView {
     c.fillStyle = g;
     c.fillRect(0, 0, this.w, this.h);
 
-    // Lazy swell lines, so the sea isn't a flat slab.
+    // The swell drifts. The render loop already runs every frame for the highlight
+    // pulse, so animating this costs nothing beyond the strokes themselves.
     c.save();
-    c.globalAlpha = 0.07;
-    c.strokeStyle = '#bfe4ff';
-    c.lineWidth = 1.5;
-    for (let i = 0; i < 9; i++) {
-      const y = (i + 0.5) * (this.h / 9);
-      c.beginPath();
-      for (let x = 0; x <= this.w; x += 12) {
-        const yy = y + Math.sin((x / 60) + i * 1.7) * 3;
-        x === 0 ? c.moveTo(x, yy) : c.lineTo(x, yy);
+    c.lineCap = 'round';
+    for (const L of WAVE_LAYERS) {
+      c.globalAlpha = L.alpha;
+      c.strokeStyle = L.colour;
+      c.lineWidth = L.width;
+      const drift = (t / 1000) * L.speed * 60;
+      for (let i = 0; i < L.rows; i++) {
+        // Rows are nudged off an even grid so the layers never line up into bands.
+        const y = ((i + 0.5) / L.rows) * this.h + Math.sin(i * 2.3 + L.phase) * 6;
+        c.beginPath();
+        for (let x = 0; x <= this.w + 8; x += 8) {
+          const yy = y
+            + Math.sin(x / L.len + drift + i * 1.31 + L.phase) * L.amp
+            + Math.sin(x / (L.len * 0.41) + drift * 1.6 + i) * (L.amp * 0.38);
+          x === 0 ? c.moveTo(x, yy) : c.lineTo(x, yy);
+        }
+        c.stroke();
       }
-      c.stroke();
     }
     c.restore();
   }
@@ -325,7 +343,9 @@ export class BoardView {
   drawCoast() {
     const c = this.ctx;
     c.save();
-    c.strokeStyle = 'rgba(224, 201, 150, 0.30)';
+    // Deeper and more opaque than it needs to be on a dark sea: against bright water a
+    // pale halo at low alpha simply is not there.
+    c.strokeStyle = 'rgba(214, 178, 116, 0.55)';
     c.lineJoin = 'round';
     for (const w of [0.30, 0.16]) {
       c.lineWidth = this.scale * w;
@@ -514,9 +534,10 @@ export class BoardView {
       const by = e.y + out.y * 0.72;
       const [sx, sy] = this.toScreen(bx, by);
 
-      // Two mooring lines from the badge back to the vertices that can use it.
+      // Two mooring lines from the badge back to the vertices that can use it. Dark
+      // rope, not cream — these cross open water and have to read against it.
       c.save();
-      c.strokeStyle = 'rgba(232, 214, 178, 0.55)';
+      c.strokeStyle = 'rgba(51, 78, 96, 0.62)';
       c.lineWidth = Math.max(1, R * 0.055);
       c.lineCap = 'round';
       for (const vid of [p.a, p.b]) {
@@ -557,7 +578,7 @@ export class BoardView {
       c.lineWidth = Math.max(1.2, R * 0.05);
       c.stroke();
       c.beginPath(); c.arc(sx, sy, rad + Math.max(1, R * 0.03), 0, Math.PI * 2);
-      c.strokeStyle = 'rgba(10,20,32,0.55)';
+      c.strokeStyle = 'rgba(18,45,64,0.75)';
       c.lineWidth = Math.max(1, R * 0.022);
       c.stroke();
 
