@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>CatanX</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<meta name="theme-color" content="#0b2540">
+<meta name="description" content="CatanX — settle the island with friends. Online multiplayer, no accounts, join by room code.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CatanX">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============================== LANDING ============================== -->
+<section class="screen" id="screen-home">
+  <div class="home-scroll">
+    <div class="brand">
+      <div class="brand-mark" id="brand-mark"></div>
+      <h1 class="wordmark">Catan<span>X</span></h1>
+      <p class="tagline">Settle the island. Trade hard. Watch the robber.</p>
+    </div>
+
+    <div class="card">
+      <div class="field-label">Your name</div>
+      <input id="name-input" class="text-input" type="text" maxlength="14" autocomplete="off"
+             autocapitalize="words" spellcheck="false" placeholder="Nickname">
+
+      <div class="field-label">Your avatar <em id="avatar-hint">tap to change</em></div>
+      <button class="avatar-big" id="avatar-big" aria-label="Change avatar"><span id="avatar-face">🐺</span></button>
+    </div>
+
+    <div class="card">
+      <button class="btn btn-key" id="btn-create">
+        <span class="btn-label">Create a Room</span>
+        <span class="btn-sub">You host, friends join with the code</span>
+      </button>
+
+      <div class="or-split"><span>or join one</span></div>
+
+      <div class="join-row">
+        <input id="code-input" class="text-input code-box" type="text" maxlength="4"
+               inputmode="latin" autocomplete="off" autocapitalize="characters"
+               spellcheck="false" placeholder="CODE">
+        <button class="btn btn-go" id="btn-join">Join</button>
+      </div>
+    </div>
+
+    <div class="home-row">
+      <button class="btn btn-ghost" id="btn-how">How to Play</button>
+      <button class="btn btn-ghost" id="btn-settings">Settings</button>
+    </div>
+
+    <footer class="ver" id="ver-home"></footer>
+  </div>
+</section>
+
+<!-- ============================== LOBBY ============================== -->
+<section class="screen" id="screen-lobby">
+  <header class="topbar">
+    <button class="icon-btn" id="lobby-back" aria-label="Leave">
+      <svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="topbar-title">Lobby</div>
+    <button class="icon-btn" id="lobby-share" aria-label="Share room">
+      <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </header>
+
+  <div class="lobby-scroll">
+    <div class="code-hero">
+      <span class="code-hero-l">Room code</span>
+      <button class="code-hero-v" id="lobby-code" title="Tap to copy">----</button>
+      <span class="code-hero-s">Everyone taps <b>Join</b> and types this</span>
+    </div>
+
+    <div class="card">
+      <div class="card-title">At the table <span id="lobby-count" class="pill">1</span></div>
+      <div class="seat-list" id="seat-list"></div>
+      <p class="hint" id="lobby-hint">Waiting for players…</p>
+    </div>
+
+    <div class="card" id="lobby-settings">
+      <div class="card-title">Game setup</div>
+
+      <div class="opt-row">
+        <span class="opt-l">Points to win<em>How long the game runs</em></span>
+        <div class="stepper">
+          <button class="step-b" data-set="target" data-step="-1">&minus;</button>
+          <span class="step-v" id="set-target">10</span>
+          <button class="step-b" data-set="target" data-step="1">+</button>
+        </div>
+      </div>
+
+      <div class="opt-row">
+        <span class="opt-l">Discard on a 7<em>Hands above this lose half</em></span>
+        <div class="stepper">
+          <button class="step-b" data-set="discard" data-step="-1">&minus;</button>
+          <span class="step-v" id="set-discard">7</span>
+          <button class="step-b" data-set="discard" data-step="1">+</button>
+        </div>
+      </div>
+
+      <div class="opt-row col">
+        <span class="opt-l">Island<em>How the tiles are laid out</em></span>
+        <div class="seg-row">
+          <button class="seg on" data-board="random">Shuffled</button>
+          <button class="seg" data-board="classic">Standard</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="lobby-actions">
+      <button class="btn btn-key" id="btn-start"><span class="btn-label">Start Game</span></button>
+      <p class="hint" id="start-hint">Needs at least 2 players.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== GAME ============================== -->
+<section class="screen" id="screen-game">
+  <header class="topbar game-top">
+    <button class="icon-btn" id="game-menu" aria-label="Menu">
+      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <div class="score-strip" id="score-strip"></div>
+    <button class="icon-btn" id="game-log-btn" aria-label="Game log">
+      <svg viewBox="0 0 24 24"><path d="M5 5h14M5 10h14M5 15h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <i class="dot" id="log-dot"></i>
+    </button>
+  </header>
+
+  <div class="board-wrap">
+    <canvas id="board-cv"></canvas>
+    <div class="board-badge" id="turn-badge"></div>
+    <div class="dice-float" id="dice-float" hidden>
+      <div class="die" id="die-a">?</div>
+      <div class="die" id="die-b">?</div>
+    </div>
+    <button class="recenter" id="btn-recenter" aria-label="Recentre board">
+      <svg viewBox="0 0 24 24"><path d="M12 3v3m0 12v3M3 12h3m12 0h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+    </button>
+    <div class="tile-tip" id="tile-tip" hidden></div>
+  </div>
+
+  <div class="tray">
+    <div class="hand" id="hand"></div>
+    <div class="actions" id="actions"></div>
+  </div>
+</section>
+
+<!-- ============================== SHEETS ============================== -->
+<div class="veil" id="veil"></div>
+
+<div class="sheet" id="sheet-build">
+  <h3 class="sheet-title">Build</h3>
+  <div class="build-grid" id="build-grid"></div>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-dev">
+  <h3 class="sheet-title">Development cards</h3>
+  <div class="dev-list" id="dev-list"></div>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-trade">
+  <h3 class="sheet-title">Trade</h3>
+  <div class="seg-row wide">
+    <button class="seg on" data-trade-tab="bank">With the bank</button>
+    <button class="seg" data-trade-tab="players">With players</button>
+  </div>
+
+  <div id="trade-bank">
+    <p class="hint">Your rate improves if you own the right port.</p>
+    <div class="bank-list" id="bank-list"></div>
+  </div>
+
+  <div id="trade-players" hidden>
+    <div class="field-label">You give</div>
+    <div class="res-picker" id="give-picker"></div>
+    <div class="field-label">You want</div>
+    <div class="res-picker" id="want-picker"></div>
+    <button class="btn btn-key" id="btn-offer"><span class="btn-label">Send offer</span></button>
+  </div>
+
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-offer">
+  <h3 class="sheet-title" id="offer-title">Trade offer</h3>
+  <div class="offer-body" id="offer-body"></div>
+  <div class="offer-replies" id="offer-replies"></div>
+  <div class="sheet-actions" id="offer-actions"></div>
+</div>
+
+<div class="sheet" id="sheet-discard">
+  <h3 class="sheet-title">The robber takes his cut</h3>
+  <p class="sheet-sub" id="discard-sub">Choose cards to discard.</p>
+  <div class="res-picker" id="discard-picker"></div>
+  <div class="sheet-actions">
+    <button class="btn btn-key" id="btn-discard"><span class="btn-label">Discard</span></button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-steal">
+  <h3 class="sheet-title">Rob someone</h3>
+  <p class="sheet-sub">Take one card at random from a player on that tile.</p>
+  <div class="steal-list" id="steal-list"></div>
+</div>
+
+<div class="sheet" id="sheet-pickres">
+  <h3 class="sheet-title" id="pickres-title">Choose</h3>
+  <p class="sheet-sub" id="pickres-sub"></p>
+  <div class="res-picker" id="pickres-picker"></div>
+  <div class="sheet-actions">
+    <button class="btn btn-key" id="btn-pickres"><span class="btn-label">Confirm</span></button>
+    <button class="btn btn-ghost" data-close>Cancel</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-log">
+  <h3 class="sheet-title">Game log</h3>
+  <div class="log-list" id="log-list"></div>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-players">
+  <h3 class="sheet-title">Players</h3>
+  <div class="player-cards" id="player-cards"></div>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-menu">
+  <h3 class="sheet-title">Menu</h3>
+  <div class="menu-list">
+    <button class="menu-item" id="menu-players"><b>Players</b><i>Scores, cards and awards</i></button>
+    <button class="menu-item" id="menu-how"><b>How to Play</b><i>Costs, rules and the robber</i></button>
+    <button class="menu-item" id="menu-settings"><b>Settings</b><i>Sound, haptics, board</i></button>
+    <button class="menu-item danger" id="menu-leave"><b>Leave game</b><i>Your buildings stay on the board</i></button>
+  </div>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-how">
+  <h3 class="sheet-title">How to Play</h3>
+  <div class="how-body">
+    <p><b>Goal.</b> Be the first to <span id="how-target">10</span> victory points. Settlements are worth 1,
+      cities 2, and the Longest Road and Largest Army cards are worth 2 each.</p>
+
+    <div class="how-costs" id="how-costs"></div>
+
+    <p><b>Setup.</b> Everyone places a settlement and a road down the table, then back up
+      again. Your <i>second</i> settlement pays out its surrounding tiles straight away, so
+      pick it for what you need, not just for what looks pretty.</p>
+
+    <p><b>Each turn.</b> Roll the dice. Every tile showing that number pays its owners —
+      one card per settlement, two per city. Then build, buy, and trade as much as you
+      like before ending your turn.</p>
+
+    <p><b>Rolling a 7.</b> Nobody produces. Anyone holding more than
+      <span id="how-discard">7</span> cards throws half away, then you move the robber onto
+      a tile and steal a card from someone built on it. That tile pays nobody until the
+      robber moves on.</p>
+
+    <p><b>Trading.</b> Four of a kind gets you any one card from the bank. Standing on a
+      generic port makes that three, and a matching two-for-one port makes it two. You can
+      also offer a swap to the table on your own turn.</p>
+
+    <p><b>Development cards.</b> Knights move the robber and count toward Largest Army
+      (three or more). There are also road building, year of plenty and monopoly cards,
+      plus five hidden victory points. A card bought this turn can't be played until your
+      next one.</p>
+  </div>
+  <div class="sheet-actions"><button class="btn btn-key" data-close><span class="btn-label">Got it</span></button></div>
+</div>
+
+<div class="sheet" id="sheet-settings">
+  <h3 class="sheet-title">Settings</h3>
+  <div class="toggle-row"><span>Sound effects</span><button class="tog" data-tog="sound"><i></i></button></div>
+  <div class="toggle-row"><span>Haptics<em>Buzz when it's your turn</em></span><button class="tog" data-tog="haptics"><i></i></button></div>
+  <div class="toggle-row"><span>Keep screen awake</span><button class="tog" data-tog="awake"><i></i></button></div>
+  <div class="set-label">About</div>
+  <p class="about-p">CatanX is an independent game inspired by the classic island-trading
+    board game. Every tile, token, port and piece on screen is drawn in code — no images,
+    no fonts, no tracking, no accounts.</p>
+  <p class="about-p ver" id="ver-about"></p>
+  <div class="sheet-actions">
+    <button class="btn btn-ghost" id="btn-refresh">Check for update</button>
+    <button class="btn btn-key" data-close><span class="btn-label">Done</span></button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-over">
+  <h3 class="sheet-title" id="over-title">Winner</h3>
+  <div class="over-hero" id="over-hero"></div>
+  <div class="final-table" id="final-table"></div>
+  <div class="sheet-actions">
+    <button class="btn btn-key" id="btn-again"><span class="btn-label">Play again</span></button>
+    <button class="btn btn-ghost" id="btn-home">Back to the start</button>
+  </div>
+</div>
+
+<!-- ============================== CHROME ============================== -->
+<div class="conn-badge" id="conn-badge" hidden>Reconnecting…</div>
+<div class="toast" id="toast"></div>
+
+<div class="banner" id="update-banner">
+  <span>A new version is ready.</span>
+  <button onclick="location.reload()">Refresh</button>
+  <button class="banner-x" onclick="this.parentElement.classList.remove('show')">&#10005;</button>
+</div>
+<div class="banner" id="install-banner">
+  <span>Install CatanX</span>
+  <button id="btn-install">Install</button>
+  <button class="banner-x" onclick="this.parentElement.classList.remove('show')">&#10005;</button>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Game rooms — open by design. There are no accounts: you join a room by saying a
+    // four-letter word out loud to the people in the room with you. Rooms hold a
+    // nickname, an emoji and a board position, and nothing else about anybody.
+    //
+    // Note this means the whole room document, including every player's hand, reaches
+    // every device in the room. Card COUNTS are public in this game anyway and the
+    // client never renders another player's actual cards, but a determined player with
+    // devtools open could read them. Closing that properly needs a server holding the
+    // hidden state (Cloud Functions on a paid plan); until then the honour system and
+    // the fact that you are playing with friends is the protection.
+    match /rooms/{code} {
+      allow read: if true;
+      allow create: if code.size() == 4
+                    && code.matches('^[A-Z]+$')
+                    && request.resource.data.keys().hasAll(['code', 'state', 'players'])
+                    && request.resource.data.code == code;
+      allow update: if true;
+      allow delete: if true;
+    }
+
+    // Connection heartbeat, one tiny document per room, kept OUT of the room itself.
+    // Firestore has no field-level deltas: a beat written inside the room would
+    // rebroadcast the entire game state to every phone every few seconds.
+    match /pulses/{code} {
+      allow read: if true;
+      allow write: if code.size() == 4
+                   && request.resource.data.keys().hasOnly(['at', 'by', 'code', 'expiresAt']);
+      allow delete: if true;
+    }
+
+    // Everything else is closed.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

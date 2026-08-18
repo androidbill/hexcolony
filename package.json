@@ -1,0 +1,7 @@
+{
+  "name": "catanx",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "CatanX - online multiplayer island-trading board game PWA"
+}
