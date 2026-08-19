@@ -59,22 +59,14 @@ function shuffle(list) {
 let playerId = localStorage.getItem('hexcolony_pid');
 if (!playerId) { playerId = rid(); localStorage.setItem('hexcolony_pid', playerId); }
 
-const AVATARS = [
-  '🐺', '🦊', '🦅', '🐗', '🦌', '🐻', '🦉', '🐍', '🦂', '🐙',
-  '🦈', '🐊', '🦏', '🐫', '🦬', '🐉', '🦡', '🦭', '🐅', '🦍',
-  '⚔️', '🛡️', '🏹', '⚒️', '👑', '🗿', '⛵', '🧭', '🗺️', '⚓',
-  '🔥', '🌋', '⛰️', '🌾', '🌲', '🧱', '🐑', '💎', '🏰', '🎲',
-];
-let myAvatar = localStorage.getItem('hexcolony_avatar') || AVATARS[Math.floor(Math.random() * AVATARS.length)];
-// The colour you would like, if it is free when you sit down.
 let myColorIdx = Number(localStorage.getItem('hexcolony_color') ?? 0);
 if (!Number.isInteger(myColorIdx) || myColorIdx < 0 || myColorIdx >= R.PLAYER_COLORS.length) myColorIdx = 0;
 
 // ---------------------------------------------------------------- dom helpers
 const $ = (id) => document.getElementById(id);
 const show = (el) => el && el.classList.remove('hidden');
-// Escapes for BOTH text and attribute contexts — names and avatars arrive from other
-// people's devices, and a quote that survives breaks straight out of an attribute.
+// Escapes for BOTH text and attribute contexts — names arrive from other people's
+// devices, and a quote that survives breaks straight out of an attribute.
 const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -205,14 +197,11 @@ function freeColourIdx(players) {
   return myColorIdx;
 }
 function nameFor(pid) { return room?.players?.[pid]?.name || 'Someone'; }
-function faceFor(pid) { return room?.players?.[pid]?.avatar || '🎲'; }
 view.colorOf = colorFor;
 
 // ---------------------------------------------------------------- landing screen
 $('name-input').value = localStorage.getItem('hexcolony_name') || '';
-$('avatar-face').textContent = myAvatar;
-
-$('avatar-big').addEventListener('click', () => { unlock(); sfx.tap(); openAvatarPicker(); });
+$('btn-colour').addEventListener('click', () => { unlock(); sfx.tap(); openColourPicker(); });
 
 function drawColourGrid() {
   const taken = takenColours();
@@ -222,7 +211,7 @@ function drawColourGrid() {
     return `<button class="colour-cell${i === mine ? ' on' : ''}" data-colour="${i}"
       style="--c:${c.hex};--ink:${c.ink}"${by ? ' disabled' : ''}
       aria-label="${esc(c.name)}${by ? ` — taken by ${esc(by.name)}` : ''}">
-      ${by ? `<span class="taken-by">${esc(by.avatar || '')}</span>` : (i === mine ? '✓' : '')}
+      ${by ? `<span class="taken-by">${esc((by.name || '?').slice(0, 2))}</span>` : (i === mine ? '✓' : '')}
     </button>`;
   }).join('');
   for (const b of document.querySelectorAll('[data-colour]')) {
@@ -247,43 +236,13 @@ function pickColour(idx) {
 function paintLookButton() {
   const c = R.PLAYER_COLORS[myColorIdx] || R.PLAYER_COLORS[0];
   $('look-swatch').style.setProperty('--c', c.hex);
+  $('colour-name').textContent = c.name;
 }
 
-function openAvatarPicker() {
+/** Colour is the only thing left to choose, so this is the whole of it. */
+function openColourPicker() {
   drawColourGrid();
-  // Avatars already spoken for in this room, so you can see them before choosing.
-  const taken = new Set(
-    Object.entries(room?.players || {})
-      .filter(([id]) => id !== playerId)
-      .map(([, p]) => p.avatar)
-  );
-  $('avatar-grid').innerHTML = AVATARS.map((a) => {
-    const cls = ['avatar-cell'];
-    if (a === myAvatar) cls.push('on');
-    if (taken.has(a)) cls.push('taken');
-    return `<button class="${cls.join(' ')}" data-avatar="${esc(a)}"
-      aria-label="Avatar ${esc(a)}"${a === myAvatar ? ' aria-current="true"' : ''}>${esc(a)}</button>`;
-  }).join('');
-  for (const b of document.querySelectorAll('[data-avatar]')) {
-    b.addEventListener('click', () => pickAvatar(b.dataset.avatar));
-  }
-  sheet('sheet-avatar');
-}
-
-function pickAvatar(avatar) {
-  if (!AVATARS.includes(avatar)) return;
-  myAvatar = avatar;
-  localStorage.setItem('hexcolony_avatar', myAvatar);
-  $('avatar-face').textContent = myAvatar;
-  sfx.tap();
-  closeSheet();
-  // Push it to whichever kind of game is in progress, if any.
-  if (roomRef) updateDoc(roomRef, { [`players.${playerId}.avatar`]: myAvatar }).catch(() => {});
-  else if (solo && room?.players?.[playerId]) {
-    room.players[playerId].avatar = myAvatar;
-    saveSolo();
-    render();
-  }
+  sheet('sheet-colour');
 }
 
 $('code-input').addEventListener('input', (e) => {
@@ -301,7 +260,7 @@ function roomIsStale(data) {
 }
 
 function freshPlayer(name, colorIdx) {
-  return { name, avatar: myAvatar, colorIdx, joinedAt: Date.now() };
+  return { name, colorIdx, joinedAt: Date.now() };
 }
 
 $('btn-create').addEventListener('click', createRoom);
@@ -1097,11 +1056,11 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   const bots = makeBots(botCount, level, myColorIdx);
   const me = myName() || 'You';
   const players = {
-    [playerId]: { name: me, avatar: myAvatar, colorIdx: myColorIdx, joinedAt: Date.now() },
+    [playerId]: { name: me, colorIdx: myColorIdx, joinedAt: Date.now() },
   };
   for (const b of bots) {
     players[b.id] = {
-      name: b.name, avatar: b.avatar, colorIdx: b.colorIdx,
+      name: b.name, colorIdx: b.colorIdx,
       joinedAt: Date.now(), bot: true, level: b.level,
     };
   }
@@ -1359,20 +1318,19 @@ function renderLobby() {
     const tags = [];
     if (pid === room.hostId) tags.push('<span class="seat-tag host">Host</span>');
     if (pid === playerId) tags.push('<span class="seat-tag you">You</span>');
-    // Your own row opens the avatar picker — the only place it is reachable once you
+    // Your own row opens the colour picker — the only place it is reachable once you
     // have left the home screen, and the only place the "already taken" marks mean
     // anything, since that is when you can see who else is at the table.
     const tag = pid === playerId ? 'button' : 'div';
-    const extra = pid === playerId ? ' data-my-seat title="Tap to change your colour and avatar"' : '';
+    const extra = pid === playerId ? ' data-my-seat title="Tap to change your colour"' : '';
     return `<${tag} class="seat${pid === playerId ? ' seat-me' : ''}" style="border-left-color:${esc(c)};--c:${esc(c)}"${extra}>
       <span class="seat-swatch"></span>
-      <span class="seat-face">${esc(p.avatar || '🎲')}</span>
       <span class="seat-name">${esc(p.name)}</span>${tags.join('')}
     </${tag}>`;
   }).join('');
 
   const mySeat = document.querySelector('[data-my-seat]');
-  if (mySeat) mySeat.addEventListener('click', () => { unlock(); sfx.tap(); openAvatarPicker(); });
+  if (mySeat) mySeat.addEventListener('click', () => { unlock(); sfx.tap(); openColourPicker(); });
 
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 10);
@@ -1421,7 +1379,7 @@ function renderLobby() {
     : isHost() ? 'Everyone in? Pick a map next.' : `Waiting for ${esc(nameFor(room.hostId))} to start.`;
   $('lobby-hint').textContent = isHost()
     ? 'Share the code — players can join until you start.'
-    : 'You can change your name and avatar on the home screen.';
+    : 'You can change your name and colour on the home screen.';
 }
 
 // ---------------------------------------------------------------- board plumbing
@@ -1725,7 +1683,7 @@ function renderScoreStrip(g) {
     const p = g.players[pid];
     const crowns = (g.award.road === pid ? '🛣️' : '') + (g.award.army === pid ? '⚔️' : '');
     return `<button class="chip${pid === up ? ' up' : ''}" style="--c:${esc(colorFor(pid))};--ink:${esc(inkFor(pid))}" data-pcard>
-      <span class="chip-face">${esc(faceFor(pid))}</span>
+      <span class="chip-name">${esc(nameFor(pid))}</span>
       <span class="chip-vp">${R.publicVP(g, pid)}</span>
       <span class="chip-cards">${R.handSize(p)}🂠</span>
       ${crowns ? `<span class="chip-crown">${crowns}</span>` : ''}
@@ -2338,7 +2296,6 @@ function drawMyOffers(g) {
       const tag = r === 'yes' ? 'Accepts — tap to trade' : r === 'no' ? 'Declined' : 'Thinking…';
       return `<button class="reply-row${r === 'yes' ? ' yes' : r === 'no' ? ' no' : ''}"
         ${r === 'yes' ? ` data-close-deal="${t.id}:${esc(pid)}"` : ' disabled'}>
-        <span>${esc(faceFor(pid))}</span>
         <span class="reply-name">${esc(nameFor(pid))}</span>
         <span class="reply-tag">${tag}</span>
       </button>`;
@@ -2410,7 +2367,7 @@ function openOffer(g) {
     // Shown from the reader's point of view: what they would hand over and what they get.
     const able = Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n);
     return `<div class="in-offer">
-      <div class="in-offer-who">${esc(faceFor(t.from))} ${esc(nameFor(t.from))}</div>
+      <div class="in-offer-who">${esc(nameFor(t.from))}</div>
       <div class="offer-row offer-row--give">
         <span class="offer-tag">You give</span>
         <span class="offer-cards">${cardBits(t.want)}</span>
@@ -2452,7 +2409,6 @@ function openSteal(g) {
     : 'Take one card at random from a player on that tile.';
   $('steal-list').innerHTML = g.pending.stealFrom.map((pid) => `
     <button class="steal-btn" style="--c:${esc(colorFor(pid))}" data-steal="${esc(pid)}">
-      <span>${esc(faceFor(pid))}</span>
       <span class="steal-name">${esc(nameFor(pid))}</span>
       <span class="steal-n">${R.handSize(g.players[pid])} cards</span>
     </button>`).join('');
@@ -2487,7 +2443,6 @@ function openPlayers() {
     if (ports.length) stats.push(`<span class="pstat">${ports.map((k) => k === 'any' ? '3:1' : `2:1 ${k}`).join(' · ')}</span>`);
     return `<div class="pcard" style="--c:${esc(colorFor(pid))}">
       <div class="pcard-top">
-        <span style="font-size:22px">${esc(faceFor(pid))}</span>
         <span class="pcard-name">${esc(nameFor(pid))}${pid === playerId ? ' (you)' : ''}</span>
         <span class="pcard-vp">${R.publicVP(g, pid)}</span>
       </div>
@@ -2597,7 +2552,6 @@ function renderOver(g) {
   const win = g.winner;
   $('over-title').textContent = win === playerId ? 'You win!' : `${nameFor(win)} wins`;
   $('over-hero').innerHTML = `
-    <div class="over-face">${esc(faceFor(win))}</div>
     <div class="over-name">${esc(nameFor(win))}</div>
     <div class="over-sub">${R.totalVP(g, win)} victory points</div>`;
 
@@ -2609,7 +2563,6 @@ function renderOver(g) {
     if (hidden) parts.push(`${hidden} hidden (${esc(p.vpCards.join(', '))})`);
     return `<div class="final-row${pid === win ? ' win' : ''}" style="--c:${esc(colorFor(pid))}">
       <span class="final-pos">${i + 1}</span>
-      <span>${esc(faceFor(pid))}</span>
       <span class="final-name">${esc(nameFor(pid))}
         <span class="final-break">${parts.join(' · ')}</span></span>
       <span class="final-vp">${R.totalVP(g, pid)}</span>
@@ -3039,6 +2992,7 @@ window.HEXCOLONY = {
   }
 
   showScreen('screen-home');
+  paintLookButton();
   refreshResume();
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
 

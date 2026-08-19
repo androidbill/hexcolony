@@ -136,18 +136,19 @@ button { background: none; border: 0; cursor: pointer; }
   text-indent: 0.36em;
 }
 
-.avatar-big {
+.colour-pick {
   width: 100%;
   display: flex; align-items: center; justify-content: center;
   background: rgba(4, 16, 28, 0.7);
   border: 1.5px solid var(--line);
   border-radius: var(--r);
-  padding: 10px;
-  font-size: 40px;
+  padding: 13px 10px;
+  /* Was 40px, for an emoji. It holds the colour's name now. */
+  font-size: 17px; font-weight: 700;
   line-height: 1.1;
   transition: transform .12s, border-color .15s;
 }
-.avatar-big:active { transform: scale(0.97); border-color: var(--gold); }
+.colour-pick:active { transform: scale(0.97); border-color: var(--gold); }
 
 .or-split {
   display: flex; align-items: center; gap: 12px;
@@ -254,14 +255,13 @@ button { background: none; border: 0; cursor: pointer; }
   border-radius: var(--r-sm);
   padding: 10px 12px;
 }
-.seat-face { font-size: 24px; line-height: 1; }
 .seat-swatch {
   width: 16px; height: 16px; border-radius: 5px;
   background: var(--c, #888);
   border: 1px solid rgba(0, 0, 0, .4);
   flex: 0 0 auto;
 }
-/* Your own row is a button — it opens the avatar picker. */
+/* Your own row is a button — it opens the colour picker. */
 .seat-me { width: 100%; text-align: left; cursor: pointer; }
 .seat-me:active { background: rgba(255, 255, 255, 0.1); }
 .seat-name { flex: 1; font-weight: 700; }
@@ -513,6 +513,7 @@ button { background: none; border: 0; cursor: pointer; }
   border: 1px solid rgba(0, 0, 0, 0.35);
   flex-shrink: 0;
   font-size: 12.5px;
+  max-width: 132px;
   opacity: 0.72;
   transition: opacity .18s, box-shadow .18s, transform .18s;
 }
@@ -523,7 +524,13 @@ button { background: none; border: 0; cursor: pointer; }
   box-shadow: 0 0 0 2px var(--gold), 0 3px 10px rgba(0, 0, 0, 0.4);
   transform: translateY(-1px);
 }
-.chip-face { font-size: 15px; line-height: 1; }
+/* A name on a colour. It has to be able to shrink: six players across a phone is not a
+   lot of room, and the colour is doing most of the identifying anyway. */
+.chip-name {
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 700;
+}
 .chip-vp { font-weight: 800; }
 .chip-cards { font-size: 11.5px; opacity: 0.8; }
 .chip-crown { font-size: 11px; }
@@ -1004,7 +1011,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .cost-bits { display: flex; gap: 7px; padding-top: 4px; }
 
 .over-hero { text-align: center; padding: 10px 0 16px; }
-.over-face { font-size: 60px; line-height: 1; }
 .over-name { font-size: 24px; font-weight: 800; margin-top: 6px; }
 .over-sub { color: var(--dim); font-size: 13px; margin-top: 3px; }
 
@@ -1152,7 +1158,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 /* Taken is not a style choice — two players in the same colour makes the board
    unreadable, so these are genuinely unavailable rather than merely discouraged. */
 .colour-cell:disabled { opacity: 0.28; }
-.colour-cell .taken-by { font-size: 15px; }
+.colour-cell .taken-by { font-size: 11px; font-weight: 800; letter-spacing: .02em; }
 
 .look-swatch {
   width: 22px; height: 22px;
@@ -1163,36 +1169,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   margin-right: 12px;
   flex: 0 0 auto;
 }
-
-/* ------------------------------------------------------------ avatar picker */
-.avatar-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
-  gap: 8px;
-  max-height: 46vh;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  padding: 2px;
-}
-.avatar-cell {
-  aspect-ratio: 1;
-  display: grid; place-items: center;
-  font-size: 26px;
-  line-height: 1;
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--line);
-  transition: transform .12s, background .15s, border-color .15s;
-}
-.avatar-cell:active { transform: scale(0.92); }
-.avatar-cell.on {
-  background: rgba(227, 186, 87, 0.24);
-  border-color: var(--gold);
-  box-shadow: 0 0 0 1px var(--gold) inset;
-}
-/* Someone else in the room already has this one. Still choosable — two identical
-   avatars are only a nuisance, not a problem — but worth flagging before you pick it. */
-.avatar-cell.taken { opacity: 0.34; }
 
 /* ------------------------------------------------------------ about */
 .about-hero { text-align: center; padding: 6px 0 10px; }
