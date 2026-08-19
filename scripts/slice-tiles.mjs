@@ -102,7 +102,13 @@ function decodePNG(buf) {
     else { const p = out[i]; r = palette[p * 3]; g = palette[p * 3 + 1]; b = palette[p * 3 + 2]; if (trns && p < trns.length) a = trns[p]; }
     rgba[i * 4] = r; rgba[i * 4 + 1] = g; rgba[i * 4 + 2] = b; rgba[i * 4 + 3] = a;
   }
-  return { w, h, rgba, colour, depth };
+  // Whether the image genuinely uses its alpha channel. A tile exported with
+  // transparent corners tells us exactly where the hexagon is, which beats any amount
+  // of guessing from colours.
+  let transparent = false;
+  for (let i = 3; i < rgba.length; i += 4) { if (rgba[i] < 128) { transparent = true; break; } }
+
+  return { w, h, rgba, colour, depth, transparent };
 }
 
 // ---------------------------------------------------------------- PNG encode
@@ -148,13 +154,12 @@ function findHexes(img, want = 5) {
   const { w, h, rgba } = img;
   const isArt = new Uint8Array(w * h);
   for (let i = 0, n = w * h; i < n; i++) {
-    const r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2], a = rgba[i * 4 + 3];
-    if (a < 128) continue;
-    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-    const nearWhite = mn > 228;
-    const nearBlack = mx < 90;
-    const grey = (mx - mn) < 14;
-    if (!nearWhite && !nearBlack && !(grey && mx < 160)) isArt[i] = 1;
+    const a = rgba[i * 4 + 3];
+    if (a < 128) continue;                                   // transparent corner
+    const r = rgba[i * 4], g = rgba[i * 4 + 1], b = rgba[i * 4 + 2];
+    if (isPage(r, g, b)) continue;                           // white margin or grey shadow
+    if (Math.max(r, g, b) < 90) continue;                    // caption text
+    isArt[i] = 1;
   }
 
   const seen = new Uint8Array(w * h);
@@ -213,53 +218,87 @@ function findHexes(img, want = 5) {
 // mask only lines up if the artwork hexagon precisely fills the image it is given.
 const isBorder = (r, g, b) => Math.min(r, g, b) > 185 && (Math.max(r, g, b) - Math.min(r, g, b)) < 70;
 
-/**
- * Measure the artwork hexagon and return the rectangle it exactly fills.
- *
- * Scanning INWARD from the outside is what makes this robust: the run of white page
- * and cream border is always light, and the first non-light pixel is the artwork edge.
- * Scanning outward from the middle would fail on the sheep, whose fleece is as pale as
- * the border.
- *
- * Only the width is measured, across the hexagon's vertical side edges where the
- * crossing is perpendicular. The height is then derived from the pointy-top ratio
- * (2/sqrt(3)), which keeps the aspect exact instead of inheriting a pixel or two of
- * error from probing a pointed corner.
- */
+// Everything that is around a tile rather than part of one: the white page, and the
+// soft neutral shadow or glow tiles are often exported with. Both are light and
+// colourless. The printed cream border is warm — its channels spread well apart — so it
+// survives this test, which is what keeps the border measurable.
+//
+// The desert tile needs all of this at once: it has transparent corners, an opaque
+// white margin inside them, AND a grey shadow along the bottom. Trusting the alpha
+// channel alone measured the white margin as tile and put the crop 29px off centre.
+const isPage = (r, g, b) => {
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  return mn > 195 && (mx - mn) < 16;
+};
+
 const HEX_ASPECT = 2 / Math.sqrt(3);
-function inscribedRect(c, img) {
-  const cx = Math.round(c.minX + c.w / 2);
-  const cy = Math.round(c.minY + c.h / 2);
+
+/**
+ * Measure the hexagon: its true centre, its width, and how much of that width is the
+ * printed border.
+ *
+ * The flood fill's bounding box is NOT good enough to centre on. A drop shadow, or any
+ * stray mark, stretches the box on one side only, and the desert tile is exactly that
+ * case — its box came out 663x818, an aspect of 0.81 where a pointy-top hexagon must be
+ * 0.866, because the shadow ran to the bottom edge of the image. Centring on that box
+ * pushed the crop down and sliced the bottom point off.
+ *
+ * So the centre is taken from the geometry instead. A pointy-top hexagon is at its full
+ * width along the straight vertical sides, which run from a quarter to three-quarters of
+ * its height — a band centred exactly on the middle. Finding the widest rows and taking
+ * the midpoint of that band gives the centre no matter what is hanging off an edge.
+ */
+function measureHex(c, img) {
   const at = (x, y) => { const i = (y * img.w + x) * 4; return [img.rgba[i], img.rgba[i + 1], img.rgba[i + 2]]; };
+  const alpha = (x, y) => img.rgba[(y * img.w + x) * 4 + 3];
+  // With a real alpha channel the hexagon's outline is already exact; without one it
+  // has to be inferred from colour, where a drop shadow can masquerade as tile.
+  const outside = (x, y) => alpha(x, y) < 128 || isPage(...at(x, y));
 
+  // Horizontal extent of the tile on each row, ignoring page and shadow.
+  const rows = [];
+  for (let y = c.minY; y <= c.maxY; y++) {
+    let left = -1, right = -1;
+    for (let x = c.minX; x <= c.maxX; x++) { if (!outside(x, y)) { left = x; break; } }
+    for (let x = c.maxX; x >= c.minX; x--) { if (!outside(x, y)) { right = x; break; } }
+    rows.push(left < 0 ? null : { y, left, right, w: right - left + 1 });
+  }
+
+  const solid = rows.filter(Boolean);
+  if (!solid.length) throw new Error('tile appears to be empty');
+  const maxW = Math.max(...solid.map((r) => r.w));
+  const band = solid.filter((r) => r.w >= maxW * 0.98);
+  const cy = Math.round((band[0].y + band[band.length - 1].y) / 2);
+
+  const mid = solid.find((r) => r.y === cy) || band[Math.floor(band.length / 2)];
+  const cx = Math.round((mid.left + mid.right) / 2);
+
+  // Border width, measured across the vertical sides where the crossing is square on.
   // Take the INNER end of the cream band rather than the first non-cream pixel: the
-  // tiles are printed with a thin dark keyline on the outside of the border, so
-  // "first pixel that isn't cream" stops immediately and measures nothing. Looking for
-  // the last cream pixel within the outer quarter steps over that keyline.
-  const limit = Math.round(c.w * 0.25);
-  let left = c.minX;
-  for (let x = c.minX; x < c.minX + limit; x++) if (isBorder(...at(x, cy))) left = x + 1;
-  let right = c.maxX;
-  for (let x = c.maxX; x > c.maxX - limit; x--) if (isBorder(...at(x, cy))) right = x - 1;
+  // tiles carry a thin dark keyline on the outside, and some carry a second gold line
+  // inside it, so "first pixel that isn't cream" stops immediately and measures nothing.
+  const limit = Math.round(maxW * 0.25);
+  let left = mid.left, right = mid.right;
+  for (let x = mid.left; x < mid.left + limit; x++) if (isBorder(...at(x, cy))) left = x + 1;
+  for (let x = mid.right; x > mid.right - limit; x--) if (isBorder(...at(x, cy))) right = x - 1;
 
-  return { inset: (right - left + 1) / c.w, cx, cy };
+  return { cx, cy, width: maxW, inset: (right - left + 1) / maxW };
 }
 
 /**
  * Turn a measured inset into the crop rectangle.
  *
- * The border is printed at one uniform width across the whole sheet, so the MEDIAN of
- * the five measurements is the trustworthy number and any single tile that disagrees is
- * a misread rather than a different tile. The sheep is exactly that case: its pale
- * fleece reaches the edge of the frame and reads as cream, which measures the border as
- * far thicker than it is. Taking the median throws that reading away.
+ * The border is printed at one uniform width across a sheet, so the MEDIAN of the
+ * measurements is the trustworthy number and any single tile that disagrees is a
+ * misread rather than a different tile. The sheep is exactly that case: its pale fleece
+ * reaches the edge of the frame and reads as cream, which measures the border as far
+ * thicker than it is. Taking the median throws that reading away.
  */
-function rectFrom(c, inset) {
-  const cx = c.minX + c.w / 2, cy = c.minY + c.h / 2;
-  const rw = c.w * inset;
+function rectFrom(m, inset) {
+  const rw = m.width * inset;
   const rh = rw * HEX_ASPECT;
   return {
-    x: Math.round(cx - rw / 2), y: Math.round(cy - rh / 2),
+    x: Math.round(m.cx - rw / 2), y: Math.round(m.cy - rh / 2),
     w: Math.round(rw), h: Math.round(rh),
   };
 }
@@ -316,7 +355,8 @@ if (hexes.length !== ORDER.length) {
   process.exit(1);
 }
 
-const measured = hexes.map((c) => inscribedRect(c, img).inset);
+const measures = hexes.map((c) => measureHex(c, img));
+const measured = measures.map((m) => m.inset);
 const sorted = measured.slice().sort((a, b) => a - b);
 
 // A hair inside the measured edge. The border measurement is good to a pixel or two,
@@ -333,19 +373,33 @@ const TRIM = Number(process.env.TILE_TRIM || 0.97);
 // the width measured off the five-tile sheet, loudly.
 const TYPICAL_INSET = 0.925;
 let median = sorted[Math.floor(sorted.length / 2)];
+
+// Some tiles defeat the colour test — the desert's cream reads as (252,228,178), whose
+// darkest channel falls below the threshold that separates border from artwork, so most
+// of its border measures as picture. Rather than keep loosening a threshold until it
+// breaks a different tile, that one gets its width stated outright and checked by eye.
+if (process.env.TILE_INSET) {
+  median = Number(process.env.TILE_INSET);
+  console.log(`  ! border inset overridden to ${median} by TILE_INSET`);
+}
 if (median < 0.80 || median > 0.98) {
   console.warn(`  ! measured border inset ${median.toFixed(3)} is implausible — `
     + `falling back to ${TYPICAL_INSET} (the width measured off the 5-tile sheet).`);
   median = TYPICAL_INSET;
 }
 const INSET = median * TRIM;
+measures.forEach((m, i) => {
+  const boxAspect = (hexes[i].w / hexes[i].h).toFixed(3);
+  console.log(`  ${(ORDER[i] || '?').padEnd(6)} centre ${m.cx},${m.cy}  width ${m.width}  `
+    + `border inset ${m.inset.toFixed(3)}  (raw box aspect ${boxAspect})`);
+});
 console.log(`border insets measured: ${measured.map((m) => m.toFixed(3)).join(', ')}`);
 console.log(`using the median, ${INSET.toFixed(3)}, for every tile`);
 
 mkdirSync(OUT, { recursive: true });
 for (let i = 0; i < hexes.length; i++) {
   const name = ORDER[i];
-  const rect = rectFrom(hexes[i], INSET);
+  const rect = rectFrom(measures[i], INSET);
   // Never upscale — the sheet is the limit of the detail that exists.
   const outW = Math.min(TARGET_W, rect.w);
   const outH = Math.round(outW * (rect.h / rect.w));

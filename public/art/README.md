@@ -14,6 +14,20 @@ Drop the five hex illustrations in this folder with these exact names:
 `.png` and `.webp` also work — `TILE_ART` in `../render.js` lists the extensions it
 tries, in order, and uses the first one that loads.
 
+Regenerate them with:
+
+```bash
+node scripts/slice-tiles.mjs hex-images.png --write
+TILE_ORDER=desert TILE_INSET=0.80 node scripts/slice-tiles.mjs desert.png --write
+```
+
+The desert needs its border width stated. Its cream reads as `(252,228,178)`, whose
+darkest channel sits below the threshold that tells border from artwork, so most of its
+frame measures as picture — and unlike the five-tile sheet there is no median to catch
+the misreading. It also arrives with transparent corners, an opaque white margin inside
+them and a grey shadow along the bottom, and it is slightly taller than a regular
+hexagon (aspect 0.81 against the sheet's 0.856).
+
 These are produced by `node scripts/slice-tiles.mjs <sheet.png> --write`, which finds
 the five tiles on a contact sheet, measures where the printed cream border ends, crops
 each artwork hexagon to its exact bounding box and writes JPEGs.
