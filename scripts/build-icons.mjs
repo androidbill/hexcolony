@@ -1,187 +1,116 @@
-// Generates the HexColony app icons as real PNG files with no image library — the pixels
-// are computed here and the PNG container is written by hand (zlib ships with Node).
+// Builds the HexColony app icons from the source logo.
 // Run with:  node scripts/build-icons.mjs
 //
-// The icon is the game in miniature: a ring of sea, a seven-hex island, and a number
-// token sitting on the middle tile.
+// The source is assets/hexcolony-logo.jpg — Bill's illustration of the hex frame holding
+// the five resources. It lives outside public/ because it is 900 KB and only this script
+// ever reads it; what ships is the four PNGs below.
+//
+// The only real decision here is the maskable icon. Android crops an adaptive icon to
+// whatever shape the launcher likes — circle, squircle, rounded square — and only
+// guarantees that the central 80%-diameter circle survives. The logo's hexagon reaches to
+// within 3% of the top and bottom edges, so at full bleed its points would simply be
+// sliced off on most phones. It is therefore scaled down and padded out to the parchment
+// colour: smaller, but the shape stays whole on every launcher.
 
-import { deflateSync } from 'node:zlib';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import sharp from 'sharp';
 
-const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'icons');
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const SRC = join(ROOT, 'assets', 'hexcolony-logo.jpg');
+const OUT = join(ROOT, 'public', 'icons');
 mkdirSync(OUT, { recursive: true });
 
-// ---------------------------------------------------------------- PNG writer
-const CRC_TABLE = (() => {
-  const t = new Int32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c;
-  }
-  return t;
-})();
-
-function crc32(buf) {
-  let c = -1;
-  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xFF] ^ (c >>> 8);
-  return (c ^ -1) >>> 0;
-}
-
-function chunk(type, data) {
-  const len = Buffer.alloc(4);
-  len.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([len, body, crc]);
-}
-
-/** rgba: Uint8Array of size w*h*4. */
-function encodePNG(w, h, rgba) {
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(w, 0);
-  ihdr.writeUInt32BE(h, 4);
-  ihdr[8] = 8;    // bit depth
-  ihdr[9] = 6;    // colour type: RGBA
-  ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
-
-  // Each scanline is prefixed with filter type 0 (none) — simplest valid encoding.
-  const raw = Buffer.alloc(h * (w * 4 + 1));
-  for (let y = 0; y < h; y++) {
-    raw[y * (w * 4 + 1)] = 0;
-    rgba.subarray(y * w * 4, (y + 1) * w * 4).forEach((v, i) => {
-      raw[y * (w * 4 + 1) + 1 + i] = v;
-    });
-  }
-
-  return Buffer.concat([
-    Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
-    chunk('IHDR', ihdr),
-    chunk('IDAT', deflateSync(raw, { level: 9 })),
-    chunk('IEND', Buffer.alloc(0)),
-  ]);
-}
-
-// ---------------------------------------------------------------- drawing
-const hex2rgb = (h) => [
-  parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16),
-];
-const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
-
-const SEA_TOP = hex2rgb('#1c5b8c');
-const SEA_BOT = hex2rgb('#08203a');
-const SAND = hex2rgb('#e8d6b2');
-const GOLD = hex2rgb('#e3ba57');
-const BRICK = hex2rgb('#b8613a');
-const FOREST = hex2rgb('#2f6b3a');
-const INK = hex2rgb('#0d1b28');
-const PARCH = hex2rgb('#f3e6cb');
-const RED = hex2rgb('#b3261e');
-
-const SQ3 = Math.sqrt(3);
-
-/** Pointy-top regular hexagon test, circumradius r, centred on (0,0). */
-function inHex(dx, dy, r) {
-  const w = (SQ3 / 2) * r;
-  return Math.abs(dx) <= w && Math.abs(dx) + SQ3 * Math.abs(dy) <= SQ3 * r;
-}
-
-// Seven hexes: a centre plus its six neighbours, in the same pointy-top layout the
-// game board uses.
-function islandHexes(r) {
-  // Pointy-top neighbours sit left/right at sqrt(3)r, and on the diagonals at
-  // (sqrt(3)r/2, 1.5r). Nothing sits directly above or below — that would overlap.
-  const dx = SQ3 * r, dy = 1.5 * r;
-  return [
-    { x: 0, y: 0, fill: FOREST },
-    { x: -dx, y: 0, fill: GOLD }, { x: dx, y: 0, fill: GOLD },
-    { x: -dx / 2, y: -dy, fill: BRICK }, { x: dx / 2, y: -dy, fill: BRICK },
-    { x: -dx / 2, y: dy, fill: BRICK }, { x: dx / 2, y: dy, fill: BRICK },
-  ];
-}
-
 /**
- * @param size    pixel size
- * @param maskable when true the sea fills the whole square and the island is drawn
- *                 smaller, so nothing important lands outside the safe circle.
+ * Where the hexagon actually sits, and the colour of the paper behind it.
+ *
+ * Measured rather than assumed: if the logo is ever re-exported with a different margin,
+ * the maskable icon has to follow it or the points start getting clipped again. A row
+ * counts as artwork only once several pixels are dark, so the parchment's JPEG speckle
+ * cannot drag the box out to the edges.
  */
-function drawIcon(size, maskable) {
-  const px = new Uint8Array(size * size * 4);
-  const c = size / 2;
-  const seaR = maskable ? size : size * 0.485;
-  const hexR = size * (maskable ? 0.108 : 0.135);
-  const hexes = islandHexes(hexR);
-  const tokenR = hexR * 0.52;
-
-  const set = (i, rgb, a = 255) => {
-    px[i] = rgb[0]; px[i + 1] = rgb[1]; px[i + 2] = rgb[2]; px[i + 3] = a;
+async function measure() {
+  const { data, info } = await sharp(SRC).raw().toBuffer({ resolveWithObject: true });
+  const { width: w, height: h, channels: ch } = info;
+  const lum = (x, y) => {
+    const i = (y * w + x) * ch;
+    return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
   };
+  const DARK = 165, MIN = 8;
+  const rowDark = (y) => { let n = 0; for (let x = 0; x < w; x++) if (lum(x, y) < DARK) n++; return n; };
+  const colDark = (x) => { let n = 0; for (let y = 0; y < h; y++) if (lum(x, y) < DARK) n++; return n; };
 
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const i = (y * size + x) * 4;
-      const dx = x - c + 0.5;
-      const dy = y - c + 0.5;
-      const dist = Math.hypot(dx, dy);
+  let top = 0, bot = h - 1, left = 0, right = w - 1;
+  while (top < h && rowDark(top) < MIN) top++;
+  while (bot > 0 && rowDark(bot) < MIN) bot--;
+  while (left < w && colDark(left) < MIN) left++;
+  while (right > 0 && colDark(right) < MIN) right--;
 
-      // Outside the disc: transparent for the round icon, sea for the maskable one.
-      if (!maskable && dist > seaR) { px[i + 3] = 0; continue; }
+  // The paper, averaged over the four corners so one speckle cannot set it.
+  const px = (x, y) => { const i = (y * w + x) * ch; return [data[i], data[i + 1], data[i + 2]]; };
+  const corners = [px(3, 3), px(w - 4, 3), px(3, h - 4), px(w - 4, h - 4)];
+  const paper = [0, 1, 2].map((k) => Math.round(corners.reduce((n, c) => n + c[k], 0) / 4));
 
-      // Sea, with a vertical gradient and a sand rim just inside the edge.
-      let rgb = mix(SEA_TOP, SEA_BOT, Math.min(1, Math.max(0, y / size)));
-      if (!maskable && dist > seaR - size * 0.028) rgb = SAND;
-
-      // Land.
-      for (const h of hexes) {
-        const hx = dx - h.x, hy = dy - h.y;
-        if (inHex(hx, hy, hexR * 0.985)) {
-          rgb = h.fill;
-          // A darker inner edge so neighbouring tiles stay legible when tiny.
-          if (!inHex(hx, hy, hexR * 0.86)) rgb = mix(h.fill, INK, 0.35);
-          break;
-        }
-      }
-
-      // The number token on the middle tile.
-      if (dist < tokenR) rgb = PARCH;
-      if (dist < tokenR && dist > tokenR * 0.82) rgb = mix(PARCH, INK, 0.3);
-
-      set(i, rgb);
-    }
-  }
-
-  // A fat red "8" on the token — the luckiest number on the board, drawn as two rings.
-  const ringOuter = tokenR * 0.50, ringInner = tokenR * 0.24, ringW = tokenR * 0.145;
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const dx = x - c + 0.5;
-      for (const [cy, rad] of [[-ringOuter * 0.52, ringOuter * 0.52], [ringOuter * 0.52, ringOuter * 0.58]]) {
-        const dy = y - c + 0.5 - cy;
-        const d = Math.hypot(dx, dy);
-        if (Math.abs(d - rad) < ringW / 2) {
-          const i = (y * size + x) * 4;
-          if (px[i + 3] > 0) set(i, RED);
-        }
-      }
-    }
-  }
-
-  return encodePNG(size, size, px);
+  // Half the hexagon's widest span, as a fraction of the image — the radius that has to
+  // fit inside a launcher's safe circle. Measured from the image centre, not the box
+  // centre, because that is what the icon is centred on.
+  const c = w / 2;
+  const reach = Math.max(bot - c, c - top, right - c, c - left) / w;
+  return { w, h, left, right, top, bot, paper, reach };
 }
 
-for (const [name, size, maskable] of [
-  ['icon-192.png', 192, false],
-  ['icon-512.png', 512, false],
-  ['icon-maskable-512.png', 512, true],
-  // iOS ignores transparency and composites the icon onto black, so the home-screen
-  // icon uses the full-bleed drawing rather than the round one — otherwise an iPhone
-  // shows the island in a black square.
-  ['apple-touch-icon.png', 180, true],
-]) {
-  const buf = drawIcon(size, maskable);
-  writeFileSync(join(OUT, name), buf);
-  console.log(`${name.padEnd(24)} ${size}x${size}  ${(buf.length / 1024).toFixed(1)} KB`);
+// 256 colours, and not fewer. Dropping to 128 halves the file but turns the pasture and
+// forest tiles muddy brown — and telling the five resources apart at a glance is the
+// entire job of this logo, so the bytes are the right trade.
+const png = (img) => img
+  .png({ compressionLevel: 9, effort: 10, palette: true, colours: 256, dither: 0.5 })
+  .toBuffer();
+
+async function main() {
+  const m = await measure();
+  console.log(`source ${m.w}x${m.h}  hexagon ${m.right - m.left + 1}x${m.bot - m.top + 1}`
+    + `  reach ${(m.reach * 100).toFixed(1)}% of width  paper rgb(${m.paper.join(', ')})`);
+
+
+  // Padding is real paper, not a flat fill. A solid rectangle of the average parchment
+  // colour behind a textured one leaves a visible square seam exactly where the artwork
+  // ends; lifting a corner of the source and blowing it up keeps the grain running to the
+  // edge. The corner is taken from left of x=81, which the measurement above shows is
+  // clear of the hexagon on every row.
+  const paperGround = async (size) => sharp(SRC)
+    .extract({ left: 0, top: 0, width: 80, height: 80 })
+    .resize(size, size, { kernel: 'lanczos3' })
+    .blur(1.4)
+    .png()
+    .toBuffer();
+
+  for (const [name, size, mode] of [
+    ['icon-192.png', 192, 'full'],
+    ['icon-512.png', 512, 'full'],
+    ['icon-maskable-512.png', 512, 'safe'],
+    // iOS applies its own rounded-square mask, which takes the corners but not the edges,
+    // so the hexagon's points survive at close to full bleed. It also ignores
+    // transparency and composites onto black — a non-issue here only because the source
+    // has opaque paper behind it.
+    ['apple-touch-icon.png', 180, 'inset'],
+  ]) {
+    // 'safe' keeps the hexagon's furthest point inside the 80%-diameter circle Android
+    // promises to show. 0.41 rather than 0.40 buys back a little size and is still inside
+    // every launcher shape.
+    const scale = mode === 'safe' ? 0.41 / m.reach : mode === 'inset' ? 0.94 : 1;
+    const inner = Math.round(size * scale);
+    const padL = Math.floor((size - inner) / 2);
+    const padR = size - inner - padL;
+
+    const art = await sharp(SRC).resize(inner, inner, { fit: 'cover', kernel: 'lanczos3' }).png().toBuffer();
+    const img = (padL > 0 || padR > 0)
+      ? sharp(await paperGround(size)).composite([{ input: art, left: padL, top: padL }])
+      : sharp(art);
+    const buf = await png(img);
+    writeFileSync(join(OUT, name), buf);
+    console.log(`${name.padEnd(24)} ${size}x${size}  art ${inner}px  ${(buf.length / 1024).toFixed(1)} KB`);
+  }
 }
+
+main().catch((e) => { console.error(e); process.exit(1); });

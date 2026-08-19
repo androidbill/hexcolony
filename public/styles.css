@@ -71,8 +71,15 @@ button { background: none; border: 0; cursor: pointer; }
 
 /* ------------------------------------------------------------ brand */
 .brand { text-align: center; padding: 6px 0 2px; }
-.brand-mark { width: 92px; height: 92px; margin: 0 auto 6px; }
-.brand-mark svg { width: 100%; height: 100%; display: block; }
+.brand-mark {
+  width: 92px; height: 92px;
+  margin: 0 auto 6px;
+  display: block;
+  border-radius: 18px;
+  /* The logo is a hexagon on paper, so it needs an edge of its own against the dark
+     landing page — without one the parchment just bleeds into the background. */
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(232, 214, 178, 0.28);
+}
 
 .wordmark {
   margin: 0;

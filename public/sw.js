@@ -21,9 +21,11 @@ const CORE = [
   'sfx/index.json',
   'firebase-config.js',
   'manifest.webmanifest',
+  // Only the icon the app itself shows. The 512s are for the launcher and the splash
+  // screen, which the OS fetches at install time — precaching them would cost every
+  // player 330 KB for images the page never draws.
   'icons/icon-192.png',
   'icons/apple-touch-icon.png',
-  'icons/icon-512.png',
 ];
 
 // Terrain illustrations, precached so the board looks right offline. Only the format

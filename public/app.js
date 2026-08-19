@@ -2515,32 +2515,6 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// ---------------------------------------------------------------- brand mark
-$('brand-mark').innerHTML = `
-<svg viewBox="0 0 100 100" aria-hidden="true">
-  <defs>
-    <linearGradient id="bmSea" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1c5b8c"/><stop offset="1" stop-color="#0b2540"/>
-    </linearGradient>
-    <linearGradient id="bmLand" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#e3ba57"/><stop offset="1" stop-color="#b8613a"/>
-    </linearGradient>
-  </defs>
-  <circle cx="50" cy="50" r="46" fill="url(#bmSea)" stroke="#e8d6b2" stroke-width="3" stroke-opacity=".55"/>
-  ${[[50, 30], [33, 40], [67, 40], [33, 60], [67, 60], [50, 70], [50, 50]].map(([x, y], i) => {
-    const r = 11.5;
-    const pts = [0, 1, 2, 3, 4, 5].map((k) => {
-      const a = (Math.PI / 180) * (60 * k - 30);
-      return `${(x + r * Math.cos(a)).toFixed(1)},${(y + r * Math.sin(a)).toFixed(1)}`;
-    }).join(' ');
-    return `<polygon points="${pts}" fill="${i === 6 ? '#2f6b3a' : 'url(#bmLand)'}"
-      stroke="#0d1b28" stroke-width="1.6" stroke-opacity=".5"/>`;
-  }).join('')}
-  <circle cx="50" cy="50" r="5.4" fill="#f3e6cb"/>
-  <text x="50" y="52.4" text-anchor="middle" font-size="7.4" font-weight="800"
-    fill="#b3261e" font-family="system-ui, sans-serif">8</text>
-</svg>`;
-
 // ---------------------------------------------------------------- app menu
 function closeKebab() {
   const menu = $('kebab-menu');
