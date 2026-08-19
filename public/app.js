@@ -1846,8 +1846,16 @@ function renderActions(g) {
   const mine = R.isTurn(g, playerId);
   const p = g.players[playerId];
   const bar = $('actions');
-  const devHand = p ? Object.entries(p.dev).filter(([k, n]) => k !== 'vp' && n > 0) : [];
-  const devBadge = devHand.reduce((n, [, c]) => n + c, 0);
+  // Whether the Cards sheet opens is a question about what is HELD, not about what can be
+  // played this second. Gating it on the playable subset — which excludes victory points
+  // and anything bought this turn — meant a victory point card, five of the twenty-five in
+  // the deck, left the tray saying you owned a development card while the only door to it
+  // was greyed out. What can actually be played is decided inside the sheet, per card,
+  // where there is room to say why not.
+  const held = p ? R.devCount(p) : 0;
+  // The badge matches the tray's count rather than the playable subset; a badge that
+  // disagreed with the number two inches below it would be its own small mystery.
+  const devBadge = held;
 
   if (!p) { bar.innerHTML = actBtn('log', '📜', 'Game log', { wide: true }); return; }
 
@@ -1879,7 +1887,7 @@ function renderActions(g) {
   if (g.phase === 'roll') {
     bar.innerHTML =
       actBtn('roll', '🎲', 'Roll', { primary: true, wide: true }) +
-      actBtn('dev', '🃏', 'Cards', { disabled: !devHand.length, badge: devBadge || 0 }) +
+      actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }) +
       actBtn('log', '📜', 'Log'); return;
   }
 
@@ -1890,7 +1898,7 @@ function renderActions(g) {
   bar.innerHTML =
     actBtn('build', '🏗️', 'Build', { disabled: !anyBuild && !mustPlace, primary: mustPlace }) +
     actBtn('trade', '🤝', 'Trade', { disabled: R.handSize(p) === 0 }) +
-    actBtn('dev', '🃏', 'Cards', { disabled: !devHand.length && !can.dev, badge: devBadge || 0, ready: can.dev }) +
+    actBtn('dev', '🃏', 'Cards', { disabled: !held && !can.dev, badge: devBadge || 0, ready: can.dev }) +
     actBtn('end', '✔️', 'End turn', { primary: !mustPlace, disabled: mustPlace });
 }
 
