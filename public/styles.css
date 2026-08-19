@@ -760,6 +760,23 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .banner .banner-x { background: none; color: var(--dim); padding: 6px 4px; }
 
+/* A standing instruction in the tray. The turn badge sits at the top of the board and
+   is easy to miss on a phone — the tray is where a player's eyes and thumbs already
+   are, so anything the game is waiting on has to be said here too. */
+.act-prompt {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  border-radius: 13px;
+  padding: 12px 10px;
+  font-size: 13.5px; font-weight: 700;
+  background: linear-gradient(180deg, rgba(227, 186, 87, 0.22), rgba(227, 186, 87, 0.1));
+  border: 1px solid rgba(227, 186, 87, 0.5);
+  color: var(--gold);
+  animation: prompt-pulse 1.7s ease-in-out infinite;
+}
+@keyframes prompt-pulse { 50% { border-color: rgba(227, 186, 87, 0.95); } }
+.act-prompt .act-ico { font-size: 17px; }
+
 /* ------------------------------------------------------------ kebab menu */
 .kebab-wrap {
   position: fixed;

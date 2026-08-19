@@ -107,7 +107,14 @@ function closeSheet() {
   openSheet = null;
   $('veil').classList.remove('show');
 }
-$('veil').addEventListener('click', closeSheet);
+// Sheets the game is actually waiting on. Tapping the veil used to dismiss these, and
+// because nothing re-renders while it is still your turn there was then no way to get
+// them back — the game simply looked frozen. They now stay put until they are answered.
+const MANDATORY_SHEETS = new Set(['sheet-discard', 'sheet-steal']);
+$('veil').addEventListener('click', () => {
+  if (MANDATORY_SHEETS.has(openSheet)) return;
+  closeSheet();
+});
 document.addEventListener('click', (e) => {
   if (e.target.closest('[data-close]')) closeSheet();
 });
@@ -218,7 +225,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic' },
+      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true },
       players: { [playerId]: freshPlayer(name, 0) },
       order: [],
       game: null,
@@ -300,7 +307,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic' },
+        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true },
         players: { [playerId]: freshPlayer(name, 0) },
         order: [],
         game: null,
@@ -785,7 +792,7 @@ function enterSolo(saved) {
   scheduleBots(900);
 }
 
-function startSolo(level, botCount, targetVP, layout = 'classic') {
+function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true) {
   const bots = makeBots(botCount, level);
   const me = myName() || 'You';
   const players = {
@@ -799,7 +806,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic') {
   }
   // Seat order is shuffled, so you don't always open the board.
   const order = [playerId, ...bots.map((b) => b.id)].sort(() => Math.random() - 0.5);
-  const settings = { targetVP, discardLimit: 7, boardMode: 'random', layout };
+  const settings = { targetVP, discardLimit: 7, boardMode: 'random', layout, useRobber };
   const game = R.newGame(order, settings);
   enterSolo({ players, order, game, settings, level, bots: botCount });
   saveSolo();
@@ -836,6 +843,7 @@ let soloLevel = localStorage.getItem('hexcolony_solo_level') || 'medium';
 let soloBots = Number(localStorage.getItem('hexcolony_solo_bots') || 3);
 let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
 let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'classic';
+let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
@@ -846,6 +854,12 @@ function drawSoloSheet() {
     b.classList.toggle('on', b.dataset.soloLayout === soloLayout);
   }
   $('solo-layout-blurb').textContent = LAYOUT_INFO[soloLayout]?.blurb || '';
+  for (const b of document.querySelectorAll('[data-solo-robber]')) {
+    b.classList.toggle('on', (b.dataset.soloRobber === 'on') === soloRobber);
+  }
+  $('solo-robber-blurb').textContent = soloRobber
+    ? 'Move the robber and rob whoever it lands on.'
+    : 'No robber: take a card from any player instead.';
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
 }
@@ -854,6 +868,14 @@ for (const b of document.querySelectorAll('[data-solo-layout]')) {
   b.addEventListener('click', () => {
     soloLayout = b.dataset.soloLayout;
     localStorage.setItem('hexcolony_solo_layout', soloLayout);
+    sfx.tap();
+    drawSoloSheet();
+  });
+}
+for (const b of document.querySelectorAll('[data-solo-robber]')) {
+  b.addEventListener('click', () => {
+    soloRobber = b.dataset.soloRobber === 'on';
+    localStorage.setItem('hexcolony_solo_robber', soloRobber ? 'on' : 'off');
     sfx.tap();
     drawSoloSheet();
   });
@@ -894,7 +916,7 @@ for (const b of document.querySelectorAll('[data-solo]')) {
 }
 $('btn-solo-start').addEventListener('click', () => {
   closeSheet();
-  startSolo(soloLevel, soloBots, soloTarget, soloLayout);
+  startSolo(soloLevel, soloBots, soloTarget, soloLayout, soloRobber);
 });
 
 // ---------------------------------------------------------------- lobby
@@ -939,6 +961,14 @@ for (const b of document.querySelectorAll('[data-board]')) {
   b.addEventListener('click', () => {
     if (!isHost()) return toast('Only the host can change the setup.');
     updateDoc(roomRef, { 'settings.boardMode': b.dataset.board }).catch(() => {});
+    sfx.tap();
+  });
+}
+
+for (const b of document.querySelectorAll('[data-robber]')) {
+  b.addEventListener('click', () => {
+    if (!isHost()) return toast('Only the host can change the setup.');
+    updateDoc(roomRef, { 'settings.useRobber': b.dataset.robber === 'on' }).catch(() => {});
     sfx.tap();
   });
 }
@@ -992,6 +1022,14 @@ function renderLobby() {
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 10);
   $('set-discard').textContent = String(s.discardLimit || 7);
+  const useRobber = s.useRobber !== false;
+  for (const b of document.querySelectorAll('[data-robber]')) {
+    b.classList.toggle('on', (b.dataset.robber === 'on') === useRobber);
+  }
+  $('robber-blurb').textContent = useRobber
+    ? 'Move the robber and rob whoever it lands on.'
+    : 'No robber: take a card from any player instead.';
+
   const layout = s.layout || 'classic';
   for (const b of document.querySelectorAll('[data-layout]')) {
     b.classList.toggle('on', b.dataset.layout === layout);
@@ -1200,6 +1238,7 @@ function turnText(g) {
   }
   if (g.phase === 'robber') return mine ? 'Move the robber — tap a tile' : `${who} is moving the robber`;
   if (g.phase === 'steal') return mine ? 'Choose who to rob' : `${who} is choosing who to rob`;
+  if (g.phase === 'take') return mine ? 'Rolled a 7 — take a card from anyone' : `${who} is taking a card`;
   if (g.phase === 'roll') return mine ? 'Your turn — roll the dice' : `${who} to roll`;
   if (g.phase === 'build') {
     if (g.turn.freeRoads > 0 && mine) return `Place ${g.turn.freeRoads} free road${g.turn.freeRoads > 1 ? 's' : ''}`;
@@ -1273,8 +1312,8 @@ function renderActions(g) {
 
   if (g.phase === 'discard') {
     bar.innerHTML = g.pending.discard[playerId]
-      ? actBtn('discard', '🗑️', 'Discard', { primary: true, wide: true })
-      : actBtn('log', '📜', 'Game log', { wide: true });
+      ? actBtn('discard', '🗑️', `Discard ${g.pending.discard[playerId]}`, { primary: true, wide: true })
+      : `<div class="act-prompt"><span class="act-ico">⏳</span>Waiting for others to discard</div>`;
     wireActions(); return;
   }
 
@@ -1283,8 +1322,16 @@ function renderActions(g) {
     wireActions(); return;
   }
 
-  if (g.phase === 'robber' || g.phase === 'steal') {
-    bar.innerHTML = actBtn('players', '👥', 'Players') + actBtn('log', '📜', 'Log');
+  if (g.phase === 'robber') {
+    bar.innerHTML = `<div class="act-prompt"><span class="act-ico">🥷</span>Tap a highlighted tile to move the robber</div>`
+      + actBtn('log', '📜', 'Log');
+    wireActions(); return;
+  }
+
+  if (g.phase === 'steal' || g.phase === 'take') {
+    // A button back into the sheet, in case it was somehow closed.
+    bar.innerHTML = actBtn('steal', '🥷', g.phase === 'take' ? 'Take a card' : 'Rob a player', { primary: true, wide: true })
+      + actBtn('log', '📜', 'Log');
     wireActions(); return;
   }
 
@@ -1329,6 +1376,7 @@ function onAction(id) {
     case 'trade': openTrade(g); break;
     case 'dev': openDev(g); break;
     case 'discard': openDiscard(g); break;
+    case 'steal': openSteal(g); break;
     case 'players': openPlayers(); break;
     case 'log': openLog(g); break;
     case 'over': sheet('sheet-over'); break;
@@ -1693,6 +1741,11 @@ function openOffer(g) {
 
 // ---------------------------------------------------------------- steal / players / log
 function openSteal(g) {
+  const raid = g.phase === 'take';
+  $('steal-title').textContent = raid ? 'Take a card' : 'Rob someone';
+  $('steal-sub').textContent = raid
+    ? 'You rolled a 7. Take one card at random from any player.'
+    : 'Take one card at random from a player on that tile.';
   $('steal-list').innerHTML = g.pending.stealFrom.map((pid) => `
     <button class="steal-btn" style="--c:${esc(colorFor(pid))}" data-steal="${esc(pid)}">
       <span>${esc(faceFor(pid))}</span>
@@ -1702,7 +1755,8 @@ function openSteal(g) {
   for (const b of document.querySelectorAll('[data-steal]')) {
     b.addEventListener('click', () => {
       closeSheet();
-      send({ type: 'steal', from: b.dataset.steal }).then((ok) => ok && sfx.steal());
+      const type = game()?.phase === 'take' ? 'takeCard' : 'steal';
+      send({ type, from: b.dataset.steal }).then((ok) => ok && sfx.steal());
     }, { once: true });
   }
   sheet('sheet-steal');
@@ -1790,7 +1844,7 @@ function syncSheets(g) {
     if (openSheet !== 'sheet-discard') openDiscard(g);
     return;
   }
-  if (g.phase === 'steal' && R.isTurn(g, playerId)) {
+  if ((g.phase === 'steal' || g.phase === 'take') && R.isTurn(g, playerId)) {
     if (openSheet !== 'sheet-steal') openSteal(g);
     return;
   }
@@ -1846,7 +1900,7 @@ function renderOver(g) {
 $('btn-again').addEventListener('click', async () => {
   if (solo) {
     closeSheet();
-    startSolo(room.level, room.bots, room.settings.targetVP, room.settings.layout);
+    startSolo(room.level, room.bots, room.settings.targetVP, room.settings.layout, room.settings.useRobber);
     return;
   }
   if (!isHost()) return toast('Only the host can start a new game.');

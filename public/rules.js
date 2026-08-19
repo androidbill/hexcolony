@@ -105,17 +105,22 @@ export function newGame(seats, settings, rng = Math.random) {
   const forward = seats.map((_, i) => i);
   const order = [...forward, ...forward.slice().reverse()];
 
+  // With the robber switched off no tile is ever blocked, so nothing sits on the
+  // desert and a 7 becomes purely a raid: take a card from whoever you like.
+  const useRobber = settings.useRobber !== false;
+
   return {
     seed,
     mode: settings.boardMode || 'random',
     layout,
+    useRobber,
     target: settings.targetVP || 10,
     discardLimit: settings.discardLimit || 7,
     seats: seats.slice(),
     players,
     bldg: {},
     roads: {},
-    robber: makeBoard(seed, settings.boardMode || 'random', layout).robber,
+    robber: useRobber ? makeBoard(seed, settings.boardMode || 'random', layout).robber : -1,
     bank: Object.fromEntries(RESOURCES.map((r) => [r, info.bank])),
     deck: shuffle(devBag(info), rng),
     vpNames: shuffle(VP_NAMES, rng),
@@ -322,7 +327,7 @@ export function portsOwned(g, board, pid) {
 function produce(g, board, roll, events) {
   const claims = {}; // res -> { pid: amount }
   for (const hi of board.byNumber[roll] || []) {
-    if (hi === g.robber) continue;
+    if (g.useRobber !== false && hi === g.robber) continue;
     const tile = board.tiles[hi];
     if (!tile.res) continue;
     for (const v of HEXES[hi].corners) {
@@ -419,6 +424,24 @@ function steal(g, thief, victim, events, rng) {
   g.players[thief].res[res] += 1;
   note(g, events, { t: 'steal', p: thief, from: victim, res });
   return res;
+}
+
+/**
+ * Where a 7 goes once everyone has discarded.
+ *
+ * With the robber in play you move it and rob whoever it lands on. With it switched
+ * off you simply take a card from any player who has one — which is the whole point of
+ * the option, since the robber's real sting is being blocked, not the stolen card.
+ * Either way, if there is nobody worth robbing the turn moves on rather than parking on
+ * a step with no legal move.
+ */
+function afterSeven(g) {
+  if (g.useRobber !== false) { g.phase = 'robber'; return; }
+  const pid = currentPid(g);
+  const targets = g.seats.filter((s) => s !== pid && handSize(g.players[s]) > 0);
+  if (!targets.length) { g.phase = g.turn.rolled ? 'build' : 'roll'; return; }
+  g.pending.stealFrom = targets;
+  g.phase = 'take';
 }
 
 /** Who still owes a discard after a 7. */
@@ -523,7 +546,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
           g.pending.discard = owed;
           g.phase = 'discard';
         } else {
-          g.phase = 'robber';
+          afterSeven(g);
         }
       } else {
         produce(g, board, roll, events);
@@ -545,12 +568,13 @@ export function applyMove(state, pid, move, rng = Math.random) {
       for (const [r, n] of Object.entries(give)) { me.res[r] -= n; g.bank[r] += n; }
       delete g.pending.discard[pid];
       note(g, events, { t: 'discard', p: pid, count: owed });
-      if (!Object.keys(g.pending.discard).length) g.phase = 'robber';
+      if (!Object.keys(g.pending.discard).length) afterSeven(g);
       return ok();
     }
 
     case 'moveRobber': {
       if (!myTurn) return fail('Not your turn.');
+      if (g.useRobber === false) return fail('The robber is not in this game.');
       if (g.phase !== 'robber') return fail('You cannot move the robber now.');
       if (move.hex === g.robber) return fail('The robber is already there.');
       if (!(move.hex >= 0 && move.hex < HEXES.length)) return fail('No such tile.');
@@ -562,6 +586,19 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!myTurn) return fail('Not your turn.');
       if (g.phase !== 'steal') return fail('Nobody to rob.');
       if (!g.pending.stealFrom.includes(move.from)) return fail('You cannot rob that player.');
+      steal(g, pid, move.from, events, rng);
+      g.pending.stealFrom = [];
+      g.phase = g.turn.rolled ? 'build' : 'roll';
+      return ok();
+    }
+
+    // Take one card from any player, when the robber is switched off. The card itself
+    // is still random: the interface never shows another player's hand, and letting the
+    // raider pick the resource would mean showing it.
+    case 'takeCard': {
+      if (!myTurn) return fail('Not your turn.');
+      if (g.phase !== 'take') return fail('Nothing to take right now.');
+      if (!g.pending.stealFrom.includes(move.from)) return fail('You cannot take from that player.');
       steal(g, pid, move.from, events, rng);
       g.pending.stealFrom = [];
       g.phase = g.turn.rolled ? 'build' : 'roll';
@@ -659,7 +696,8 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (kind === 'knight') {
         me.knights += 1;
         refreshAwards(g, events);
-        g.phase = 'robber';
+        // A knight is a robber move, so without a robber it is a raid instead.
+        afterSeven(g);
         checkWin(g, events); // Largest Army can be the winning move
         return ok();
       }
@@ -849,6 +887,7 @@ export function highlightsFor(g, pid, intent) {
   if (g.phase === 'robber' && isTurn(g, pid)) {
     return { verts: [], edges: [], hexes: HEXES.map((h) => h.i).filter((i) => i !== g.robber) };
   }
+  if (g.phase === 'take') return { verts: [], edges: [], hexes: [] };
   if (intent === 'road') return { verts: [], edges: legalRoads(g, pid), hexes: [] };
   if (intent === 'settlement') return { verts: legalSettlements(g, pid), edges: [], hexes: [] };
   if (intent === 'city') return { verts: legalCities(g, pid), edges: [], hexes: [] };

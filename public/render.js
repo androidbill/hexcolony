@@ -694,6 +694,8 @@ export class BoardView {
 
   drawRobber() {
     if (!this.game) return;
+    // Switched off for this game: there is no piece and no blocked tile.
+    if (this.game.useRobber === false) return;
     const tile = this.board.tiles[this.game.robber];
     if (!tile) return;
     const [x, y] = this.toScreen(tile.x, tile.y - 0.42);

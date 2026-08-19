@@ -282,7 +282,8 @@ export function botMove(game, board, pid, level, rng = Math.random) {
   // ---- robber business
   if (g.phase === 'robber') return { type: 'moveRobber', hex: robberTarget(g, board, pid, cfg, rng) };
 
-  if (g.phase === 'steal') {
+  // 'take' is the no-robber version of the same decision: pick a victim, no tile move.
+  if (g.phase === 'steal' || g.phase === 'take') {
     const victims = g.pending.stealFrom;
     if (!victims.length) return null;
     const ranked = victims.slice().sort((a, b) => {
@@ -290,13 +291,17 @@ export function botMove(game, board, pid, level, rng = Math.random) {
       if (cfg.denyLeader) return (R.publicVP(g, b) * 3 + hb) - (R.publicVP(g, a) * 3 + ha);
       return hb - ha;
     });
-    return { type: 'steal', from: cfg.robberSmart > rng() ? ranked[0] : pick(rng, victims) };
+    const type = g.phase === 'take' ? 'takeCard' : 'steal';
+    return { type, from: cfg.robberSmart > rng() ? ranked[0] : pick(rng, victims) };
   }
 
   // ---- before the roll
   if (g.phase === 'roll') {
     // A knight before rolling clears the robber off your own tile in time to matter.
-    const robbedByMe = HEXES[g.robber].corners.some((v) => g.bldg[v]?.p === pid);
+    // With the robber switched off there is no tile to be sitting on — and no index
+    // either, since g.robber is -1 in that game.
+    const robbedByMe = g.useRobber !== false && g.robber >= 0
+      && HEXES[g.robber].corners.some((v) => g.bldg[v]?.p === pid);
     if (p.dev.knight > 0 && !g.turn.playedDev && robbedByMe && rng() < cfg.devPlay) {
       return { type: 'playDev', card: 'knight' };
     }
