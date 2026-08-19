@@ -1,7 +1,11 @@
-// Cuts the five terrain illustrations out of a single contact sheet and writes them
-// into public/art/.
+// Cuts terrain illustrations out of a sheet and writes them into public/art/.
 //
 //   node scripts/slice-tiles.mjs <sheet.png> [--write]
+//   TILE_ORDER=desert node scripts/slice-tiles.mjs desert.png --write
+//
+// TILE_ORDER names the tiles in the order they appear on the sheet, reading top row
+// first, and its length is how many the script expects to find. It handles a sheet of
+// one as happily as a sheet of five.
 //
 // Without --write it only reports what it found, so you can check the detection before
 // it overwrites anything.
@@ -140,7 +144,7 @@ function encodePNG(w, h, rgb) {          // rgb: Uint8Array w*h*3
  * anything nearly black is caption text, so what is left is artwork; flood filling that
  * mask and keeping the big blobs gives one component per hex.
  */
-function findHexes(img) {
+function findHexes(img, want = 5) {
   const { w, h, rgba } = img;
   const isArt = new Uint8Array(w * h);
   for (let i = 0, n = w * h; i < n; i++) {
@@ -179,7 +183,7 @@ function findHexes(img) {
     .filter((c) => c.area > (w * h) / 400 && c.w > w / 12 && c.h > h / 12)
     .filter((c) => { const ar = c.w / c.h; return ar > 0.65 && ar < 1.55; })
     .sort((a, b) => b.area - a.area)
-    .slice(0, 5);
+    .slice(0, want);
 
   // Reading order: top row left-to-right, then the next row.
   const rowH = Math.max(...big.map((c) => c.h), 1);
@@ -302,23 +306,39 @@ const QUALITY = Number(process.env.TILE_Q || 82);
 const img = decodePNG(readFileSync(sheetPath));
 console.log(`sheet ${basename(sheetPath)}  ${img.w}x${img.h}  colourType=${img.colour}`);
 
-const hexes = findHexes(img);
+const hexes = findHexes(img, ORDER.length);
 console.log(`found ${hexes.length} tile-shaped regions:`);
 hexes.forEach((c, i) => {
   console.log(`  ${(ORDER[i] || '?').padEnd(6)} box ${c.minX},${c.minY} ${c.w}x${c.h}  area=${c.area}`);
 });
-if (hexes.length !== 5) {
-  console.error(`\nExpected 5 tiles, got ${hexes.length}. Not writing anything.`);
+if (hexes.length !== ORDER.length) {
+  console.error(`\nExpected ${ORDER.length} tile(s) (TILE_ORDER=${ORDER.join(',')}), got ${hexes.length}. Not writing anything.`);
   process.exit(1);
 }
 
 const measured = hexes.map((c) => inscribedRect(c, img).inset);
 const sorted = measured.slice().sort((a, b) => a - b);
+
 // A hair inside the measured edge. The border measurement is good to a pixel or two,
 // and a sliver of cream left in the corner of a tile is far more visible on the board
 // than the 3% of grass it costs to be sure.
 const TRIM = Number(process.env.TILE_TRIM || 0.97);
-const INSET = sorted[Math.floor(sorted.length / 2)] * TRIM;
+
+// Every tile on a printed sheet has the same border width, so the median measurement is
+// the trustworthy one and an outlier is a misread — the sheep measured 0.72 against the
+// others' 0.925 because its pale fleece reaches the frame and reads as cream.
+//
+// A single-tile sheet has no median to appeal to, so an outlier there would go through
+// unchallenged. Hence the sanity band: a measurement outside it is rejected in favour of
+// the width measured off the five-tile sheet, loudly.
+const TYPICAL_INSET = 0.925;
+let median = sorted[Math.floor(sorted.length / 2)];
+if (median < 0.80 || median > 0.98) {
+  console.warn(`  ! measured border inset ${median.toFixed(3)} is implausible — `
+    + `falling back to ${TYPICAL_INSET} (the width measured off the 5-tile sheet).`);
+  median = TYPICAL_INSET;
+}
+const INSET = median * TRIM;
 console.log(`border insets measured: ${measured.map((m) => m.toFixed(3)).join(', ')}`);
 console.log(`using the median, ${INSET.toFixed(3)}, for every tile`);
 

@@ -9,6 +9,7 @@ Drop the five hex illustrations in this folder with these exact names:
 | `sheep.jpg`  | pasture   | sheep    |
 | `wheat.jpg`  | fields    | wheat    |
 | `ore.jpg`    | mountains | ore      |
+| `desert.jpg` | desert    | nothing  |
 
 `.png` and `.webp` also work — `TILE_ART` in `../render.js` lists the extensions it
 tries, in order, and uses the first one that loads.

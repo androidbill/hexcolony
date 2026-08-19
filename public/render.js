@@ -49,6 +49,7 @@ const TILE_ART = {
   pasture:   'sheep',
   fields:    'wheat',
   mountains: 'ore',
+  desert:    'desert',   // produces nothing, but it is still a tile you look at
 };
 const ART_EXT = ['jpg', 'png', 'webp', 'jpeg'];
 const artImages = {};   // terrain -> HTMLImageElement once decoded
