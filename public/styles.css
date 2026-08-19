@@ -455,6 +455,11 @@ button { background: none; border: 0; cursor: pointer; }
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(38px, 1fr));
   gap: 7px;
+  /* Twenty-seven of them, ordered dark to light. Four rows are enough to see the range
+     and to scroll from without the picker swallowing the whole lobby. */
+  max-height: 184px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 .sea-cell {
   aspect-ratio: 1;

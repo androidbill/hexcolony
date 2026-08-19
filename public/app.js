@@ -20,7 +20,7 @@ import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
 import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO } from './board.js';
-import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS } from './render.js';
+import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS, SEA_DEFAULT, seaAt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
@@ -338,7 +338,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: 0 },
+      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: SEA_DEFAULT },
       players: { [playerId]: freshPlayer(name, myColorIdx) },
       order: [],
       game: null,
@@ -417,7 +417,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: 0 },
+        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: SEA_DEFAULT },
         players: { [playerId]: freshPlayer(name, myColorIdx) },
         order: [],
         game: null,
@@ -1159,7 +1159,7 @@ let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
 let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'classic';
 let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
-let soloSea = Number(localStorage.getItem('hexcolony_solo_sea') || 0);
+let soloSea = localStorage.getItem('hexcolony_solo_sea') || SEA_DEFAULT;
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
@@ -1182,13 +1182,13 @@ function drawSoloSheet() {
   $('solo-robber-blurb').textContent = soloRobber
     ? 'Discard down, move the robber, rob whoever it lands on.'
     : 'No discard, no robber — just take a card from any player.';
-  drawSeaRow('solo-sea-row', soloSea, (i) => {
-    soloSea = i;
-    localStorage.setItem('hexcolony_solo_sea', String(i));
+  drawSeaRow('solo-sea-row', soloSea, (key) => {
+    soloSea = key;
+    localStorage.setItem('hexcolony_solo_sea', key);
     sfx.tap();
     drawSoloSheet();
   });
-  $('solo-sea-blurb').textContent = `${SEA_COLORS[soloSea]?.name || 'Lagoon'} — the water around the island`;
+  $('solo-sea-blurb').textContent = `${seaAt(soloSea).name} — the water around the island`;
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
 }
@@ -1327,11 +1327,11 @@ function setSetting(patch) {
   return true;
 }
 
-function pickSea(idx) {
-  if (!setSetting({ 'settings.sea': idx })) return;
+function pickSea(key) {
+  if (!setSetting({ 'settings.sea': key })) return;
   sfx.tap();
   // Remembered for the next solo game too, the way the other solo options are.
-  if (solo) { soloSea = idx; localStorage.setItem('hexcolony_solo_sea', String(idx)); }
+  if (solo) { soloSea = key; localStorage.setItem('hexcolony_solo_sea', key); }
   applySea();
 }
 
@@ -1404,9 +1404,9 @@ function renderLobby() {
   }
   $('layout-blurb').textContent = LAYOUT_INFO[layout]?.blurb || '';
 
-  const sea = s.sea ?? 0;
+  const sea = s.sea;
   drawSeaRow('sea-row', sea, pickSea);
-  $('sea-blurb').textContent = `${SEA_COLORS[sea]?.name || 'Lagoon'} — the water around the island`;
+  $('sea-blurb').textContent = `${seaAt(sea).name} — the water around the island`;
   applySea();
   for (const b of document.querySelectorAll('[data-board]')) {
     b.classList.toggle('on', b.dataset.board === (s.boardMode || 'random'));
@@ -1426,20 +1426,28 @@ function renderLobby() {
 }
 
 // ---------------------------------------------------------------- board plumbing
-/** Paint the water the host chose. Falls back to the first entry for an old room. */
+/** Paint the water the host chose. An unknown or missing choice falls back to the default. */
 function applySea() {
-  view.setSea(room?.settings?.sea ?? 0);
+  view.setSea(room?.settings?.sea);
 }
 
+/**
+ * The swatches, darkest water first.
+ *
+ * Identified by key rather than by position: the player colours were stored as indexes
+ * into an array, and reordering that array repainted everybody's pieces. A list of
+ * twenty-seven is going to be reordered again.
+ */
 function drawSeaRow(elId, chosen, onPick) {
   const row = $(elId);
   if (!row) return;
-  row.innerHTML = SEA_COLORS.map((c, i) => `
-    <button class="sea-cell${i === chosen ? ' on' : ''}" data-sea="${i}"
+  const now = seaAt(chosen).key;
+  row.innerHTML = SEA_COLORS.map((c) => `
+    <button class="sea-cell${c.key === now ? ' on' : ''}" data-sea="${esc(c.key)}"
       style="--a:${c.a};--b:${c.b}" aria-label="${esc(c.name)} sea"
-      title="${esc(c.name)}">${i === chosen ? '✓' : ''}</button>`).join('');
+      title="${esc(c.name)}">${c.key === now ? '✓' : ''}</button>`).join('');
   for (const b of row.querySelectorAll('[data-sea]')) {
-    b.addEventListener('click', () => onPick(Number(b.dataset.sea)));
+    b.addEventListener('click', () => onPick(b.dataset.sea));
   }
 }
 

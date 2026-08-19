@@ -46,26 +46,97 @@ export { RES_COLOR, RES_ICON };
 /**
  * The sea, which the host picks before the game starts.
  *
- * All light, and that is a constraint rather than a preference: the board chrome
- * (topbar, tray, sheets) stays dark whatever is chosen, so the sea has to read as a lit
- * map inset rather than as the app changing theme. It is also what the coastline halo,
- * the cream port rings and the white piece outlines were all drawn against — a dark sea
- * would leave every one of them invisible.
+ * Twenty-six of them, ordered from the darkest water to the lightest.
  *
- * Each entry carries its own wave colours. Deriving them by darkening the base looks
- * fine on the blues and muddy on everything else, so they are chosen per palette.
+ * An earlier note here claimed light was a constraint rather than a preference — that the
+ * cream coastline, the cream port rings and the white piece outlines all needed a bright
+ * sea behind them. That was wrong, and backwards: cream and white show up MORE against
+ * dark water, not less. What a dark sea actually costs is the board reading as a lit panel
+ * inset into dark chrome, which is a look rather than a requirement. So the whole range is
+ * here, and the choice is the host's.
+ *
+ * Each entry gives only the two gradient stops. The wave colours are derived from them,
+ * because the right answer flips with the water: on pale seas the swell reads as shadow
+ * and has to be darker than the base, and on dark seas it reads as reflected light and has
+ * to be lighter. Twenty-six pairs of hand-picked wave colours would be twenty-six chances
+ * to get that backwards.
  */
+const hexToRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const rgbToHex = (c) => '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+const towards = (hex, target, t) => rgbToHex(hexToRgb(hex).map((v, i) => v + (target[i] - v) * t));
+const relLum = (hex) => {
+  const [r, g, b] = hexToRgb(hex).map((v) => v / 255);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+const BLACK = [0, 0, 0];
+
+/**
+ * Both wave colours are found along the gradient the sea already describes, never by
+ * mixing with white or black.
+ *
+ * On pale water the swell reads as shadow, so it carries on PAST the foreground stop —
+ * more of the same gradient, which stays in the hue family. Mixing toward black instead
+ * washed the colour out of it. On dark water the swell reads as reflected light, so it
+ * moves back toward the horizon stop, which is the lighter of the two and is where that
+ * sea keeps its colour. Mixing toward white turned every dark sea's swell the same
+ * lifeless grey, whatever the water underneath it was.
+ */
+function makeSea(key, name, a, b) {
+  const A = hexToRgb(a), B = hexToRgb(b);
+  const past = (k) => rgbToHex(B.map((v, i) => v + (v - A[i]) * k));
+  const back = (k) => rgbToHex(B.map((v, i) => v + (A[i] - v) * k));
+  const light = relLum(b) > 0.38;
+  return {
+    key, name, a, b,
+    trough: light ? past(0.9) : back(0.85),
+    deep: light ? past(1.6) : back(0.5),
+    // White crests everywhere except on near-white water, where they would simply vanish;
+    // there the highlight has to be a darkening instead.
+    crest: relLum(b) > 0.78 ? towards(b, BLACK, 0.3) : '#ffffff',
+  };
+}
+
 export const SEA_COLORS = [
-  { key: 'lagoon', name: 'Lagoon',   a: '#bfe7f7', b: '#7cc2e4', trough: '#2f86b8', deep: '#1d6d9c' },
-  { key: 'tropic', name: 'Tropical', a: '#c6f5ee', b: '#79d9cd', trough: '#2aa295', deep: '#17786e' },
-  { key: 'mint',   name: 'Mint',     a: '#d6f6e4', b: '#93ddb4', trough: '#37a06a', deep: '#227a4c' },
-  { key: 'sand',   name: 'Shallows', a: '#f6ecd2', b: '#dfc99a', trough: '#b8974f', deep: '#93753a' },
-  { key: 'rose',   name: 'Coral',    a: '#fbe2e4', b: '#f0aeb4', trough: '#d3707c', deep: '#ac4f5c' },
-  { key: 'lilac',  name: 'Lilac',    a: '#e9e2fb', b: '#bcaaf0', trough: '#8b73d6', deep: '#6a53b4' },
-  { key: 'slate',  name: 'Overcast', a: '#e6edf3', b: '#b3c4d2', trough: '#7a91a4', deep: '#5c7183' },
-  { key: 'dawn',   name: 'Dawn',     a: '#fdeed6', b: '#f5c79b', trough: '#d99457', deep: '#b3703a' },
-];
-export const seaAt = (i) => SEA_COLORS[Number.isInteger(i) && SEA_COLORS[i] ? i : 0];
+  makeSea('midnight', 'Midnight',  '#123a5c', '#05121f'),
+  makeSea('ink',      'Ink',       '#23304a', '#0b1220'),
+  makeSea('abyss',    'Abyss',     '#0f3348', '#04121b'),
+  makeSea('pitch',    'Pitch',     '#14513f', '#062018'),
+  makeSea('plum',     'Plum',      '#3d2a56', '#170f22'),
+  makeSea('wine',     'Wine',      '#6b2740', '#2c0f1b'),
+  makeSea('deep',     'Deep',      '#1c5b8c', '#08203a'),
+  makeSea('jade',     'Jade',      '#1d7a63', '#0a3c30'),
+  makeSea('umber',    'Umber',     '#a06232', '#4d2c15'),
+  makeSea('storm',    'Storm',     '#4a5b70', '#222c3a'),
+  makeSea('ocean',    'Ocean',     '#2a74ad', '#114166'),
+  makeSea('pine',     'Pine',      '#2f9a63', '#12492f'),
+  makeSea('reef',     'Reef',      '#1a8f86', '#0a4a45'),
+  makeSea('cobalt',   'Cobalt',    '#3f8fd8', '#1e5ea1'),
+  makeSea('harbour',  'Harbour',   '#7fb2d8', '#4f83ab'),
+  makeSea('slate',    'Slate',     '#aebccb', '#7a8b9c'),
+  makeSea('lagoon',   'Lagoon',    '#bfe7f7', '#7cc2e4'),
+  makeSea('tropic',   'Tropical',  '#c6f5ee', '#79d9cd'),
+  makeSea('moss',     'Moss',      '#cfe3b4', '#9dc17a'),
+  makeSea('sky',      'Sky',       '#d8f0ff', '#9ad3f5'),
+  makeSea('mint',     'Mint',      '#d6f6e4', '#93ddb4'),
+  makeSea('rose',     'Coral',     '#fbe2e4', '#f0aeb4'),
+  makeSea('lilac',    'Lilac',     '#e9e2fb', '#bcaaf0'),
+  makeSea('overcast', 'Overcast',  '#e6edf3', '#b3c4d2'),
+  makeSea('dawn',     'Dawn',      '#fdeed6', '#f5c79b'),
+  makeSea('sand',     'Shallows',  '#f6ecd2', '#dfc99a'),
+  makeSea('ice',      'Ice',       '#eef8ff', '#c6e6f7'),
+].sort((x, y) => relLum(x.b) - relLum(y.b));
+
+/**
+ * The sea a game uses, looked up by key.
+ *
+ * By key and not by index, deliberately. The player colours were stored as positions in
+ * an array, and reordering that array silently repainted everybody's pieces. A list this
+ * long is going to be reordered again.
+ */
+export const SEA_DEFAULT = 'lagoon';
+export const seaAt = (key) => SEA_COLORS.find((c) => c.key === key)
+  || SEA_COLORS.find((c) => c.key === SEA_DEFAULT);
 
 // Wave layers drawn over the gradient, drifting in opposite directions so the sea never
 // looks like a repeating pattern. `role` picks the colour out of whichever sea is in use;
@@ -174,7 +245,7 @@ export class BoardView {
     this.game = null;
     this.highlights = { verts: [], edges: [], hexes: [], cities: [] };
     this.payout = null;                // what the last roll paid, and to whom
-    this.sea = SEA_COLORS[0];
+    this.sea = seaAt(SEA_DEFAULT);
     this.colorOf = () => '#888';       // pid -> css colour, injected by the app
     this.scale = 40;
     this.ox = 0; this.oy = 0;          // pan, in screen pixels
@@ -200,7 +271,7 @@ export class BoardView {
   setBoard(board) { this.board = board; this.fit(); }
   setGame(game) { this.game = game; }
   setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [], cities: [] }; }
-  setSea(idx) { this.sea = seaAt(idx); }
+  setSea(key) { this.sea = seaAt(key); }
   /** `{ hexes, spots: [{ v, colour, city }], until }`, or null for nothing to show. */
   setPayout(p) { this.payout = p; }
 
@@ -423,7 +494,7 @@ export class BoardView {
     c.lineCap = 'round';
     for (const L of WAVE_LAYERS) {
       c.globalAlpha = L.alpha;
-      c.strokeStyle = L.role === 'crest' ? '#ffffff' : this.sea[L.role];
+      c.strokeStyle = this.sea[L.role];
       c.lineWidth = L.width;
       const drift = (t / 1000) * L.speed * 60;
       for (let i = 0; i < L.rows; i++) {
