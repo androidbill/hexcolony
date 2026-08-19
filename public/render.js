@@ -38,6 +38,18 @@ const WAVE_LAYERS = [
   { colour: '#ffffff', alpha: 0.40, amp: 2.0, len: 93,  rows: 8, speed: 0.038, phase: 3.1, width: 1.6 },
 ];
 
+// Everything a player owns is outlined in the same bright white: roads, settlements and
+// cities. Against illustrated tiles the pieces were reading as dark shapes on a dark
+// picture, and a colour alone is not enough to pick out at a glance.
+//
+// A hairline of near-black sits outside the white. It is not decoration — four of the
+// fourteen player colours are pale enough to disappear into a white outline on their own,
+// and without an outer edge a white player's settlement on a desert tile would have no
+// silhouette at all. Dark players get the white, pale players get the dark, and every
+// piece keeps an edge on every background.
+const OUTLINE = 'rgba(255, 255, 255, 0.95)';
+const EDGE_INK = 'rgba(8, 16, 26, 0.85)';
+
 // ---------------------------------------------------------------- terrain art
 // Illustrated tiles, if they are present in art/. Each terrain is tried in extension
 // order and the first one that decodes wins. Nothing here is required: a missing or
@@ -651,12 +663,17 @@ export class BoardView {
       const x1 = ax + (bx - ax) * t, y1 = ay + (by - ay) * t;
       const x2 = bx - (bx - ax) * t, y2 = by - (by - ay) * t;
       c.lineCap = 'round';
-      c.strokeStyle = 'rgba(8,16,26,0.7)';
-      c.lineWidth = R * 0.20;
-      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
-      c.strokeStyle = this.colorOf(pid);
-      c.lineWidth = R * 0.135;
-      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+      // Three passes, widest first, so each one leaves a ring of the one beneath: a thin
+      // dark edge on the outside, then the bright white outline, then the owner's colour
+      // down the middle. See OUTLINE for why both edges are there.
+      const stripe = (w, style) => {
+        c.strokeStyle = style;
+        c.lineWidth = w;
+        c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
+      };
+      stripe(R * 0.245, EDGE_INK);
+      stripe(R * 0.215, OUTLINE);
+      stripe(R * 0.125, this.colorOf(pid));
     }
   }
 
@@ -697,8 +714,13 @@ export class BoardView {
 
     c.shadowColor = 'transparent';
     c.lineJoin = 'round';
-    c.lineWidth = 4;
-    c.strokeStyle = 'rgba(8, 16, 26, 0.85)';
+    // Same two edges as the roads. Widest first: the dark pass survives only as a hairline
+    // outside the white, which is what keeps a pale piece from dissolving into it.
+    c.lineWidth = 11;
+    c.strokeStyle = EDGE_INK;
+    c.stroke(path);
+    c.lineWidth = 7;
+    c.strokeStyle = OUTLINE;
     c.stroke(path);
     c.restore();
   }
