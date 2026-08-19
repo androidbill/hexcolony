@@ -148,6 +148,17 @@
       </div>
 
       <div class="opt-row col">
+        <span class="opt-l">Turn timer<em id="timer-blurb">No limit — take as long as you like.</em></span>
+        <div class="seg-row">
+          <button class="seg on" data-timer="0">Off</button>
+          <button class="seg" data-timer="15">15s</button>
+          <button class="seg" data-timer="30">30s</button>
+          <button class="seg" data-timer="45">45s</button>
+          <button class="seg" data-timer="60">60s</button>
+        </div>
+      </div>
+
+      <div class="opt-row col">
         <span class="opt-l">Rolling a 7<em id="robber-blurb">Discard down, move the robber, rob whoever it lands on.</em></span>
         <div class="seg-row">
           <button class="seg on" data-robber="on">Robber</button>
@@ -187,6 +198,7 @@
   <div class="board-wrap">
     <canvas id="board-cv"></canvas>
     <div class="board-badge" id="turn-badge"></div>
+    <div class="turn-timer" id="turn-timer" hidden><span id="timer-secs">0</span></div>
     <div class="dice-float" id="dice-float" hidden>
       <div class="die" id="die-a">?</div>
       <div class="die" id="die-b">?</div>
@@ -315,6 +327,17 @@
     <div class="seg-row">
       <button class="seg on" data-solo-layout="classic">Classic &middot; 19</button>
       <button class="seg" data-solo-layout="expansion">Expansion &middot; 30</button>
+    </div>
+  </div>
+
+  <div class="opt-row col">
+    <span class="opt-l">Turn timer<em id="solo-timer-blurb"></em></span>
+    <div class="seg-row">
+      <button class="seg on" data-solo-timer="0">Off</button>
+      <button class="seg" data-solo-timer="15">15s</button>
+      <button class="seg" data-solo-timer="30">30s</button>
+      <button class="seg" data-solo-timer="45">45s</button>
+      <button class="seg" data-solo-timer="60">60s</button>
     </div>
   </div>
 

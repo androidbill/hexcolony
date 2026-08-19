@@ -253,7 +253,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true },
+      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0 },
       players: { [playerId]: freshPlayer(name, 0) },
       order: [],
       game: null,
@@ -335,7 +335,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true },
+        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0 },
         players: { [playerId]: freshPlayer(name, 0) },
         order: [],
         game: null,
@@ -372,6 +372,13 @@ function noteServerTime(serverMs) {
   clockOffset = Math.max(...clockSamples);
 }
 const clockReady = () => clockOffset !== null;
+/**
+ * The time everyone agrees on. Turn deadlines are stored as absolute timestamps in the
+ * game state, so each device subtracts its own corrected clock and they all show the
+ * same number without having to tick together. In solo the offset is zero and this is
+ * just the local clock.
+ */
+const serverNow = () => Date.now() + (clockOffset || 0);
 
 // ---------------------------------------------------------------- liveness
 // Phones dim, lock, background the browser or drop wifi, any of which can silently
@@ -598,7 +605,7 @@ async function leaveRoom(removeSelf = true) {
             const patch = { [`players.${playerId}`]: deleteField() };
             if (data.hostId === playerId) patch.hostId = others[0];
             if (data.game) {
-              const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId });
+              const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId }, Math.random, serverNow());
               if (res.ok) {
                 patch.game = res.game;
                 if (res.game.phase === 'over') patch.state = 'over';
@@ -640,7 +647,7 @@ async function send(move) {
       if (!snap.exists()) { rejected = 'The room is gone.'; return; }
       const data = snap.data();
       if (!data.game) { rejected = 'The game has not started.'; return; }
-      const res = R.applyMove(data.game, playerId, move);
+      const res = R.applyMove(data.game, playerId, move, Math.random, serverNow());
       if (!res.ok) { rejected = res.error; return; }
       const patch = { game: res.game };
       if (res.game.phase === 'over') patch.state = 'over';
@@ -750,6 +757,7 @@ function renderMapPreview() {
 
   $('score-strip').innerHTML = '';
   $('dice-float').hidden = true;
+  $('turn-timer').hidden = true;
   $('hand').innerHTML = `<span class="map-count">Map ${(room.mapIndex ?? 0) + 1}`
     + `${LAYOUT_INFO[room.settings?.layout || 'classic']?.tiles ? ` · ${LAYOUT_INFO[room.settings.layout || 'classic'].tiles} tiles` : ''}</span>`;
 
@@ -795,7 +803,7 @@ const isBot = (pid) => !!room?.players?.[pid]?.bot;
 function sendLocal(move) {
   const g = room?.game;
   if (!g) return false;
-  const res = R.applyMove(g, playerId, move);
+  const res = R.applyMove(g, playerId, move, Math.random, serverNow());
   if (!res.ok) { toast(res.error); sfx.error(); return false; }
   room.game = res.game;
   saveSolo();
@@ -903,13 +911,13 @@ function runBot(pid) {
   if (!move) move = fallbackMove(g, pid);
   if (!move) return;
 
-  let res = R.applyMove(g, pid, move);
+  let res = R.applyMove(g, pid, move, Math.random, serverNow());
   if (!res.ok) {
     // A bot must never be able to wedge the game, and in solo there is nobody else to
     // unstick it. Fall back to the always-legal move for this phase before giving up.
     console.warn('bot move rejected:', move.type, res.error);
     const safe = fallbackMove(g, pid);
-    res = safe ? R.applyMove(g, pid, safe) : res;
+    res = safe ? R.applyMove(g, pid, safe, Math.random, serverNow()) : res;
   }
   if (!res.ok) { console.error('bot could not act at all in phase', g.phase); return; }
   room.game = res.game;
@@ -965,7 +973,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   }
   // Seat order is shuffled, so you don't always open the board.
   const order = [playerId, ...bots.map((b) => b.id)].sort(() => Math.random() - 0.5);
-  const settings = { targetVP, discardLimit: 7, boardMode: 'random', layout, useRobber };
+  const settings = { targetVP, discardLimit: 7, boardMode: 'random', layout, useRobber, turnSeconds: soloTurnSeconds };
 
   // Straight to the map picker: solo has a host too, and it is you.
   solo = true;
@@ -1011,6 +1019,7 @@ let soloBots = Number(localStorage.getItem('hexcolony_solo_bots') || 3);
 let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
 let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'classic';
 let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
+let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
@@ -1021,9 +1030,23 @@ function drawSoloSheet() {
     b.classList.toggle('on', b.dataset.soloLayout === soloLayout);
   }
   $('solo-layout-blurb').textContent = LAYOUT_INFO[soloLayout]?.blurb || '';
-  for (const b of document.querySelectorAll('[data-solo-robber]')) {
+  for (const b of document.querySelectorAll('[data-solo-timer]')) {
+  b.addEventListener('click', () => {
+    soloTurnSeconds = Number(b.dataset.soloTimer);
+    localStorage.setItem('hexcolony_solo_timer', String(soloTurnSeconds));
+    sfx.tap();
+    drawSoloSheet();
+  });
+}
+for (const b of document.querySelectorAll('[data-solo-robber]')) {
     b.classList.toggle('on', (b.dataset.soloRobber === 'on') === soloRobber);
   }
+  for (const b of document.querySelectorAll('[data-solo-timer]')) {
+    b.classList.toggle('on', Number(b.dataset.soloTimer) === soloTurnSeconds);
+  }
+  $('solo-timer-blurb').textContent = soloTurnSeconds
+    ? `${soloTurnSeconds}s to act, ${R.ROLL_SECONDS}s to roll. Doing something adds 10s.`
+    : 'No limit — take as long as you like.';
   $('solo-robber-blurb').textContent = soloRobber
     ? 'Discard down, move the robber, rob whoever it lands on.'
     : 'No discard, no robber — just take a card from any player.';
@@ -1132,6 +1155,14 @@ for (const b of document.querySelectorAll('[data-board]')) {
   });
 }
 
+for (const b of document.querySelectorAll('[data-timer]')) {
+  b.addEventListener('click', () => {
+    if (!isHost()) return toast('Only the host can change the setup.');
+    updateDoc(roomRef, { 'settings.turnSeconds': Number(b.dataset.timer) }).catch(() => {});
+    sfx.tap();
+  });
+}
+
 for (const b of document.querySelectorAll('[data-robber]')) {
   b.addEventListener('click', () => {
     if (!isHost()) return toast('Only the host can change the setup.');
@@ -1184,6 +1215,14 @@ function renderLobby() {
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 10);
   $('set-discard').textContent = String(s.discardLimit || 7);
+  const turnSeconds = R.TURN_OPTIONS.includes(s.turnSeconds) ? s.turnSeconds : 0;
+  for (const b of document.querySelectorAll('[data-timer]')) {
+    b.classList.toggle('on', Number(b.dataset.timer) === turnSeconds);
+  }
+  $('timer-blurb').textContent = turnSeconds
+    ? `${turnSeconds}s to act, ${R.ROLL_SECONDS}s to roll. Doing something adds 10s.`
+    : 'No limit — take as long as you like.';
+
   const useRobber = s.useRobber !== false;
   for (const b of document.querySelectorAll('[data-robber]')) {
     b.classList.toggle('on', (b.dataset.robber === 'on') === useRobber);
@@ -1295,6 +1334,71 @@ function loop(t) {
 }
 requestAnimationFrame(loop);
 
+// ---------------------------------------------------------------- turn clock
+// The deadline lives in the game state; this only reads it. A short interval keeps the
+// number moving without re-rendering the whole screen, and fires the automatic move
+// when it runs out.
+let autoFiredFor = null;
+let timerInterval = null;
+
+function secondsLeft(g) {
+  if (!g || !g.turnSeconds || g.turn.deadline === null || g.turn.deadline === undefined) return null;
+  if (g.phase !== 'roll' && g.phase !== 'build') return null;   // only timed steps
+  return (g.turn.deadline - serverNow()) / 1000;
+}
+
+function drawTimer() {
+  const g = game();
+  const left = secondsLeft(g);
+  const el = $('turn-timer');
+  if (left === null) { el.hidden = true; return; }
+  const mine = R.isTurn(g, playerId);
+  const secs = Math.max(0, Math.ceil(left));
+  el.hidden = false;
+  $('timer-secs').textContent = String(secs);
+  el.classList.toggle('mine', mine);
+  el.classList.toggle('urgent', secs <= 5);
+}
+
+/**
+ * Run out of time and the turn takes itself.
+ *
+ * The player whose turn it is fires first. Everyone else waits three more seconds and
+ * then tries too, which covers a phone that has gone to sleep mid-turn — the move goes
+ * through the same transaction as any other, so a second attempt simply finds the turn
+ * already over and is rejected harmlessly.
+ */
+async function fireTimeout() {
+  const g = game();
+  const left = secondsLeft(g);
+  if (left === null) return;
+  const mine = R.isTurn(g, playerId);
+  if (left > 0) return;
+  if (!mine && left > -3) return;
+
+  const key = `${g.turn.num}:${g.phase}:${mine}`;
+  if (autoFiredFor === key) return;
+  autoFiredFor = key;
+
+  if (g.phase === 'roll') { await send({ type: 'roll' }); return; }
+
+  // Free roads from a Road Building card have to be placed before a turn can end.
+  if (g.turn.freeRoads > 0) {
+    const legal = R.legalRoads(g, R.currentPid(g));
+    if (legal.length) { await send({ type: 'build', what: 'road', e: legal[0] }); return; }
+  }
+  await send({ type: 'endTurn' });
+}
+
+function startTimerLoop() {
+  if (timerInterval) return;
+  timerInterval = setInterval(() => {
+    if (!room || room.state !== 'playing') return;
+    drawTimer();
+    fireTimeout();
+  }, 250);
+}
+
 // ---------------------------------------------------------------- game rendering
 function render() {
   if (!room) return;
@@ -1319,6 +1423,8 @@ function render() {
   view.setHighlights(R.highlightsFor(g, playerId, intent));
 
   reactToLog(g);
+  startTimerLoop();
+  drawTimer();
   renderScoreStrip(g);
   renderTurnBadge(g);
   renderDice(g);

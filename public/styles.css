@@ -326,8 +326,28 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .board-badge.mine { border-color: var(--gold); color: var(--gold); }
 
+.turn-timer {
+  position: absolute; top: 46px; left: 50%; transform: translateX(-50%);
+  min-width: 44px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(5, 18, 32, 0.88);
+  border: 1px solid var(--line);
+  font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums;
+  text-align: center;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+/* Yours to act on — and running out. */
+.turn-timer.mine { border-color: var(--gold); color: var(--gold); }
+.turn-timer.urgent {
+  border-color: var(--danger); color: #ff9fa1;
+  animation: timer-tick 1s steps(2) infinite;
+}
+@keyframes timer-tick { 50% { opacity: 0.45; } }
+
 .dice-float {
-  position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+  position: absolute; top: 88px; left: 50%; transform: translateX(-50%);
   display: flex; gap: 9px;
   pointer-events: none;
 }

@@ -19,6 +19,13 @@ export const COSTS = {
 };
 
 export const PIECES = { road: 15, settlement: 5, city: 4 };
+
+// Turn timers. The clock is kept in the game state as an absolute deadline rather than
+// a countdown, so every device shows the same number without any of them having to tick
+// in step — each just subtracts its own (server-corrected) clock from the deadline.
+export const TURN_OPTIONS = [0, 15, 30, 45, 60];   // 0 = no timer at all
+export const ROLL_SECONDS = 10;                    // fixed: rolling is not a decision
+export const ACTION_BONUS_MS = 10000;              // earned by actually doing something
 export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expansion
 
 // The development deck and the bank both scale with the board — a 30-tile island with
@@ -127,7 +134,11 @@ export function newGame(seats, settings, rng = Math.random) {
     vpNames: shuffle(VP_NAMES, rng),
     phase: 'setup',
     setup: { order, at: 0, need: 's', lastV: null },
-    turn: { seat: order[0], dice: null, rolled: false, playedDev: false, num: 0, freeRoads: 0 },
+    turnSeconds: TURN_OPTIONS.includes(settings.turnSeconds) ? settings.turnSeconds : 0,
+    turn: {
+      seat: order[0], dice: null, rolled: false, playedDev: false, num: 0, freeRoads: 0,
+      deadline: null,
+    },
     award: { road: null, roadLen: 0, army: null, armySize: 0 },
     pending: { discard: {}, stealFrom: [] },
     trade: null,
@@ -135,6 +146,25 @@ export function newGame(seats, settings, rng = Math.random) {
     seq: 0,
     log: [],
   };
+}
+
+/**
+ * Put the clock on the current step. `null` whenever timers are off, which is also what
+ * every reader checks, so switching them off needs no other special cases.
+ */
+function setDeadline(g, seconds, now) {
+  g.turn.deadline = g.turnSeconds ? now + seconds * 1000 : null;
+}
+
+/**
+ * Doing something buys you more time. Capped at twice the chosen limit so a player
+ * cannot hold the turn open indefinitely by making a cheap bank trade every ten
+ * seconds — the bonus is there to stop the clock punishing you for playing, not to
+ * become a way of never ending your turn.
+ */
+function bumpDeadline(g, now) {
+  if (!g.turnSeconds || g.turn.deadline === null) return;
+  g.turn.deadline = Math.min(g.turn.deadline + ACTION_BONUS_MS, now + g.turnSeconds * 2000);
 }
 
 export const currentPid = (g) => g.seats[g.turn.seat];
@@ -368,7 +398,7 @@ function produce(g, board, roll, events) {
 }
 
 // ---------------------------------------------------------------- turn plumbing
-function startTurn(g, events) {
+function startTurn(g, events, now) {
   const pid = currentPid(g);
   const p = g.players[pid];
   // Cards bought last turn become playable now.
@@ -380,6 +410,7 @@ function startTurn(g, events) {
   g.turn.num += 1;
   g.phase = 'roll';
   g.trade = null;
+  setDeadline(g, ROLL_SECONDS, now);
   note(g, events, { t: 'turn', p: pid });
 }
 
@@ -463,7 +494,7 @@ const fail = (msg) => ({ ok: false, error: msg });
  * Apply one move. Returns `{ ok, game, events }` on success or `{ ok: false, error }`.
  * `rng` is injected so tests can make dice and steals deterministic.
  */
-export function applyMove(state, pid, move, rng = Math.random) {
+export function applyMove(state, pid, move, rng = Math.random, now = Date.now()) {
   const g = clone(state);
   const events = [];
   // Rebuilding the board here is also what switches the shared topology to this
@@ -523,7 +554,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         refreshAwards(g, events);
         g.turn.seat = 0;
         g.turn.num = 0;
-        startTurn(g, events);
+        startTurn(g, events, now);
       } else {
         g.turn.seat = g.setup.order[g.setup.at];
       }
@@ -555,6 +586,8 @@ export function applyMove(state, pid, move, rng = Math.random) {
         produce(g, board, roll, events);
         g.phase = 'build';
       }
+      // Whatever the roll led to, the acting clock starts now.
+      setDeadline(g, g.turnSeconds, now);
       return ok();
     }
 
@@ -622,6 +655,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         g.roads[move.e] = pid;
         me.left.road -= 1;
         note(g, events, { t: 'build', p: pid, what: 'road', e: move.e, free });
+        bumpDeadline(g, now);
         refreshAwards(g, events);
         if (g.turn.freeRoads > 0 && !legalRoads(g, pid).length) g.turn.freeRoads = 0;
         checkWin(g, events);
@@ -636,6 +670,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         g.bldg[move.v] = { t: 's', p: pid };
         me.left.settlement -= 1;
         note(g, events, { t: 'build', p: pid, what: 'settlement', v: move.v });
+        bumpDeadline(g, now);
         // A new settlement can cut an opponent's road, so awards are rechecked.
         refreshAwards(g, events);
         checkWin(g, events);
@@ -652,6 +687,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         me.left.city -= 1;
         me.left.settlement += 1; // the settlement piece comes back to your supply
         note(g, events, { t: 'build', p: pid, what: 'city', v: move.v });
+        bumpDeadline(g, now);
         checkWin(g, events);
         return ok();
       }
@@ -674,6 +710,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         me.devNew[card] += 1;
       }
       note(g, events, { t: 'buyDev', p: pid });
+      bumpDeadline(g, now);
       checkWin(g, events); // a victory-point card can be the winning card
       return ok();
     }
@@ -695,6 +732,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       me.dev[kind] -= 1;
       g.turn.playedDev = true;
       note(g, events, { t: 'playDev', p: pid, card: kind });
+      bumpDeadline(g, now);
 
       if (kind === 'knight') {
         me.knights += 1;
@@ -751,6 +789,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       me.res[give] -= rate; g.bank[give] += rate;
       me.res[want] += 1;  g.bank[want] -= 1;
       note(g, events, { t: 'bankTrade', p: pid, give, want, rate });
+      bumpDeadline(g, now);
       return ok();
     }
 
@@ -792,6 +831,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       for (const [r, n] of Object.entries(g.trade.give)) { me.res[r] -= n; them.res[r] += n; }
       for (const [r, n] of Object.entries(g.trade.want)) { them.res[r] -= n; me.res[r] += n; }
       note(g, events, { t: 'trade', p: pid, with: withPid, give: g.trade.give, want: g.trade.want });
+      bumpDeadline(g, now);
       g.trade = null;
       return ok();
     }
@@ -810,7 +850,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (g.turn.freeRoads > 0) return fail('Place your free roads first.');
       g.trade = null;
       advanceSeat(g);
-      startTurn(g, events);
+      startTurn(g, events, now);
       return ok();
     }
 
@@ -843,14 +883,14 @@ export function applyMove(state, pid, move, rng = Math.random) {
         if (g.setup.at >= g.setup.order.length) {
           refreshAwards(g, events);
           g.turn.seat = 0; g.turn.num = 0;
-          startTurn(g, events);
+          startTurn(g, events, now);
         } else {
           g.setup.need = 's';
           g.setup.lastV = null;
           g.turn.seat = g.setup.order[g.setup.at];
         }
       } else if (wasTheirTurn) {
-        startTurn(g, events);
+        startTurn(g, events, now);
       } else if (g.phase === 'discard' && !Object.keys(g.pending.discard).length) {
         g.phase = 'robber';
       }
