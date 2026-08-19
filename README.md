@@ -100,8 +100,14 @@ to cancel first-player advantage:
 
 At a four-player table (hard, medium, medium, easy) the wins land 104 / 41 / 51 / 4.
 Across 230,794 moves the bots produced **zero** illegal moves and every game finished.
-Re-run it with `node scripts/../` — the harness lives in the repo history; the quickest
-check is that `bot.js` still exports `botMove(game, board, pid, level)`.
+Re-run it yourself:
+
+```bash
+node scripts/bot-tournament.mjs 200
+```
+
+That harness doubles as the regression test for the engine and the bots together — it
+reports any illegal move and any game that fails to finish.
 
 Bots answer trades but do not propose them, which keeps the offer sheet from popping up
 every turn. That is a deliberate limit, not an oversight.
