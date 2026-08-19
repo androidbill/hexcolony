@@ -18,6 +18,7 @@ const CORE = [
   'audio.js',
   'wordcodes.js',
   'version.js',
+  'sfx/index.json',
   'firebase-config.js',
   'manifest.webmanifest',
   'icons/icon-192.png',

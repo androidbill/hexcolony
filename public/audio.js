@@ -201,7 +201,7 @@ const C5 = 523, D5 = 587, E5 = 659, G5 = 784, A5 = 880;
 const C6 = 1047, D6 = 1175, E6 = 1319, G6 = 1568;
 const C4 = 262, G4 = 392, E4 = 330;
 
-export const sfx = {
+const synth = {
   tap: () => note(A5, { dur: 0.045, vol: 0.09, type: 'sine', room: 0.05 }),
 
   /**
@@ -309,6 +309,82 @@ export const sfx = {
     fat(D6, { delay: 0.08, dur: 0.22, vol: 0.14 });
   },
 };
+
+// ---------------------------------------------------------------- recorded sounds
+//
+// Anything in public/sfx/ takes over from the synthesised version of the same name. This
+// is the whole point of the arrangement: real recordings beat synthesis for the sounds
+// that imitate an object — dice on a table above all — while synthesis stays perfectly
+// good for the abstract ones, and neither has to be finished before the other is useful.
+//
+// public/sfx/index.json lists what is actually there, so a game with no recordings makes
+// one small request rather than a 404 for every effect. A file that fails to load, or a
+// device that cannot decode it, silently keeps the synthesised sound: there is no state
+// in which the game goes quiet because a download failed.
+//
+// Playback goes through the same master chain as everything else, so recordings from
+// different sources still land in one space and at one level.
+
+const samples = new Map();       // name -> AudioBuffer
+let samplesAsked = false;
+
+async function loadSamples() {
+  if (samplesAsked || !ctx) return;
+  samplesAsked = true;
+  try {
+    const res = await fetch('sfx/index.json', { cache: 'no-cache' });
+    if (!res.ok) return;                       // no recordings in this build
+    const list = await res.json();
+
+    // Either ["dice", "gain"] or { "dice": { file: "dice.mp3", gain: 0.8 } }.
+    const entries = Array.isArray(list)
+      ? list.map((name) => [name, {}])
+      : Object.entries(list).map(([name, v]) => [name, typeof v === 'string' ? { file: v } : (v || {})]);
+
+    await Promise.all(entries.map(async ([name, cfg]) => {
+      if (!(name in synth)) return;            // not a sound this game plays
+      try {
+        const file = cfg.file || `${name}.mp3`;
+        const r = await fetch(`sfx/${file}`);
+        if (!r.ok) return;
+        const buf = await ctx.decodeAudioData(await r.arrayBuffer());
+        samples.set(name, { buf, gain: Number.isFinite(cfg.gain) ? cfg.gain : 1, room: cfg.room ?? 0.1 });
+      } catch { /* this one stays synthesised */ }
+    }));
+  } catch { /* offline, or no index — synthesis covers everything */ }
+}
+
+/** Play the recording for `name`. False means there isn't one, so the caller synthesises. */
+function playSample(name) {
+  const s = samples.get(name);
+  if (!s || !ctx) return false;
+  try {
+    const src = ctx.createBufferSource();
+    src.buffer = s.buf;
+    const g = ctx.createGain();
+    g.gain.value = s.gain;
+    src.connect(g).connect(master);
+    if (s.room) {
+      const send = ctx.createGain();
+      send.gain.value = s.room;
+      g.connect(send);
+      send.connect(roomSend);
+    }
+    src.start();
+    return true;
+  } catch { return false; }
+}
+
+/**
+ * Every effect, recorded where a recording exists and synthesised where it does not.
+ * Callers never know which they got.
+ */
+export const sfx = Object.fromEntries(Object.keys(synth).map((name) => [name, () => {
+  if (!enabled) return;
+  unlock();
+  loadSamples();
+  if (!playSample(name)) synth[name]();
+}]));
 
 export function buzz(pattern) {
   if (localStorage.getItem('hexcolony_haptics') === 'off') return;
