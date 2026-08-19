@@ -9,7 +9,7 @@
 // The engine is deliberately strict — it re-validates everything, because the client
 // that sends a move is the same untrusted device that drew the buttons.
 
-import { HEXES, VERTS, EDGES, RESOURCES, makeBoard, hexNeighbours, LAYOUT_INFO } from './board.js';
+import { HEXES, VERTS, EDGES, RESOURCES, makeBoard, hexNeighbours, LAYOUT_INFO, pips } from './board.js';
 
 export const COSTS = {
   road:       { wood: 1, brick: 1 },
@@ -30,6 +30,13 @@ export const PIECES = { road: 15, settlement: 5, city: 4 };
 // timer for everybody else.
 export const TURN_OPTIONS = [0, 15, 30, 45, 60];   // 0 = no timer at all
 export const ROLL_SECONDS = 10;                    // fixed: rolling is not a decision
+
+// Opening placement is timed even when the rest of the game is not, and that is
+// deliberate. A turn nobody takes during play holds up one round; a settlement nobody
+// places holds up the entire game before it has started, and there is no board yet for
+// the others to look at while they wait. Ninety seconds is long enough to think about an
+// opening and short enough that a phone that went to sleep does not end the evening.
+export const SETUP_SECONDS = 90;
 export const ACTION_BONUS_MS = 10000;              // earned by actually doing something
 export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expansion
 
@@ -70,6 +77,24 @@ export const PLAYER_COLORS = [
   { key: 'slate',  hex: '#64748b', ink: '#ffffff', name: 'Slate' },
   { key: 'black',  hex: '#26303f', ink: '#ffffff', name: 'Black' },
 ];
+
+/**
+ * Check a client-supplied {resource: count} bundle.
+ *
+ * Every one of these arrives from a device we do not control, and the counts were being
+ * used in arithmetic without ever being checked. A negative count in a trade offer
+ * reversed the transfer and pulled cards OUT of the other player's hand; a fractional
+ * one produced fractional resources that no later check could tidy up. Whole numbers,
+ * real resources, nothing absurd.
+ */
+function badBundle(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return 'Malformed.';
+  for (const [r, n] of Object.entries(obj)) {
+    if (!RESOURCES.includes(r)) return 'Unknown resource.';
+    if (!Number.isInteger(n) || n < 0 || n > 999) return 'Bad card count.';
+  }
+  return null;
+}
 
 const clone = (o) => (typeof structuredClone === 'function'
   ? structuredClone(o)
@@ -153,7 +178,8 @@ export function newGame(seats, settings, rng = Math.random) {
     turnSeconds: TURN_OPTIONS.includes(settings.turnSeconds) ? settings.turnSeconds : 0,
     turn: {
       seat: order[0], dice: null, rolled: false, playedDev: false, num: 0, freeRoads: 0,
-      allowMs: 0, clockRestart: false,
+      // The first player is already on the clock as the board appears.
+      allowMs: SETUP_SECONDS * 1000, clockRestart: true,
     },
     award: { road: null, roadLen: 0, army: null, armySize: 0 },
     pending: { discard: {}, stealFrom: [] },
@@ -168,9 +194,23 @@ export function newGame(seats, settings, rng = Math.random) {
  * Start the allowance for the step just entered. `allowMs` of 0 means untimed, which is
  * what every reader checks, so switching timers off needs no other special cases.
  */
-function startClock(g, seconds) {
-  g.turn.allowMs = g.turnSeconds ? seconds * 1000 : 0;
-  g.turn.clockRestart = !!g.turnSeconds;
+function startClock(g, seconds, always = false) {
+  const on = always || !!g.turnSeconds;
+  g.turn.allowMs = on ? seconds * 1000 : 0;
+  g.turn.clockRestart = on;
+}
+
+/**
+ * Hand control back to the player whose turn it is, with a fresh allowance.
+ *
+ * Everything between the roll and the next build — discarding, moving the robber,
+ * choosing a victim — used to run on the clock that started at the roll. Other people's
+ * discards were eating the roller's building time, and a seven could cost most of a
+ * turn that had not begun. The step that gives control back starts the allowance again.
+ */
+function resumeTurn(g) {
+  g.phase = g.turn.rolled ? 'build' : 'roll';
+  startClock(g, g.turn.rolled ? g.turnSeconds : ROLL_SECONDS);
 }
 
 /**
@@ -381,6 +421,10 @@ function produce(g, board, roll, events) {
     for (const v of HEXES[hi].corners) {
       const b = g.bldg[v];
       if (!b) continue;
+      // A player who walked out leaves their buildings on the board — they still block
+      // roads and still count for whoever cut them off — but paying them drains the
+      // bank into a hand nobody will ever spend.
+      if (!g.seats.includes(b.p)) continue;
       const amt = b.t === 'c' ? 2 : 1;
       ((claims[tile.res] ||= {})[b.p] ||= 0);
       claims[tile.res][b.p] += amt;
@@ -451,16 +495,17 @@ function moveRobber(g, hexIndex, pid, events, rng) {
   const victims = stealCandidates(g, hexIndex, pid);
   if (victims.length === 0) {
     g.pending.stealFrom = [];
-    g.phase = g.turn.rolled ? 'build' : 'roll';
+    resumeTurn(g);
     return;
   }
   if (victims.length === 1) {
     steal(g, pid, victims[0], events, rng);
-    g.phase = g.turn.rolled ? 'build' : 'roll';
+    resumeTurn(g);
     return;
   }
   g.pending.stealFrom = victims;
   g.phase = 'steal';
+  startClock(g, g.turnSeconds);
 }
 
 function steal(g, thief, victim, events, rng) {
@@ -485,12 +530,13 @@ function steal(g, thief, victim, events, rng) {
  * a step with no legal move.
  */
 function afterSeven(g) {
-  if (g.useRobber !== false) { g.phase = 'robber'; return; }
+  if (g.useRobber !== false) { g.phase = 'robber'; startClock(g, g.turnSeconds); return; }
   const pid = currentPid(g);
   const targets = g.seats.filter((s) => s !== pid && handSize(g.players[s]) > 0);
-  if (!targets.length) { g.phase = g.turn.rolled ? 'build' : 'roll'; return; }
+  if (!targets.length) { resumeTurn(g); return; }
   g.pending.stealFrom = targets;
   g.phase = 'take';
+  startClock(g, g.turnSeconds);
 }
 
 /** Who still owes a discard after a 7. */
@@ -501,6 +547,104 @@ function computeDiscards(g) {
     if (n > g.discardLimit) out[pid] = Math.floor(n / 2);
   }
   return out;
+}
+
+// ---------------------------------------------------------------- running out of time
+//
+// Nothing here reads a clock — the engine still has no idea what time it is. It only
+// answers "if the player on the clock has run out, what should happen?", and the caller
+// decides when to ask. Keeping the answer in here means a timed-out human, a sleeping
+// phone and a crashed bot all resolve the same way, and it can be tested without one.
+
+/** The best-looking legal corner: production first, then variety. */
+function autoSettlement(g, board, pid, setupMode) {
+  const spots = legalSettlements(g, pid, setupMode);
+  if (!spots.length) return null;
+  let best = spots[0], bestScore = -Infinity;
+  for (const v of spots) {
+    let score = 0;
+    const kinds = new Set();
+    for (const h of VERTS[v].hexes) {
+      const t = board.tiles[h];
+      score += pips(t.num);
+      if (t.res) kinds.add(t.res);
+    }
+    score += kinds.size * 1.5;
+    if (board.portAt[v]) score += 1;
+    if (score > bestScore) { bestScore = score; best = v; }
+  }
+  return best;
+}
+
+/** Of the roads on offer, the one whose far end is worth walking to. */
+function autoRoad(g, board, pid, fromVertex) {
+  const legal = legalRoads(g, pid, fromVertex);
+  if (!legal.length) return null;
+  let best = legal[0], bestScore = -Infinity;
+  for (const e of legal) {
+    const target = fromVertex === null || fromVertex === undefined
+      ? EDGES[e].b
+      : (EDGES[e].a === fromVertex ? EDGES[e].b : EDGES[e].a);
+    let score = 0;
+    for (const h of VERTS[target].hexes) score += pips(board.tiles[h].num);
+    if (score > bestScore) { bestScore = score; best = e; }
+  }
+  return best;
+}
+
+/** Half a hand for a discard nobody made in time, taken off the biggest piles. */
+function autoDiscard(g, pid) {
+  const owed = g.pending.discard[pid] || 0;
+  const res = {};
+  let left = owed;
+  const held = g.players[pid].res;
+  const order = RESOURCES.slice().sort((a, b) => (held[b] || 0) - (held[a] || 0));
+  for (const r of order) {
+    if (!left) break;
+    const take = Math.min(left, held[r] || 0);
+    if (take > 0) { res[r] = take; left -= take; }
+  }
+  return res;
+}
+
+/** What the game should do for itself, and who it acts as. Null when nothing is stalled. */
+function timeoutMove(g, board) {
+  const up = currentPid(g);
+  switch (g.phase) {
+    case 'setup': {
+      if (g.setup.need === 's') {
+        const v = autoSettlement(g, board, up, true);
+        return v === null ? null : { pid: up, move: { type: 'setupSettlement', v } };
+      }
+      const e = autoRoad(g, board, up, g.setup.lastV);
+      return e === null ? null : { pid: up, move: { type: 'setupRoad', e } };
+    }
+    case 'roll':
+      return { pid: up, move: { type: 'roll' } };
+    case 'discard': {
+      // One player per call; the next expiry collects the next one.
+      const who = Object.keys(g.pending.discard)[0];
+      return who ? { pid: who, move: { type: 'discard', res: autoDiscard(g, who) } } : null;
+    }
+    case 'robber': {
+      const hex = HEXES.map((h) => h.i).find((i) => i !== g.robber);
+      return hex === undefined ? null : { pid: up, move: { type: 'moveRobber', hex } };
+    }
+    case 'steal':
+    case 'take': {
+      const from = g.pending.stealFrom[0];
+      return from ? { pid: up, move: { type: g.phase === 'take' ? 'takeCard' : 'steal', from } } : null;
+    }
+    case 'build': {
+      if (g.turn.freeRoads > 0) {
+        const e = autoRoad(g, board, up, null);
+        if (e !== null) return { pid: up, move: { type: 'build', what: 'road', e } };
+      }
+      return { pid: up, move: { type: 'endTurn' } };
+    }
+    default:
+      return null;
+  }
 }
 
 // ---------------------------------------------------------------- the move dispatcher
@@ -535,6 +679,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       me.left.settlement -= 1;
       g.setup.need = 'r';
       g.setup.lastV = v;
+      startClock(g, SETUP_SECONDS, true);
       note(g, events, { t: 'build', p: pid, what: 'settlement', v });
 
       // The second settlement each player places pays out its surrounding hexes.
@@ -574,6 +719,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         startTurn(g, events);
       } else {
         g.turn.seat = g.setup.order[g.setup.at];
+        startClock(g, SETUP_SECONDS, true);
       }
       return ok();
     }
@@ -613,10 +759,12 @@ export function applyMove(state, pid, move, rng = Math.random) {
       const owed = g.pending.discard[pid];
       if (!owed) return fail('You do not need to discard.');
       const give = move.res || {};
+      const bad = badBundle(give);
+      if (bad) return fail(bad);
       const total = Object.values(give).reduce((a, b) => a + b, 0);
       if (total !== owed) return fail(`Discard exactly ${owed}.`);
       for (const [r, n] of Object.entries(give)) {
-        if (n < 0 || (me.res[r] || 0) < n) return fail('You do not have those cards.');
+        if ((me.res[r] || 0) < n) return fail('You do not have those cards.');
       }
       for (const [r, n] of Object.entries(give)) { me.res[r] -= n; g.bank[r] += n; }
       delete g.pending.discard[pid];
@@ -641,7 +789,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!g.pending.stealFrom.includes(move.from)) return fail('You cannot rob that player.');
       steal(g, pid, move.from, events, rng);
       g.pending.stealFrom = [];
-      g.phase = g.turn.rolled ? 'build' : 'roll';
+      resumeTurn(g);
       return ok();
     }
 
@@ -654,7 +802,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!g.pending.stealFrom.includes(move.from)) return fail('You cannot take from that player.');
       steal(g, pid, move.from, events, rng);
       g.pending.stealFrom = [];
-      g.phase = g.turn.rolled ? 'build' : 'roll';
+      resumeTurn(g);
       return ok();
     }
 
@@ -766,10 +914,11 @@ export function applyMove(state, pid, move, rng = Math.random) {
       }
       if (kind === 'plenty') {
         const take = move.res || {};
+        const badTake = badBundle(take);
+        if (badTake) return fail(badTake);
         const total = Object.values(take).reduce((a, b) => a + b, 0);
         if (total !== 2) return fail('Choose exactly two resources.');
         for (const [r, n] of Object.entries(take)) {
-          if (!RESOURCES.includes(r) || n < 0) return fail('Unknown resource.');
           if (g.bank[r] < n) return fail(`The bank is out of ${r}.`);
         }
         for (const [r, n] of Object.entries(take)) { me.res[r] += n; g.bank[r] -= n; }
@@ -814,9 +963,11 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!myTurn) return fail('Only the player whose turn it is can open a trade.');
       if (g.phase !== 'build') return fail('Roll the dice first.');
       const give = move.give || {}, want = move.want || {};
+      const badGive = badBundle(give) || badBundle(want);
+      if (badGive) return fail(badGive);
       const gTotal = Object.values(give).reduce((a, b) => a + b, 0);
       const wTotal = Object.values(want).reduce((a, b) => a + b, 0);
-      if (!gTotal || !wTotal) return fail('Offer something and ask for something.');
+      if (gTotal <= 0 || wTotal <= 0) return fail('Offer something and ask for something.');
       for (const [r, n] of Object.entries(give)) if ((me.res[r] || 0) < n) return fail('You do not have that to give.');
       g.trade = { from: pid, give, want, replies: {} };
       note(g, events, { t: 'offer', p: pid, give, want });
@@ -868,6 +1019,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (g.phase !== 'build') return fail('You still have something to do.');
       if (g.turn.freeRoads > 0) return fail('Place your free roads first.');
       g.trade = null;
+      g.pending.stealFrom = [];
       advanceSeat(g);
       startTurn(g, events);
       return ok();
@@ -897,24 +1049,61 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (g.phase === 'setup') {
         // Rebuilding the snake mid-setup is not worth the corner cases — drop the
         // departed seat's remaining slots and carry on with who is left.
-        g.setup.order = g.setup.order.filter((s) => s !== idx).map((s) => (s > idx ? s - 1 : s));
-        g.setup.at = Math.min(g.setup.at, g.setup.order.length);
+        // The pointer has to move back by however many of the departed player's slots
+        // were already behind it. Clamping it to the new length instead — which is what
+        // this did — leaves it pointing at a different player's slot, so somebody gets
+        // skipped and somebody else places twice.
+        const doneRemoved = g.setup.order.slice(0, g.setup.at).filter((sx) => sx === idx).length;
+        g.setup.order = g.setup.order.filter((sx) => sx !== idx).map((sx) => (sx > idx ? sx - 1 : sx));
+        g.setup.at = Math.max(0, Math.min(g.setup.at - doneRemoved, g.setup.order.length));
+
+        // Only the departing player's own half-finished placement is abandoned. Resetting
+        // this unconditionally threw away the settlement somebody ELSE had just put down
+        // and sent them back to place another one, so that player ended the opening with
+        // three settlements and one road.
+        if (wasTheirTurn) {
+          g.setup.need = 's';
+          g.setup.lastV = null;
+        }
+
         if (g.setup.at >= g.setup.order.length) {
           refreshAwards(g, events);
           g.turn.seat = 0; g.turn.num = 0;
           startTurn(g, events);
         } else {
-          g.setup.need = 's';
-          g.setup.lastV = null;
           g.turn.seat = g.setup.order[g.setup.at];
+          startClock(g, SETUP_SECONDS, true);
         }
       } else if (wasTheirTurn) {
         startTurn(g, events);
       } else if (g.phase === 'discard' && !Object.keys(g.pending.discard).length) {
-        g.phase = 'robber';
+        // Straight to 'robber' was wrong in a game with the robber switched off: that
+        // phase has no legal move there, so the turn parked and never came back.
+        afterSeven(g);
       }
       refreshAwards(g, events);
       return ok();
+    }
+
+    /**
+     * The clock ran out. Any player at the table may send this.
+     *
+     * It has to be sendable by anyone, because the commonest reason a turn stalls is
+     * that the phone whose turn it is has gone to sleep — the one device that cannot
+     * report it. Every device watches the same server-stamped deadline, so they all
+     * reach the same conclusion; whoever's transaction lands first does the work and the
+     * rest find the turn already moved on.
+     *
+     * It is not a way to act as somebody else: the move is chosen here, from the phase,
+     * and it is always the move the game was already waiting for.
+     */
+    case 'timeout': {
+      if (!g.seats.includes(pid)) return fail('Not seated.');
+      const auto = timeoutMove(g, board);
+      if (!auto) return fail('Nothing to force.');
+      // Re-entered from the original state so the move is credited to, and validated
+      // against, the player who actually owed it.
+      return applyMove(state, auto.pid, auto.move, rng);
     }
 
     default:

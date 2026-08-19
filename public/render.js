@@ -81,6 +81,33 @@ export function loadTerrainArt(onLoad) {
   }
 }
 
+/**
+ * Bill's settlement and city outlines, from house.svg and city.svg.
+ *
+ * Path data drawn with Path2D rather than loaded as images: a piece is about twenty
+ * pixels across at normal zoom on a phone, where a vector stays crisp and a bitmap turns
+ * to mush, and it costs no request, no tint compositing and no cache. The colour is
+ * simply the fill.
+ *
+ * Module level, and the Path2D built once. As a static getter this rebuilt the whole
+ * object — and re-parsed both path strings — for every building on the board, on every
+ * frame of a loop that runs sixty times a second.
+ *
+ * `box` is the ink's own extent, not the viewBox: both drawings sit inside a larger
+ * canvas, and centring on the viewBox would hang them off the corner.
+ */
+const PIECES = {
+  settlement: {
+    d: 'M 20 85 L 80 85 L 80 45 L 50 15 L 20 45 Z',
+    box: { x: 20, y: 15, w: 60, h: 70 },
+  },
+  city: {
+    d: 'M 15 85 L 105 85 L 105 55 L 80 30 L 55 55 L 55 30 L 35 15 L 15 30 Z',
+    box: { x: 15, y: 15, w: 90, h: 70 },
+  },
+};
+for (const spec of Object.values(PIECES)) spec.path = new Path2D(spec.d);
+
 export class BoardView {
   constructor(canvas) {
     this.cv = canvas;
@@ -641,36 +668,15 @@ export class BoardView {
     }
   }
 
-  /**
-   * Bill's settlement and city outlines, from house.svg and city.svg.
-   *
-   * Kept as path data and drawn with Path2D rather than loaded as images: a piece is
-   * about twenty pixels across at normal zoom on a phone, where a vector stays crisp
-   * and a bitmap turns to mush, and it costs no request, no tint compositing and no
-   * cache. The colour is simply the fill.
-   *
-   * `box` is the ink's own extent, not the viewBox — both drawings sit inside a larger
-   * canvas, and centring on the viewBox would hang them off the corner.
-   */
-  static get PIECES() {
-    return {
-      settlement: {
-        d: 'M 20 85 L 80 85 L 80 45 L 50 15 L 20 45 Z',
-        box: { x: 20, y: 15, w: 60, h: 70 },
-      },
-      city: {
-        d: 'M 15 85 L 105 85 L 105 55 L 80 30 L 55 55 L 55 30 L 35 15 L 15 30 Z',
-        box: { x: 15, y: 15, w: 90, h: 70 },
-      },
-    };
-  }
+  /** The piece outlines, for anything outside the renderer that wants them. */
+  static get PIECES() { return PIECES; }
 
   /**
    * Stand a piece on a corner, sized by height so a city reads as wider than a house
    * rather than merely taller.
    */
   drawPiece(kind, x, y, color, height) {
-    const spec = BoardView.PIECES[kind];
+    const spec = PIECES[kind];
     if (!spec) return;
     const c = this.ctx;
     const k = height / spec.box.h;
@@ -682,7 +688,7 @@ export class BoardView {
     // junction instead of floating above it.
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
 
-    const path = new Path2D(spec.d);
+    const path = spec.path;
     c.shadowColor = 'rgba(0, 0, 0, 0.5)';
     c.shadowBlur = 7;
     c.shadowOffsetY = 3;

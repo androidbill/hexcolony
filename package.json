@@ -6,5 +6,9 @@
   "description": "HexColony - online multiplayer island-trading board game PWA",
   "devDependencies": {
     "sharp": "^0.35.3"
+  },
+  "scripts": {
+    "test": "node scripts/engine-tests.mjs",
+    "tournament": "node scripts/bot-tournament.mjs"
   }
 }

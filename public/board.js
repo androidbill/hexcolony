@@ -335,7 +335,29 @@ function classicBoard() {
  * Also switches the module's active layout, so calling this is what makes the rest of
  * the topology exports correct for this game.
  */
+const boardCache = new Map();
+
 export function makeBoard(seed, mode = 'random', layout = 'classic') {
+  // Deterministic in its three arguments, and the rules engine rebuilds it on every
+  // single move — including every move of every bot turn. Generating it costs a terrain
+  // shuffle, a port walk and a token deal that reshuffles until no two red numbers
+  // touch, which on the expansion island can run to hundreds of attempts. Handing back
+  // the same object is exact, not an approximation.
+  //
+  // Switching the shared topology is a side effect callers rely on, so that still runs.
+  const cacheKey = `${seed}|${mode}|${layout}`;
+  const hit = boardCache.get(cacheKey);
+  if (hit) { useLayout(hit.layout); return hit; }
+
+  const built = buildBoard(seed, mode, layout);
+  // The map picker walks through boards one seed at a time; only a handful are ever
+  // wanted again, so this is a small window rather than a permanent store.
+  if (boardCache.size > 24) boardCache.clear();
+  boardCache.set(cacheKey, built);
+  return built;
+}
+
+function buildBoard(seed, mode, layout) {
   const key = useLayout(layout);
   const info = LAYOUT_INFO[key];
   const rng = mulberry32(seed);
@@ -374,13 +396,19 @@ export function makeBoard(seed, mode = 'random', layout = 'classic') {
 }
 
 // ---------------------------------------------------------------- spatial helpers
+// One per layout, worked out once. The renderer asks for this while clamping a pan,
+// which is to say on every frame of every drag.
+const extentCache = {};
 export function boardExtent() {
+  const hit = extentCache[LAYOUT];
+  if (hit) return hit;
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const v of VERTS) {
     minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
     minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y);
   }
-  return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
+  extentCache[LAYOUT] = { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
+  return extentCache[LAYOUT];
 }
 
 // The outward direction of a coastal edge, used to float the port badge off the shore.

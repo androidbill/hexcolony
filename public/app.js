@@ -39,6 +39,23 @@ function withTimeout(promise, ms) {
 
 // ---------------------------------------------------------------- identity
 const rid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+/**
+ * A real shuffle.
+ *
+ * `sort(() => Math.random() - 0.5)` is not one: the comparator is inconsistent, so the
+ * result depends on the sort's internal order of comparisons and leaves some
+ * arrangements far likelier than others — often barely moving a short list at all. Seat
+ * order decides who opens the board, so it is worth getting right.
+ */
+function shuffle(list) {
+  const out = list.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+}
 let playerId = localStorage.getItem('hexcolony_pid');
 if (!playerId) { playerId = rid(); localStorage.setItem('hexcolony_pid', playerId); }
 
@@ -705,13 +722,18 @@ async function leaveRoom(removeSelf = true) {
  * Send a move. The engine re-validates inside the transaction against the state that
  * is actually on the server, so two people acting at once cannot both win the race.
  */
-async function send(move) {
-  if (solo) return sendLocal(move);
-  if (!roomRef || sending) return false;
+async function send(move, opts = {}) {
+  if (solo) return sendLocal(move, opts);
+  if (!roomRef) return false;
+  // One move at a time, but never for ever. A transaction that hangs on a dead
+  // connection used to leave this flag raised forever, and with it up every later tap —
+  // build, trade, end turn — returned false in silence. The game looked frozen and
+  // nothing said why.
+  if (sending) { if (!opts.quiet) toast('Still sending the last move…'); return false; }
   sending = true;
   let rejected = null;
   try {
-    await runTransaction(db, async (tx) => {
+    await withTimeout(runTransaction(db, async (tx) => {
       const snap = await tx.get(roomRef);
       if (!snap.exists()) { rejected = 'The room is gone.'; return; }
       const data = snap.data();
@@ -728,14 +750,19 @@ async function send(move) {
         patch.turnStartedAt = serverTimestamp();
       }
       tx.update(roomRef, patch);
-    });
+    }), 15000);
   } catch (e) {
     console.error(e);
     rejected = 'That did not go through — check your connection.';
   } finally {
     sending = false;
   }
-  if (rejected) { toast(rejected); sfx.error(); return false; }
+  if (rejected) {
+    // Automatic moves are sent by every device at once; all but the first are expected
+    // to be refused, and saying so would be noise rather than news.
+    if (!opts.quiet) { toast(rejected); sfx.error(); }
+    return false;
+  }
   nudgeCount = 0;
   return true;
 }
@@ -792,8 +819,11 @@ async function acceptMap() {
 
   if (solo) {
     const game = R.newGame(room.order, { ...room.settings, seed });
+    game.turn.clockRestart = false;
     room.state = 'playing';
     room.game = game;
+    // The first placement is already on the clock, so it needs its starting point.
+    room.turnStartedAt = Date.now();
     delete room.mapSeeds;
     delete room.mapIndex;
     saveSolo();
@@ -806,10 +836,14 @@ async function acceptMap() {
   const ids = Object.keys(room.players || {});
   if (ids.length < 2) return toast('You need at least two players.');
   // Seat order is shuffled here, which is this game's version of rolling for first player.
-  const order = ids.slice().sort(() => Math.random() - 0.5);
+  const order = shuffle(ids);
   const game = R.newGame(order, { ...room.settings, seed });
+  // Setup is timed from the moment the board appears, and the deadline is only
+  // meaningful against a stamp every device reads the same way — so the server sets it,
+  // exactly as it does for every later turn.
+  game.turn.clockRestart = false;
   try {
-    await updateDoc(roomRef, { state: 'playing', order, game });
+    await updateDoc(roomRef, { state: 'playing', order, game, turnStartedAt: serverTimestamp() });
   } catch (e) {
     console.error(e);
     toast('Could not start — check your connection.');
@@ -876,11 +910,14 @@ function renderMapPreview() {
 const isBot = (pid) => !!room?.players?.[pid]?.bot;
 
 /** The local twin of `send` — same engine, same validation, no server. */
-function sendLocal(move) {
+function sendLocal(move, opts = {}) {
   const g = room?.game;
   if (!g) return false;
   const res = R.applyMove(g, playerId, move);
-  if (!res.ok) { toast(res.error); sfx.error(); return false; }
+  if (!res.ok) {
+    if (!opts.quiet) { toast(res.error); sfx.error(); }
+    return false;
+  }
   room.game = res.game;
   if (res.game.turn.clockRestart) { res.game.turn.clockRestart = false; room.turnStartedAt = Date.now(); }
   saveSolo();
@@ -965,6 +1002,10 @@ function fallbackMove(g, pid) {
     }
     case 'steal':
       return g.pending.stealFrom.length ? { type: 'steal', from: g.pending.stealFrom[0] } : null;
+    // The no-robber version of the same step. Without this a solo game with the robber
+    // switched off could stop dead here, and there is no other player to unstick it.
+    case 'take':
+      return g.pending.stealFrom.length ? { type: 'takeCard', from: g.pending.stealFrom[0] } : null;
     case 'build': {
       if (g.turn.freeRoads > 0) {
         const roads = R.legalRoads(g, pid);
@@ -1054,7 +1095,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
     };
   }
   // Seat order is shuffled, so you don't always open the board.
-  const order = [playerId, ...bots.map((b) => b.id)].sort(() => Math.random() - 0.5);
+  const order = shuffle([playerId, ...bots.map((b) => b.id)]);
   const settings = { targetVP, discardLimit: 7, boardMode: 'random', layout, useRobber, turnSeconds: soloTurnSeconds };
 
   // Straight to the map picker: solo has a host too, and it is you.
@@ -1113,15 +1154,7 @@ function drawSoloSheet() {
     b.classList.toggle('on', b.dataset.soloLayout === soloLayout);
   }
   $('solo-layout-blurb').textContent = LAYOUT_INFO[soloLayout]?.blurb || '';
-  for (const b of document.querySelectorAll('[data-solo-timer]')) {
-  b.addEventListener('click', () => {
-    soloTurnSeconds = Number(b.dataset.soloTimer);
-    localStorage.setItem('hexcolony_solo_timer', String(soloTurnSeconds));
-    sfx.tap();
-    drawSoloSheet();
-  });
-}
-for (const b of document.querySelectorAll('[data-solo-robber]')) {
+  for (const b of document.querySelectorAll('[data-solo-robber]')) {
     b.classList.toggle('on', (b.dataset.soloRobber === 'on') === soloRobber);
   }
   for (const b of document.querySelectorAll('[data-solo-timer]')) {
@@ -1137,6 +1170,14 @@ for (const b of document.querySelectorAll('[data-solo-robber]')) {
   $('solo-target').textContent = String(soloTarget);
 }
 
+for (const b of document.querySelectorAll('[data-solo-timer]')) {
+  b.addEventListener('click', () => {
+    soloTurnSeconds = Number(b.dataset.soloTimer);
+    localStorage.setItem('hexcolony_solo_timer', String(soloTurnSeconds));
+    sfx.tap();
+    drawSoloSheet();
+  });
+}
 for (const b of document.querySelectorAll('[data-solo-layout]')) {
   b.addEventListener('click', () => {
     soloLayout = b.dataset.soloLayout;
@@ -1411,10 +1452,17 @@ function clearIntent() {
 
 $('btn-recenter').addEventListener('click', () => { view.resetView(); sfx.tap(); });
 
-// A continuous loop so the legal-move highlights can pulse.
+// A continuous loop so the legal-move highlights can pulse and the sea drifts.
+//
+// It only draws when there is something to look at. The board is behind the home and
+// lobby screens, and a hidden tab or a pocketed phone is not looking at anything — but
+// the loop was redrawing the whole island, waves and all, sixty times a second
+// throughout. That is a battery drain for no picture.
 function loop(t) {
-  view.draw(t);
   requestAnimationFrame(loop);
+  if (document.hidden) return;
+  if (!$('screen-game').classList.contains('is-active')) return;
+  view.draw(t);
 }
 requestAnimationFrame(loop);
 
@@ -1434,8 +1482,12 @@ function stampMs(v) {
 }
 
 function secondsLeft(g) {
-  if (!g || !g.turnSeconds || !g.turn.allowMs) return null;
-  if (g.phase !== 'roll' && g.phase !== 'build') return null;   // only timed steps
+  // `allowMs` is the whole answer: the engine sets it to 0 for any step that is not on
+  // the clock. Listing the timed phases here as well was a second copy of that decision,
+  // and it was already out of date — a player who had to discard, move the robber or
+  // choose a victim could hold the entire table up for as long as they liked, timer
+  // setting or not.
+  if (!g || !g.turn.allowMs) return null;
   const started = stampMs(room?.turnStartedAt);
   if (started === null) return null;          // the server has not stamped it yet
   if (!clockTrusted()) return null;           // this device cannot be trusted to judge
@@ -1447,8 +1499,7 @@ function drawTimer() {
   const el = $('turn-timer');
   // Timed game, but this device has not measured the server clock yet — say so rather
   // than counting down from a number that might be minutes wrong.
-  if (g && g.turnSeconds && g.turn.allowMs && (g.phase === 'roll' || g.phase === 'build')
-      && !clockTrusted()) {
+  if (g && g.turn.allowMs && !clockTrusted()) {
     el.hidden = false;
     el.classList.remove('mine', 'urgent');
     $('timer-secs').textContent = '⋯';
@@ -1475,24 +1526,28 @@ function drawTimer() {
 async function fireTimeout() {
   const g = game();
   const left = secondsLeft(g);
-  if (left === null) return;
-  const mine = R.isTurn(g, playerId);
-  if (left > 0) return;
+  if (left === null || left > 0) return;
+
+  // The phone whose turn it is goes first. Everyone else waits three more seconds and
+  // then tries too, which is what covers the commonest stall of all: the phone on the
+  // clock has gone to sleep and is the one device that cannot report it.
+  const mine = R.waitingOn(g, playerId);
   if (!mine && left > -3) return;
 
-  const key = `${g.turn.num}:${g.phase}:${mine}`;
+  // Keyed on the move counter, so each automatic move can be followed by another. The
+  // old key could not tell one forced discard from the next and stopped after one, which
+  // left the rest of a seven's discards stuck.
+  const key = `${g.turn.num}:${g.phase}:${g.seq}`;
   if (autoFiredFor === key) return;
   autoFiredFor = key;
 
   intent = null;      // whatever you were about to place, you are out of time for it
-  if (g.phase === 'roll') { await send({ type: 'roll' }); return; }
 
-  // Free roads from a Road Building card have to be placed before a turn can end.
-  if (g.turn.freeRoads > 0) {
-    const legal = R.legalRoads(g, R.currentPid(g));
-    if (legal.length) { await send({ type: 'build', what: 'road', e: legal[0] }); return; }
-  }
-  await send({ type: 'endTurn' });
+  // One move type for every stalled step. The engine works out what was owed and credits
+  // it to whoever owed it — this used to send `endTurn` as the local player, which the
+  // engine rightly refused as "Not your turn", and then showed that refusal to every
+  // innocent bystander at the table.
+  await send({ type: 'timeout' }, { quiet: true });
 }
 
 function startTimerLoop() {
@@ -1976,12 +2031,6 @@ for (const b of document.querySelectorAll('[data-trade-tab]')) {
 }
 
 function openTrade(g) {
-  // Trim anything left over from a previous visit that the hand no longer covers — the
-  // offer would only be refused on the way out.
-  const held = g.players[playerId]?.res || {};
-  for (const r of Object.keys(giveSel)) {
-    if ((held[r] || 0) < giveSel[r]) { if (held[r]) giveSel[r] = held[r]; else delete giveSel[r]; }
-  }
   tradeTab = 'bank';
   for (const x of document.querySelectorAll('[data-trade-tab]')) x.classList.toggle('on', x.dataset.tradeTab === 'bank');
   $('trade-bank').hidden = false;
@@ -2728,13 +2777,6 @@ window.HEXCOLONY = {
 };
 
 // ---------------------------------------------------------------- boot
-window.addEventListener('beforeunload', () => {
-  // Best effort: tell the room we're gone so the turn doesn't stall on a closed tab.
-  if (roomRef && room?.state === 'lobby') {
-    try { navigator.sendBeacon?.(''); } catch { /* no-op */ }
-  }
-});
-
 (async function boot() {
   // Drop the cache-busting marker fullRefresh added, so it is not carried into shares
   // or bookmarks.
