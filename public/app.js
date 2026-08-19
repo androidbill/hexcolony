@@ -20,7 +20,7 @@ import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
 import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO } from './board.js';
-import { BoardView, RES_ICON, loadTerrainArt } from './render.js';
+import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
@@ -330,7 +330,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0 },
+      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: 0 },
       players: { [playerId]: freshPlayer(name, myColorIdx) },
       order: [],
       game: null,
@@ -409,7 +409,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0 },
+        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: 0 },
         players: { [playerId]: freshPlayer(name, myColorIdx) },
         order: [],
         game: null,
@@ -651,7 +651,7 @@ function enterRoom(code) {
   lastFreshAt = now; lastPulseSeenAt = now;
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
   clockSamples = []; clockOffset = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null;
+  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null; payoutKey = null;
   subscribeRoom();
   subscribePulse();
   // One immediate beat so this phone has a clock reading straight away.
@@ -859,6 +859,7 @@ function renderMapPreview() {
   ensureBoard();
   view.setGame(null);
   view.setHighlights({ verts: [], edges: [], hexes: [] });
+  view.setPayout(null);       // whatever the last game's dice lit, this is a new island
 
   const host = isHost();
   const badge = $('turn-badge');
@@ -1063,7 +1064,7 @@ function clearSolo() { try { localStorage.removeItem(SOLO_KEY); } catch { /* fin
 function enterSolo(saved) {
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null;
+  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null; payoutKey = null;
   room = {
     code: 'SOLO', hostId: playerId, state: 'playing', solo: true,
     players: saved.players, order: saved.order, game: saved.game,
@@ -1096,12 +1097,15 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   }
   // Seat order is shuffled, so you don't always open the board.
   const order = shuffle([playerId, ...bots.map((b) => b.id)]);
-  const settings = { targetVP, discardLimit: 7, boardMode: 'random', layout, useRobber, turnSeconds: soloTurnSeconds };
+  const settings = {
+    targetVP, discardLimit: 7, boardMode: 'random', layout, useRobber,
+    turnSeconds: soloTurnSeconds, sea: soloSea,
+  };
 
   // Straight to the map picker: solo has a host too, and it is you.
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null;
+  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null; payoutKey = null;
   boardSeed = null;
   room = {
     code: 'SOLO', hostId: playerId, state: 'map', solo: true,
@@ -1144,6 +1148,7 @@ let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
 let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'classic';
 let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
+let soloSea = Number(localStorage.getItem('hexcolony_solo_sea') || 0);
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
@@ -1166,6 +1171,13 @@ function drawSoloSheet() {
   $('solo-robber-blurb').textContent = soloRobber
     ? 'Discard down, move the robber, rob whoever it lands on.'
     : 'No discard, no robber — just take a card from any player.';
+  drawSeaRow('solo-sea-row', soloSea, (i) => {
+    soloSea = i;
+    localStorage.setItem('hexcolony_solo_sea', String(i));
+    sfx.tap();
+    drawSoloSheet();
+  });
+  $('solo-sea-blurb').textContent = `${SEA_COLORS[soloSea]?.name || 'Lagoon'} — the water around the island`;
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
 }
@@ -1256,55 +1268,70 @@ async function shareRoom() {
 
 for (const b of document.querySelectorAll('[data-set]')) {
   b.addEventListener('click', () => {
-    if (!isHost()) return toast('Only the host can change the setup.');
     const key = b.dataset.set;
     const step = Number(b.dataset.step);
-    const s = room.settings || {};
-    if (key === 'target') {
-      const v = Math.max(5, Math.min(15, (s.targetVP || 10) + step));
-      updateDoc(roomRef, { 'settings.targetVP': v }).catch(() => {});
-    } else {
-      const v = Math.max(5, Math.min(12, (s.discardLimit || 7) + step));
-      updateDoc(roomRef, { 'settings.discardLimit': v }).catch(() => {});
-    }
-    sfx.tap();
+    const s = room?.settings || {};
+    const patch = key === 'target'
+      ? { 'settings.targetVP': Math.max(5, Math.min(15, (s.targetVP || 10) + step)) }
+      : { 'settings.discardLimit': Math.max(5, Math.min(12, (s.discardLimit || 7) + step)) };
+    if (setSetting(patch)) sfx.tap();
   });
 }
 
 for (const b of document.querySelectorAll('[data-board]')) {
   b.addEventListener('click', () => {
-    if (!isHost()) return toast('Only the host can change the setup.');
-    updateDoc(roomRef, { 'settings.boardMode': b.dataset.board }).catch(() => {});
-    sfx.tap();
+    if (setSetting({ 'settings.boardMode': b.dataset.board })) sfx.tap();
   });
 }
 
 for (const b of document.querySelectorAll('[data-timer]')) {
   b.addEventListener('click', () => {
-    if (!isHost()) return toast('Only the host can change the setup.');
-    updateDoc(roomRef, { 'settings.turnSeconds': Number(b.dataset.timer) }).catch(() => {});
-    sfx.tap();
+    if (setSetting({ 'settings.turnSeconds': Number(b.dataset.timer) })) sfx.tap();
   });
 }
 
 for (const b of document.querySelectorAll('[data-robber]')) {
   b.addEventListener('click', () => {
-    if (!isHost()) return toast('Only the host can change the setup.');
-    updateDoc(roomRef, { 'settings.useRobber': b.dataset.robber === 'on' }).catch(() => {});
-    sfx.tap();
+    if (setSetting({ 'settings.useRobber': b.dataset.robber === 'on' })) sfx.tap();
   });
+}
+
+/**
+ * Change a room setting from the lobby.
+ *
+ * A solo game has a lobby too — it is one tap back from the map picker — but no room
+ * document, and every one of these handlers passed a null reference straight to
+ * updateDoc. That throws synchronously, which the trailing .catch() does not catch, so
+ * touching any setting there took the screen down. Solo keeps its settings in memory.
+ */
+function setSetting(patch) {
+  if (!isHost()) { toast('Only the host can change the setup.'); return false; }
+  if (solo) {
+    room.settings = room.settings || {};
+    for (const [k, v] of Object.entries(patch)) room.settings[k.replace('settings.', '')] = v;
+    render();
+    return true;
+  }
+  updateDoc(roomRef, patch).catch(() => {});
+  return true;
+}
+
+function pickSea(idx) {
+  if (!setSetting({ 'settings.sea': idx })) return;
+  sfx.tap();
+  // Remembered for the next solo game too, the way the other solo options are.
+  if (solo) { soloSea = idx; localStorage.setItem('hexcolony_solo_sea', String(idx)); }
+  applySea();
 }
 
 for (const b of document.querySelectorAll('[data-layout]')) {
   b.addEventListener('click', () => {
-    if (!isHost()) return toast('Only the host can change the setup.');
     const layout = b.dataset.layout;
     const patch = { 'settings.layout': layout };
     // The fixed "Standard" arrangement only exists for the 19-tile island, so choosing
     // the expansion also drops back to a shuffled board rather than silently ignoring it.
     if (layout === 'expansion') patch['settings.boardMode'] = 'random';
-    updateDoc(roomRef, patch).catch(() => {});
-    sfx.tap();
+    if (setSetting(patch)) sfx.tap();
   });
 }
 
@@ -1365,6 +1392,11 @@ function renderLobby() {
     b.classList.toggle('on', b.dataset.layout === layout);
   }
   $('layout-blurb').textContent = LAYOUT_INFO[layout]?.blurb || '';
+
+  const sea = s.sea ?? 0;
+  drawSeaRow('sea-row', sea, pickSea);
+  $('sea-blurb').textContent = `${SEA_COLORS[sea]?.name || 'Lagoon'} — the water around the island`;
+  applySea();
   for (const b of document.querySelectorAll('[data-board]')) {
     b.classList.toggle('on', b.dataset.board === (s.boardMode || 'random'));
     // A fixed arrangement is only defined for the classic island.
@@ -1383,6 +1415,23 @@ function renderLobby() {
 }
 
 // ---------------------------------------------------------------- board plumbing
+/** Paint the water the host chose. Falls back to the first entry for an old room. */
+function applySea() {
+  view.setSea(room?.settings?.sea ?? 0);
+}
+
+function drawSeaRow(elId, chosen, onPick) {
+  const row = $(elId);
+  if (!row) return;
+  row.innerHTML = SEA_COLORS.map((c, i) => `
+    <button class="sea-cell${i === chosen ? ' on' : ''}" data-sea="${i}"
+      style="--a:${c.a};--b:${c.b}" aria-label="${esc(c.name)} sea"
+      title="${esc(c.name)}">${i === chosen ? '✓' : ''}</button>`).join('');
+  for (const b of row.querySelectorAll('[data-sea]')) {
+    b.addEventListener('click', () => onPick(Number(b.dataset.sea)));
+  }
+}
+
 function ensureBoard() {
   const g = game();
   // During map selection there is no game yet, so the preview is built from the room's
@@ -1398,6 +1447,7 @@ function ensureBoard() {
     boardSeed = seed;
     view.setBoard(board);
   }
+  applySea();
   return board;
 }
 
@@ -1587,6 +1637,7 @@ function render() {
   view.setHighlights(R.highlightsFor(g, playerId, intent));
 
   reactToLog(g);
+  updatePayout(g);
   startTimerLoop();
   drawTimer();
   renderScoreStrip(g);
@@ -1710,10 +1761,50 @@ function renderDice(g) {
   if ($('die-a').textContent !== String(d[0]) || $('die-b').textContent !== String(d[1])) {
     $('die-a').textContent = String(d[0]);
     $('die-b').textContent = String(d[1]);
-    for (const el of [$('die-a'), $('die-b')]) {
+    $('die-sum').textContent = String(d[0] + d[1]);
+    for (const el of [$('die-a'), $('die-b'), $('die-sum')]) {
       el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
     }
   }
+}
+
+// How long the producing tiles stay lit after a roll lands.
+const PAYOUT_MS = 6000;
+let payoutKey = null;
+
+/**
+ * Light up what the roll just paid: the tiles that came up, and every building standing
+ * on one, haloed in its owner's colour.
+ *
+ * Keyed on the roll's own log id rather than on the dice, so the flash starts once and
+ * is not restarted by the next unrelated snapshot — and so two 8s in a row are two
+ * separate flashes rather than one that never ends.
+ */
+function updatePayout(g) {
+  const rollEvt = (g.log || []).filter((e) => e.t === 'roll').pop();
+  const key = rollEvt ? `${rollEvt.i}` : null;
+  if (key === payoutKey) return;
+  payoutKey = key;
+
+  const roll = rollEvt?.roll;
+  // A seven pays nobody; there is nothing to light.
+  if (!board || !roll || roll === 7) { view.setPayout(null); return; }
+
+  const hexes = (board.byNumber[roll] || [])
+    .filter((i) => g.useRobber === false || i !== g.robber);
+  if (!hexes.length) { view.setPayout(null); return; }
+
+  const spots = [];
+  for (const i of hexes) {
+    for (const v of HEXES[i].corners) {
+      const b = g.bldg[v];
+      // A player who has left still owns the building, but it is no longer paid.
+      if (!b || !g.seats.includes(b.p)) continue;
+      if (spots.some((sp) => sp.v === Number(v))) continue;
+      spots.push({ v: Number(v), colour: colorFor(b.p), city: b.t === 'c' });
+    }
+  }
+  view.setPayout({ hexes, spots, until: performance.now() + PAYOUT_MS });
 }
 
 function renderHand(g) {

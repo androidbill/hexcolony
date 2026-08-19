@@ -43,17 +43,37 @@ const RES_COLOR = {
 const RES_ICON = { wood: '🌲', brick: '🧱', sheep: '🐑', wheat: '🌾', ore: '⛰️' };
 export { RES_COLOR, RES_ICON };
 
-// A bright, shallow-lagoon blue. The board chrome (topbar, tray, sheets) stays dark,
-// so the sea reads as a lit map inset rather than the app changing theme.
-const WATER_A = '#bfe7f7';   // horizon
-const WATER_B = '#7cc2e4';   // foreground
-// Wave layers drawn over that gradient: a deeper blue for the troughs and a white
-// highlight for the crests, drifting in opposite directions so the sea never looks
-// like a repeating pattern.
+/**
+ * The sea, which the host picks before the game starts.
+ *
+ * All light, and that is a constraint rather than a preference: the board chrome
+ * (topbar, tray, sheets) stays dark whatever is chosen, so the sea has to read as a lit
+ * map inset rather than as the app changing theme. It is also what the coastline halo,
+ * the cream port rings and the white piece outlines were all drawn against — a dark sea
+ * would leave every one of them invisible.
+ *
+ * Each entry carries its own wave colours. Deriving them by darkening the base looks
+ * fine on the blues and muddy on everything else, so they are chosen per palette.
+ */
+export const SEA_COLORS = [
+  { key: 'lagoon', name: 'Lagoon',   a: '#bfe7f7', b: '#7cc2e4', trough: '#2f86b8', deep: '#1d6d9c' },
+  { key: 'tropic', name: 'Tropical', a: '#c6f5ee', b: '#79d9cd', trough: '#2aa295', deep: '#17786e' },
+  { key: 'mint',   name: 'Mint',     a: '#d6f6e4', b: '#93ddb4', trough: '#37a06a', deep: '#227a4c' },
+  { key: 'sand',   name: 'Shallows', a: '#f6ecd2', b: '#dfc99a', trough: '#b8974f', deep: '#93753a' },
+  { key: 'rose',   name: 'Coral',    a: '#fbe2e4', b: '#f0aeb4', trough: '#d3707c', deep: '#ac4f5c' },
+  { key: 'lilac',  name: 'Lilac',    a: '#e9e2fb', b: '#bcaaf0', trough: '#8b73d6', deep: '#6a53b4' },
+  { key: 'slate',  name: 'Overcast', a: '#e6edf3', b: '#b3c4d2', trough: '#7a91a4', deep: '#5c7183' },
+  { key: 'dawn',   name: 'Dawn',     a: '#fdeed6', b: '#f5c79b', trough: '#d99457', deep: '#b3703a' },
+];
+export const seaAt = (i) => SEA_COLORS[Number.isInteger(i) && SEA_COLORS[i] ? i : 0];
+
+// Wave layers drawn over the gradient, drifting in opposite directions so the sea never
+// looks like a repeating pattern. `role` picks the colour out of whichever sea is in use;
+// crests are white in all of them.
 const WAVE_LAYERS = [
-  { colour: '#2f86b8', alpha: 0.30, amp: 3.4, len: 118, rows: 7, speed: 0.055, phase: 0.0, width: 2.0 },
-  { colour: '#1d6d9c', alpha: 0.20, amp: 2.4, len: 71,  rows: 9, speed: -0.085, phase: 1.7, width: 1.5 },
-  { colour: '#ffffff', alpha: 0.40, amp: 2.0, len: 93,  rows: 8, speed: 0.038, phase: 3.1, width: 1.6 },
+  { role: 'trough', alpha: 0.30, amp: 3.4, len: 118, rows: 7, speed: 0.055, phase: 0.0, width: 2.0 },
+  { role: 'deep',   alpha: 0.20, amp: 2.4, len: 71,  rows: 9, speed: -0.085, phase: 1.7, width: 1.5 },
+  { role: 'crest',  alpha: 0.40, amp: 2.0, len: 93,  rows: 8, speed: 0.038, phase: 3.1, width: 1.6 },
 ];
 
 // Everything a player owns is outlined in the same bright white: roads, settlements and
@@ -138,6 +158,14 @@ const PIECES = {
 };
 for (const spec of Object.values(PIECES)) spec.path = new Path2D(spec.d);
 
+/** A #rrggbb from the player palette, at an alpha — canvas gradients need the components. */
+function hexToRgba(hex, alpha) {
+  const h = String(hex).replace('#', '');
+  const n = parseInt(h.length === 3 ? h.replace(/./g, (ch) => ch + ch) : h, 16);
+  if (!Number.isFinite(n)) return `rgba(255, 255, 255, ${alpha})`;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+}
+
 export class BoardView {
   constructor(canvas) {
     this.cv = canvas;
@@ -145,6 +173,8 @@ export class BoardView {
     this.board = null;
     this.game = null;
     this.highlights = { verts: [], edges: [], hexes: [] };
+    this.payout = null;                // what the last roll paid, and to whom
+    this.sea = SEA_COLORS[0];
     this.colorOf = () => '#888';       // pid -> css colour, injected by the app
     this.scale = 40;
     this.ox = 0; this.oy = 0;          // pan, in screen pixels
@@ -170,6 +200,23 @@ export class BoardView {
   setBoard(board) { this.board = board; this.fit(); }
   setGame(game) { this.game = game; }
   setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [] }; }
+  setSea(idx) { this.sea = seaAt(idx); }
+  /** `{ hexes, spots: [{ v, colour, city }], until }`, or null for nothing to show. */
+  setPayout(p) { this.payout = p; }
+
+  /**
+   * How strongly the payout flash is showing, 0 when it is over.
+   *
+   * It comes up fast, holds, then fades — a flash that simply vanished at the end read
+   * as a glitch, and one that stayed up competed with the build highlights for the rest
+   * of the turn.
+   */
+  payoutLevel(t) {
+    if (!this.payout) return 0;
+    const left = this.payout.until - t;
+    if (left <= 0) return 0;
+    return Math.min(1, left / 900);
+  }
 
   // ------------------------------------------------------------ camera
   /** Size the backing store to the element and refit the island inside it. */
@@ -341,13 +388,17 @@ export class BoardView {
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     c.clearRect(0, 0, this.w, this.h);
 
+    const paying = this.payoutLevel(t);
+
     this.drawWater(t);
     this.drawCoast();
     for (const tile of this.board.tiles) this.drawHex(tile);
+    if (paying) this.drawPayingHexes(paying);
     this.drawPorts();
     this.drawHexHighlights();
     this.drawRoads();
     this.drawEdgeHighlights();
+    if (paying) this.drawPayingSpots(paying);
     this.drawBuildings();
     this.drawRobber();
     this.drawVertexHighlights();
@@ -356,8 +407,8 @@ export class BoardView {
   drawWater(t = 0) {
     const c = this.ctx;
     const g = c.createLinearGradient(0, 0, 0, this.h);
-    g.addColorStop(0, WATER_A);
-    g.addColorStop(1, WATER_B);
+    g.addColorStop(0, this.sea.a);
+    g.addColorStop(1, this.sea.b);
     c.fillStyle = g;
     c.fillRect(0, 0, this.w, this.h);
 
@@ -367,7 +418,7 @@ export class BoardView {
     c.lineCap = 'round';
     for (const L of WAVE_LAYERS) {
       c.globalAlpha = L.alpha;
-      c.strokeStyle = L.colour;
+      c.strokeStyle = L.role === 'crest' ? '#ffffff' : this.sea[L.role];
       c.lineWidth = L.width;
       const drift = (t / 1000) * L.speed * 60;
       for (let i = 0; i < L.rows; i++) {
@@ -783,6 +834,68 @@ export class BoardView {
     c.arc(0, -s * 0.72, s * 0.42, 0, Math.PI * 2);
     c.fill(); c.stroke();
     c.restore();
+  }
+
+  // ------------------------------------------------------------ the payout flash
+  //
+  // The tiles that just came up, and every building standing on them. Between them these
+  // answer "what did that roll do, and who got it?" without anyone having to read the
+  // log or count corners.
+
+  /** The producing tiles, lit from within and ringed. */
+  drawPayingHexes(level) {
+    const c = this.ctx;
+    const beat = 0.72 + this.pulse * 0.28;
+    for (const i of this.payout.hexes) {
+      const tile = this.board.tiles[i];
+      if (!tile) continue;
+      const [cx, cy] = this.toScreen(tile.x, tile.y);
+      const R = this.scale;
+
+      c.save();
+      this.hexPath(tile, 0.985);
+      c.clip();
+      // Brightest at the rim, so the illustration underneath still shows through.
+      const glow = c.createRadialGradient(cx, cy, R * 0.1, cx, cy, R);
+      glow.addColorStop(0, `rgba(255, 248, 214, ${0.06 * level * beat})`);
+      glow.addColorStop(1, `rgba(255, 236, 150, ${0.52 * level * beat})`);
+      c.fillStyle = glow;
+      c.fillRect(cx - R * 1.2, cy - R * 1.2, R * 2.4, R * 2.4);
+
+      this.hexPath(tile, 0.985);
+      c.strokeStyle = `rgba(255, 255, 255, ${0.95 * level})`;
+      c.lineWidth = Math.max(3, R * 0.22);
+      c.stroke();
+      c.restore();
+
+      this.hexPath(tile, 0.985);
+      c.strokeStyle = `rgba(255, 214, 92, ${0.9 * level * beat})`;
+      c.lineWidth = Math.max(2, R * 0.07);
+      c.stroke();
+    }
+  }
+
+  /** A halo in the owner's colour under every building that is being paid. */
+  drawPayingSpots(level) {
+    const c = this.ctx;
+    const R = this.scale;
+    const beat = 0.7 + this.pulse * 0.3;
+    for (const spot of this.payout.spots) {
+      const [x, y] = this.toScreen(VERTS[spot.v].x, VERTS[spot.v].y);
+      const rad = R * (spot.city ? 0.46 : 0.38) * (0.94 + this.pulse * 0.12);
+
+      // A soft disc of their colour first — this is the part that says WHO at a glance.
+      const halo = c.createRadialGradient(x, y, rad * 0.15, x, y, rad);
+      halo.addColorStop(0, hexToRgba(spot.colour, 0.9 * level));
+      halo.addColorStop(1, hexToRgba(spot.colour, 0));
+      c.fillStyle = halo;
+      c.beginPath(); c.arc(x, y, rad, 0, Math.PI * 2); c.fill();
+
+      c.beginPath(); c.arc(x, y, rad * 0.82, 0, Math.PI * 2);
+      c.strokeStyle = `rgba(255, 255, 255, ${0.85 * level * beat})`;
+      c.lineWidth = Math.max(1.5, R * 0.045);
+      c.stroke();
+    }
   }
 
   // ------------------------------------------------------------ highlights
