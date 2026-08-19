@@ -468,12 +468,24 @@ button { background: none; border: 0; cursor: pointer; }
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   padding: 18px 16px calc(var(--safe-b) + 18px);
   transform: translateY(102%);
-  transition: transform .28s cubic-bezier(.2, .9, .3, 1);
   box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.5);
+
+  /* Parked off the bottom of the screen is not the same as gone. Every sheet casts its
+     shadow UPWARD (0 -14px 40px), so all fifteen of them were bleeding a dark band back
+     onto the bottom of the page, stacking into a very visible blob on the home screen.
+     visibility:hidden stops a closed sheet painting at all — and takes it out of the tab
+     order while we are here. The zero-length transition is delayed by the length of the
+     slide, so a sheet stays visible while it animates out and only then disappears. */
+  visibility: hidden;
+  transition: transform .28s cubic-bezier(.2, .9, .3, 1), visibility 0s linear .28s;
   max-width: 560px;
   margin: 0 auto;
 }
-.sheet.show { transform: translateY(0); }
+.sheet.show {
+  transform: translateY(0);
+  visibility: visible;
+  transition: transform .28s cubic-bezier(.2, .9, .3, 1), visibility 0s;
+}
 
 .sheet-title { margin: 0 0 4px; font-size: 19px; font-weight: 800; }
 .sheet-sub { margin: 0 0 14px; color: var(--dim); font-size: 13px; }
