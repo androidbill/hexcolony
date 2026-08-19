@@ -156,6 +156,92 @@ check('a forced discard clears the whole seven', () => {
   eq(Object.keys(g.pending.discard).length, 0, 'discards left owing');
 });
 
+// ---------------------------------------------------------------- nobody to choose from
+
+/**
+ * A game past setup with the robber switched off, ready for a raid.
+ *
+ * `victims` is how many OTHER players are left holding cards — which is what decides
+ * whether there is a choice to make. Nobody is given cards by seat name, because the
+ * seat order is shuffled and a test that assumed p1 was on the clock would pass or fail
+ * on the shuffle rather than on the rule.
+ */
+function raidState(ids, victims) {
+  let g = R.newGame(ids, { seed: 4242, layout: 'classic', useRobber: false }, rngFrom(5));
+  let guard = 0;
+  while (g.phase === 'setup') {
+    g = R.applyMove(g, ids[0], { type: 'timeout' }, rngFrom(guard + 1)).game;
+    if (guard++ > 40) throw new Error('setup did not finish');
+  }
+  for (const pid of ids) for (const r of RESOURCES) g.players[pid].res[r] = 0;
+  const me = R.currentPid(g);
+  const others = ids.filter((s) => s !== me);
+  for (const pid of others.slice(0, victims)) g.players[pid].res.wood = 3;
+
+  g.phase = 'build';
+  g.turn.rolled = true;
+  g.players[me].dev.knight = 1;          // a knight is a raid, with the robber off
+  return { g, me, others };
+}
+
+const raid = (g, me, seed) => R.applyMove(g, me, { type: 'playDev', card: 'knight' }, rngFrom(seed));
+
+check('a two-player raid does not ask who', () => {
+  const { g, me, others } = raidState(['p1', 'p2'], 1);
+  const them = others[0];
+  const before = R.handSize(g.players[them]);
+
+  const done = raid(g, me, 11);
+  assert(done.ok, `knight refused: ${done.error}`);
+  assert(done.game.phase !== 'take', 'still asked who to take from with one candidate');
+  eq(R.handSize(done.game.players[them]), before - 1, 'their hand after the raid');
+  eq(R.handSize(done.game.players[me]), 1, 'my hand after the raid');
+  eq(done.game.pending.stealFrom.length, 0, 'a target list was left behind');
+});
+
+check('a raid with two possible victims still asks', () => {
+  const { g, me } = raidState(['p1', 'p2', 'p3'], 2);
+  const done = raid(g, me, 12);
+  assert(done.ok, `knight refused: ${done.error}`);
+  eq(done.game.phase, 'take', 'phase with two candidates');
+  eq(done.game.pending.stealFrom.length, 2, 'candidates offered');
+  eq(R.handSize(done.game.players[me]), 0, 'took a card before being asked who from');
+});
+
+check('a raid with nobody holding cards just moves on', () => {
+  const { g, me } = raidState(['p1', 'p2'], 0);
+  const done = raid(g, me, 13);
+  assert(done.ok, `knight refused: ${done.error}`);
+  assert(done.game.phase !== 'take', 'asked who to raid when nobody had anything');
+  eq(done.game.phase, 'build', 'phase when there was nobody to raid');
+});
+
+check('the robber still takes the only victim without asking', () => {
+  const ids = ['p1', 'p2'];
+  let g = R.newGame(ids, { seed: 909, layout: 'classic', useRobber: true }, rngFrom(6));
+  let guard = 0;
+  while (g.phase === 'setup') {
+    g = R.applyMove(g, ids[0], { type: 'timeout' }, rngFrom(guard + 20)).game;
+    if (guard++ > 40) throw new Error('setup did not finish');
+  }
+  const me = R.currentPid(g);
+  const them = ids.find((s) => s !== me);
+  for (const r of RESOURCES) { g.players[me].res[r] = 0; g.players[them].res[r] = 0; }
+  g.players[them].res.ore = 2;
+  g.phase = 'robber';
+  g.turn.rolled = true;
+
+  // A tile the other player is standing on, and this one is not.
+  const target = HEXES.find((h) => h.i !== g.robber
+    && h.corners.some((v) => g.bldg[v]?.p === them)
+    && !h.corners.some((v) => g.bldg[v]?.p === me));
+  if (!target) return;                            // this board did not produce one
+  const done = R.applyMove(g, me, { type: 'moveRobber', hex: target.i }, rngFrom(14));
+  assert(done.ok, `moveRobber refused: ${done.error}`);
+  eq(done.game.phase, 'build', 'phase after robbing the only victim');
+  eq(R.handSize(done.game.players[me]), 1, 'stolen card');
+});
+
 // ---------------------------------------------------------------- hostile input
 
 check('a negative trade offer cannot pull cards out of a hand', () => {

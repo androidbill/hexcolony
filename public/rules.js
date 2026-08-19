@@ -529,11 +529,21 @@ function steal(g, thief, victim, events, rng) {
  * Either way, if there is nobody worth robbing the turn moves on rather than parking on
  * a step with no legal move.
  */
-function afterSeven(g) {
+function afterSeven(g, events, rng) {
   if (g.useRobber !== false) { g.phase = 'robber'; startClock(g, g.turnSeconds); return; }
   const pid = currentPid(g);
   const targets = g.seats.filter((s) => s !== pid && handSize(g.players[s]) > 0);
   if (!targets.length) { resumeTurn(g); return; }
+  // One possible target is not a choice. Asking "who?" of a two-player game — or of any
+  // game where only one person is holding cards — is a tap that can only be answered one
+  // way. The robber's own path has always taken it automatically; this is the same rule
+  // for the raid that replaces it.
+  if (targets.length === 1) {
+    steal(g, pid, targets[0], events, rng);
+    g.pending.stealFrom = [];
+    resumeTurn(g);
+    return;
+  }
   g.pending.stealFrom = targets;
   g.phase = 'take';
   startClock(g, g.turnSeconds);
@@ -743,7 +753,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
           g.pending.discard = owed;
           g.phase = 'discard';
         } else {
-          afterSeven(g);
+          afterSeven(g, events, rng);
         }
       } else {
         produce(g, board, roll, events);
@@ -769,7 +779,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       for (const [r, n] of Object.entries(give)) { me.res[r] -= n; g.bank[r] += n; }
       delete g.pending.discard[pid];
       note(g, events, { t: 'discard', p: pid, count: owed });
-      if (!Object.keys(g.pending.discard).length) afterSeven(g);
+      if (!Object.keys(g.pending.discard).length) afterSeven(g, events, rng);
       return ok();
     }
 
@@ -903,7 +913,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         me.knights += 1;
         refreshAwards(g, events);
         // A knight is a robber move, so without a robber it is a raid instead.
-        afterSeven(g);
+        afterSeven(g, events, rng);
         checkWin(g, events); // Largest Army can be the winning move
         return ok();
       }
@@ -1079,7 +1089,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       } else if (g.phase === 'discard' && !Object.keys(g.pending.discard).length) {
         // Straight to 'robber' was wrong in a game with the robber switched off: that
         // phase has no legal move there, so the turn parked and never came back.
-        afterSeven(g);
+        afterSeven(g, events, rng);
       }
       refreshAwards(g, events);
       return ok();
