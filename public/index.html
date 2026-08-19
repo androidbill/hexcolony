@@ -12,6 +12,18 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="HexColony">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+<!-- Open Graph, so a pasted link unfurls into a card in Discord rather than bare text. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="HexColony">
+<meta property="og:title" content="HexColony">
+<meta property="og:description" content="Settle the island with friends. Online multiplayer, no accounts, join by room code.">
+<meta property="og:url" content="https://androidbill.github.io/hexcolony/">
+<meta property="og:image" content="https://androidbill.github.io/hexcolony/icons/icon-512.png">
+<meta property="og:image:width" content="512">
+<meta property="og:image:height" content="512">
+<meta name="twitter:card" content="summary">
+<meta name="theme-color" content="#0b2540">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -34,7 +46,17 @@
       <button class="avatar-big" id="avatar-big" aria-label="Change avatar"><span id="avatar-face">🐺</span></button>
     </div>
 
-    <div class="card">
+    <div class="card" id="discord-panel" hidden>
+      <div class="card-title">Voice channel game <span class="pill">Discord</span></div>
+      <p class="hint" id="discord-hint">Everyone in this voice channel joins the same table &mdash;
+        no code needed. Pick a name and an avatar above, then sit down.</p>
+      <button class="btn btn-key" id="btn-discord-join">
+        <span class="btn-label">Join the Table</span>
+        <span class="btn-sub" id="discord-sub">Same game for the whole channel</span>
+      </button>
+    </div>
+
+    <div class="card" id="online-panel">
       <button class="btn btn-key" id="btn-create">
         <span class="btn-label">Create a Room</span>
         <span class="btn-sub">You host, friends join with the code</span>

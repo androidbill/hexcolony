@@ -9,14 +9,14 @@
 // same design used by the other party games in this collection — see the comments at
 // "liveness" for why each rung exists.
 
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+// Firebase comes through fb.js rather than a direct import: it has to be loadable
+// through Discord's proxy, and a failure there must not stop solo play from running.
 import {
-  initializeFirestore, doc, getDoc, getDocFromServer, setDoc, updateDoc, onSnapshot,
+  db, NET_READY, doc, getDoc, getDocFromServer, setDoc, updateDoc, onSnapshot,
   deleteField, deleteDoc, serverTimestamp, runTransaction,
   disableNetwork, enableNetwork,
-} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
-
-import { firebaseConfig } from './firebase-config.js';
+} from './fb.js';
+import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
 import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO } from './board.js';
@@ -24,11 +24,6 @@ import { BoardView, RES_COLOR, RES_ICON, loadTerrainArt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import * as R from './rules.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
-
-const app = initializeApp(firebaseConfig);
-// Some phones (iOS Safari behind content blockers, certain captive wifi) silently
-// break the streaming transport; auto-detection falls back to long-polling.
-const db = initializeFirestore(app, { experimentalAutoDetectLongPolling: true });
 
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
 
@@ -269,6 +264,61 @@ async function joinRoom() {
     $('btn-join').disabled = false;
   }
 }
+
+// ---------------------------------------------------------------- discord activity
+/**
+ * Sit down at the voice channel's table.
+ *
+ * There is no code to type: everyone Discord loaded this activity for shares one
+ * `instance_id`, so the first player through creates the room and the rest join it.
+ */
+async function joinDiscordRoom() {
+  const code = discordRoomCode();
+  if (!code) return toast('Could not read the Discord session.');
+  const name = myName();
+  if (!name) return toast('Enter your name first.');
+  localStorage.setItem('hexcolony_name', name);
+
+  const btn = $('btn-discord-join');
+  btn.disabled = true;
+  try {
+    const ref = doc(db, 'rooms', code);
+    let data = null;
+    try {
+      const snap = await withTimeout(getDoc(ref), 6000);
+      if (snap.exists()) data = snap.data();
+    } catch { /* lookup hung; fall through and try to create */ }
+
+    if (!data || roomIsStale(data)) {
+      await withTimeout(setDoc(ref, {
+        code,
+        createdAt: Date.now(),
+        expiresAt: new Date(Date.now() + ROOM_TTL_MS),
+        hostId: playerId,
+        state: 'lobby',
+        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic' },
+        players: { [playerId]: freshPlayer(name, 0) },
+        order: [],
+        game: null,
+      }), 8000);
+    } else if (!data.players?.[playerId]) {
+      if (data.state !== 'lobby') return toast('That game has already started.');
+      const used = new Set(Object.values(data.players || {}).map((p) => p.colorIdx));
+      let colorIdx = 0;
+      while (used.has(colorIdx) && colorIdx < R.PLAYER_COLORS.length - 1) colorIdx++;
+      await withTimeout(updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name, colorIdx) }), 8000);
+    }
+    sfx.join();
+    enterRoom(code);
+  } catch (e) {
+    console.error(e);
+    toast('Could not reach the table — check your connection.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$('btn-discord-join').addEventListener('click', () => { unlock(); joinDiscordRoom(); });
 
 // ---------------------------------------------------------------- clock sync
 // Phone clocks disagree, sometimes by minutes. Each phone measures its own offset from
@@ -1977,6 +2027,24 @@ window.addEventListener('beforeunload', () => {
   showScreen('screen-home');
   refreshResume();
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
+
+  if (!NET_READY) {
+    // No Firebase: solo still plays, so say so rather than letting the buttons fail.
+    $('btn-create').disabled = true;
+    $('btn-join').disabled = true;
+    $('code-input').disabled = true;
+    $('code-input').placeholder = 'OFFLINE';
+  }
+
+  if (IN_DISCORD) {
+    // Swap the code-based lobby for the voice channel one, then finish the handshake
+    // that stops Discord showing its loading spinner.
+    $('online-panel').hidden = true;
+    $('discord-panel').hidden = false;
+    const ctx = await initDiscord();
+    if (ctx?.channelId) $('discord-sub').textContent = 'Same game for the whole channel';
+    return;
+  }
 
   // Rejoin the room this device was last in — a locked phone killing the tab mid-game
   // should not cost you your settlements.

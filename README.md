@@ -12,8 +12,9 @@ One person taps **Create a Room** and reads out the four-letter code. Everyone e
 types it into **Join**. Two to six players. Nobody makes an account.
 
 Or tap **Play Solo** for a game against one to five bots at Easy, Medium or Hard.
-Solo needs no network at all — it runs entirely on the device and works offline — and
-the game is saved as you play, so closing the app offers to resume it.
+Solo needs no network at all — it runs on the device and keeps working when Firebase
+cannot be reached — and the game is saved as you play, so closing the app offers to
+resume it.
 
 Two boards to choose from, in the lobby or the solo sheet:
 
@@ -122,6 +123,18 @@ reports any illegal move and any game that fails to finish.
 
 Bots answer trades but do not propose them, which keeps the offer sheet from popping up
 every turn. That is a deliberate limit, not an oversight.
+
+## Discord
+
+The app runs as a Discord Activity — embedded in a voice channel, the way colonist.io
+does it. Inside Discord the room *is* the voice channel: everyone Discord launched the
+activity for shares one `instance_id`, so nobody types a code.
+
+It needs an application ID in `public/discord-config.js` and three URL mappings in the
+developer portal. Full checklist, and an honest list of what is and is not tested, in
+[DISCORD.md](DISCORD.md).
+
+Outside Discord none of it runs, so the website behaves exactly as before.
 
 ## Version
 

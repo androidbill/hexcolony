@@ -12,10 +12,18 @@ service cloud.firestore {
     // devtools open could read them. Closing that properly needs a server holding the
     // hidden state (Cloud Functions on a paid plan); until then the honour system and
     // the fact that you are playing with friends is the protection.
+    // Two shapes of room id. A typed room is a four-letter word people say out loud.
+    // A Discord Activity room is keyed by the voice channel's instance id instead, so
+    // everyone Discord launched the game for lands in the same game without typing
+    // anything — those are prefixed 'D' and are longer.
+    function validRoomId(code) {
+      return (code.size() == 4 && code.matches('^[A-Z]+$'))
+          || code.matches('^D[A-Za-z0-9_-]{4,120}$');
+    }
+
     match /rooms/{code} {
       allow read: if true;
-      allow create: if code.size() == 4
-                    && code.matches('^[A-Z]+$')
+      allow create: if validRoomId(code)
                     && request.resource.data.keys().hasAll(['code', 'state', 'players'])
                     && request.resource.data.code == code;
       allow update: if true;
@@ -27,7 +35,7 @@ service cloud.firestore {
     // rebroadcast the entire game state to every phone every few seconds.
     match /pulses/{code} {
       allow read: if true;
-      allow write: if code.size() == 4
+      allow write: if validRoomId(code)
                    && request.resource.data.keys().hasOnly(['at', 'by', 'code', 'expiresAt']);
       allow delete: if true;
     }
