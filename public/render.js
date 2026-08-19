@@ -641,56 +641,64 @@ export class BoardView {
     }
   }
 
-  drawSettlement(x, y, color) {
+  /**
+   * Bill's settlement and city outlines, from house.svg and city.svg.
+   *
+   * Kept as path data and drawn with Path2D rather than loaded as images: a piece is
+   * about twenty pixels across at normal zoom on a phone, where a vector stays crisp
+   * and a bitmap turns to mush, and it costs no request, no tint compositing and no
+   * cache. The colour is simply the fill.
+   *
+   * `box` is the ink's own extent, not the viewBox — both drawings sit inside a larger
+   * canvas, and centring on the viewBox would hang them off the corner.
+   */
+  static get PIECES() {
+    return {
+      settlement: {
+        d: 'M 20 85 L 80 85 L 80 45 L 50 15 L 20 45 Z',
+        box: { x: 20, y: 15, w: 60, h: 70 },
+      },
+      city: {
+        d: 'M 15 85 L 105 85 L 105 55 L 80 30 L 55 55 L 55 30 L 35 15 L 15 30 Z',
+        box: { x: 15, y: 15, w: 90, h: 70 },
+      },
+    };
+  }
+
+  /**
+   * Stand a piece on a corner, sized by height so a city reads as wider than a house
+   * rather than merely taller.
+   */
+  drawPiece(kind, x, y, color, height) {
+    const spec = BoardView.PIECES[kind];
+    if (!spec) return;
     const c = this.ctx;
-    const s = this.scale * 0.24;
+    const k = height / spec.box.h;
+
     c.save();
     c.translate(x, y);
-    c.beginPath();
-    c.moveTo(-s, s * 0.55);
-    c.lineTo(-s, -s * 0.25);
-    c.lineTo(0, -s);
-    c.lineTo(s, -s * 0.25);
-    c.lineTo(s, s * 0.55);
-    c.closePath();
+    c.scale(k, k);
+    // Bottom-centre of the drawing on the corner, nudged down so it sits on the
+    // junction instead of floating above it.
+    c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
+
+    const path = new Path2D(spec.d);
+    c.shadowColor = 'rgba(0, 0, 0, 0.5)';
+    c.shadowBlur = 7;
+    c.shadowOffsetY = 3;
     c.fillStyle = color;
-    c.shadowColor = 'rgba(0,0,0,0.5)';
-    c.shadowBlur = s * 0.7;
-    c.shadowOffsetY = s * 0.18;
-    c.fill();
+    c.fill(path);
+
     c.shadowColor = 'transparent';
-    c.strokeStyle = 'rgba(8,16,26,0.75)';
-    c.lineWidth = Math.max(1, s * 0.17);
-    c.stroke();
+    c.lineJoin = 'round';
+    c.lineWidth = 4;
+    c.strokeStyle = 'rgba(8, 16, 26, 0.85)';
+    c.stroke(path);
     c.restore();
   }
 
-  drawCity(x, y, color) {
-    const c = this.ctx;
-    const s = this.scale * 0.27;
-    c.save();
-    c.translate(x, y);
-    c.beginPath();
-    // A long hall with a taller tower on the left — reads as "bigger" at thumbnail size.
-    c.moveTo(-s * 1.15, s * 0.6);
-    c.lineTo(-s * 1.15, -s * 0.35);
-    c.lineTo(-s * 0.55, -s * 0.95);
-    c.lineTo(0, -s * 0.35);
-    c.lineTo(0, -s * 0.05);
-    c.lineTo(s * 1.1, -s * 0.05);
-    c.lineTo(s * 1.1, s * 0.6);
-    c.closePath();
-    c.fillStyle = color;
-    c.shadowColor = 'rgba(0,0,0,0.5)';
-    c.shadowBlur = s * 0.7;
-    c.shadowOffsetY = s * 0.18;
-    c.fill();
-    c.shadowColor = 'transparent';
-    c.strokeStyle = 'rgba(8,16,26,0.75)';
-    c.lineWidth = Math.max(1, s * 0.16);
-    c.stroke();
-    c.restore();
-  }
+  drawSettlement(x, y, color) { this.drawPiece('settlement', x, y, color, this.scale * 0.52); }
+  drawCity(x, y, color) { this.drawPiece('city', x, y, color, this.scale * 0.58); }
 
   drawRobber() {
     if (!this.game) return;
