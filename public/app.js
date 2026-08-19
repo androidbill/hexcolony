@@ -1757,15 +1757,15 @@ function turnText(g) {
     const owed = g.pending.discard[playerId];
     if (owed) return `Discard ${owed} card${owed > 1 ? 's' : ''}`;
     const n = Object.keys(g.pending.discard).length;
-    return `Waiting on ${n} player${n > 1 ? 's' : ''} to discard`;
+    return `Waiting: ${n} to discard`;
   }
-  if (g.phase === 'robber') return mine ? 'Move the robber — tap a tile' : `${who} is moving the robber`;
+  if (g.phase === 'robber') return mine ? 'Move the robber' : `${who} is moving the robber`;
   if (g.phase === 'steal') return mine ? 'Choose who to rob' : `${who} is choosing who to rob`;
-  if (g.phase === 'take') return mine ? 'Rolled a 7 — take a card from anyone' : `${who} is taking a card`;
+  if (g.phase === 'take') return mine ? 'Take a card' : `${who} is taking a card`;
   if (g.phase === 'roll') return mine ? 'Your turn — roll the dice' : `${who} to roll`;
   if (g.phase === 'build') {
     if (g.turn.freeRoads > 0 && mine) return `Place ${g.turn.freeRoads} free road${g.turn.freeRoads > 1 ? 's' : ''}`;
-    return mine ? 'Your turn — build, trade or end' : `${who}'s turn`;
+    return mine ? 'Your turn' : `${who}'s turn`;
   }
   if (g.phase === 'over') return `${g.winner === playerId ? 'You' : nameFor(g.winner)} won`;
   return '';
@@ -1782,11 +1782,13 @@ function renderTurnBadge(g) {
     // Say what is actually lit, so the highlights are self-explanatory rather than
     // something to be decoded.
     const h = R.highlightsFor(g, playerId, null);
+    // Icons rather than words: this shares the row with the clock and the dice now, and
+    // the highlights on the board say the same thing at full length.
     const bits = [];
-    if (h.edges.length) bits.push('road');
-    if (h.verts.length) bits.push('settlement');
-    if (h.cities.length) bits.push('city');
-    if (bits.length) text = `Tap the board — ${bits.join(', ')}`;
+    if (h.edges.length) bits.push('🛣️');
+    if (h.verts.length) bits.push('🏠');
+    if (h.cities.length) bits.push('🏛️');
+    if (bits.length) text = `Tap ${bits.join(' ')}`;
   }
   badge.textContent = text;
   badge.classList.toggle('mine', !!mine);

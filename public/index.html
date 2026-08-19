@@ -206,13 +206,15 @@
 
   <div class="board-wrap">
     <canvas id="board-cv"></canvas>
-    <div class="board-badge" id="turn-badge"></div>
-    <div class="turn-timer" id="turn-timer" hidden><span id="timer-secs">0</span></div>
-    <div class="dice-float" id="dice-float" hidden>
-      <div class="die" id="die-a">?</div>
-      <div class="die" id="die-b">?</div>
-      <div class="die-eq" aria-hidden="true">=</div>
-      <div class="die die-sum" id="die-sum">?</div>
+    <div class="board-hud">
+      <div class="board-badge" id="turn-badge"></div>
+      <div class="turn-timer" id="turn-timer" hidden><span id="timer-secs">0</span></div>
+      <div class="dice-float" id="dice-float" hidden>
+        <div class="die" id="die-a">?</div>
+        <div class="die" id="die-b">?</div>
+        <div class="die-eq" aria-hidden="true">=</div>
+        <div class="die die-sum" id="die-sum">?</div>
+      </div>
     </div>
     <button class="recenter" id="btn-recenter" aria-label="Recentre board">
       <svg viewBox="0 0 24 24"><path d="M12 3v3m0 12v3M3 12h3m12 0h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
