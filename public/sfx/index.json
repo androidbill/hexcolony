@@ -1,1 +1,17 @@
-{}
+{
+  "dice": {
+    "file": "dice_roll.mp3",
+    "gain": 1,
+    "room": 0
+  },
+  "build": {
+    "file": "build-house.mp3",
+    "gain": 1,
+    "room": 0
+  },
+  "city": {
+    "file": "build-city.mp3",
+    "gain": 1,
+    "room": 0
+  }
+}

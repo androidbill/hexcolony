@@ -71,4 +71,22 @@ so it is not lost.
 
 | file | source | licence |
 |------|--------|---------|
-|      |        |         |
+| `dice_roll.mp3` | supplied by Bill | — |
+| `build-house.mp3` | supplied by Bill | — |
+| `build-city.mp3` | supplied by Bill | — |
+
+## What is in here now
+
+| file | effect | length | size |
+|------|--------|--------|------|
+| `dice_roll.mp3` | `dice` | 1.58s | 31 KB |
+| `build-house.mp3` | `build` | 1.20s | 23 KB |
+| `build-city.mp3` | `city` | 2.72s | 85 KB |
+
+`build-city.mp3` is 256 kbps stereo at 44.1 kHz, which is why it is four times the size
+of the others for twice the length. Re-encoding it mono at 128 kbps would take it to
+roughly 20 KB with no audible difference through a phone speaker — worth doing if more
+files land and the total starts to matter.
+
+The bots' pacing in `paceFor` was lengthened to match these: a bot that moved on after
+1.1s was talking over its own dice.

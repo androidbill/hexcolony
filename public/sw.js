@@ -32,12 +32,31 @@ const CORE = [
 // precaching every extension would just mean ten 404s on every install.
 const ART = ['wood', 'brick', 'sheep', 'wheat', 'ore', 'desert'].map((n) => `art/${n}.jpg`);
 
+/**
+ * The recorded effects, read from their own index at install time.
+ *
+ * Listing them here instead would mean two places to edit every time one is added, and
+ * the one that got forgotten would be this one — where the symptom is only ever "the
+ * game is silent on a bad connection", which nobody reports.
+ */
+async function soundFiles() {
+  try {
+    const res = await fetch('sfx/index.json', { cache: 'reload' });
+    if (!res.ok) return [];
+    const list = await res.json();
+    const names = Array.isArray(list)
+      ? list.map((n) => `${n}.mp3`)
+      : Object.entries(list).map(([n, v]) => (typeof v === 'string' ? v : v?.file) || `${n}.mp3`);
+    return names.map((f) => `sfx/${f}`);
+  } catch { return []; }
+}
+
 self.addEventListener('install', (e) => {
   // cache:'reload' so a new VERSION always pulls fresh bytes. Plain addAll() may answer
   // from the browser's own HTTP cache, leaving new JS running against an old module.
   e.waitUntil(
-    caches.open(CACHE)
-      .then((c) => Promise.all([...CORE, ...ART].map((f) => fetch(f, { cache: 'reload' })
+    Promise.all([caches.open(CACHE), soundFiles()])
+      .then(([c, sounds]) => Promise.all([...CORE, ...ART, ...sounds].map((f) => fetch(f, { cache: 'reload' })
         .then((res) => (res && res.ok) ? c.put(f, res) : null)
         .catch(() => null))))
       .then(() => self.skipWaiting())
