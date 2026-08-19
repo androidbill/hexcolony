@@ -10,6 +10,7 @@ const CORE = [
   'board.js',
   'rules.js',
   'bot.js',
+  'cards.js',
   'fb.js',
   'discord.js',
   'discord-config.js',

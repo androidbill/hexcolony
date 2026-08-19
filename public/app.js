@@ -20,8 +20,9 @@ import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
 import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO } from './board.js';
-import { BoardView, RES_COLOR, RES_ICON, loadTerrainArt } from './render.js';
+import { BoardView, RES_ICON, loadTerrainArt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
+import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
@@ -1526,7 +1527,7 @@ function reactToLog(g) {
 
 function bumpCards(list) {
   for (const r of list) {
-    const el = document.querySelector(`.res-card[data-res="${r}"]`);
+    const el = document.querySelector(`.rcard-wrap[data-res="${r}"]`);
     if (!el) continue;
     el.classList.remove('bump');
     void el.offsetWidth;
@@ -1603,14 +1604,13 @@ function renderDice(g) {
 function renderHand(g) {
   const p = g.players[playerId];
   if (!p) { $('hand').innerHTML = '<span class="hint">You are watching this game.</span>'; return; }
+  const devs = R.devCount(p);
   $('hand').innerHTML = RESOURCES.map((r) => {
     const n = p.res[r] || 0;
-    return `<div class="res-card${n ? '' : ' zero'}" data-res="${r}" style="--c:${RES_COLOR[r]}">
-      <div class="res-icon">${RES_ICON[r]}</div>
-      <div class="res-n">${n}</div>
-      <div class="res-name">${r}</div>
-    </div>`;
-  }).join('');
+    // A zero card stays on the table, greyed: the hand doubles as the legend for what
+    // the board's tiles produce, and cards appearing and vanishing is hard to read.
+    return resCard(r, { count: n || null, dim: !n, size: 'sm', dataset: ` data-res="${r}"` });
+  }).join('') + devCard({ count: devs || null, dim: !devs, size: 'sm' });
 }
 
 function actBtn(id, ico, label, opts = {}) {
@@ -1711,8 +1711,9 @@ function onAction(id) {
 }
 
 // ---------------------------------------------------------------- build sheet
-const COST_BITS = (cost) => Object.entries(cost)
-  .flatMap(([r, n]) => Array(n).fill(`<span>${RES_ICON[r]}</span>`)).join('');
+// A cost is drawn as one card per unit, dimmed for whatever you cannot cover — you can
+// see at a glance both what it costs and how close you are.
+const COST_BITS = (cost, have = null) => costRow(cost, have);
 
 function openBuild(g) {
   const p = g.players[playerId];
@@ -1728,7 +1729,7 @@ function openBuild(g) {
       <span class="build-ico">${it.ico}</span>
       <span class="build-txt">
         <span class="build-name">${it.name}</span>
-        <span class="build-cost">${COST_BITS(it.cost)}</span>
+        <span class="build-cost">${COST_BITS(it.cost, p.res)}</span>
       </span>
       <span class="build-left">${it.left} left</span>
     </button>`).join('');
@@ -1799,21 +1800,11 @@ function resPicker(elId, counts, opts = {}) {
   $(elId).innerHTML = RESOURCES.map((r) => {
     const have = opts.showHave === false ? '' : `<span class="pick-have">have ${p.res[r] || 0}</span>`;
     const n = counts[r] || 0;
-    if (opts.single) {
-      return `<div class="pick-col">
-        <button class="pick-btn${opts.chosen === r ? ' on' : ''}" data-pick="${r}" style="--c:${RES_COLOR[r]}">
-          <span class="pick-ico">${RES_ICON[r]}</span>
-          <span class="pick-n">${RES_ICON[r] ? '' : ''}${r === opts.chosen ? '✓' : ''}</span>
-        </button>${have}</div>`;
-    }
     return `<div class="pick-col">
-      <button class="pick-btn${n ? ' on' : ''}" style="--c:${RES_COLOR[r]}" disabled>
-        <span class="pick-ico">${RES_ICON[r]}</span>
-        <span class="pick-n">${n}</span>
-      </button>
+      ${resCard(r, { size: 'sm', count: n || null, selected: !!n, dim: !n })}
       <div class="pick-pm">
-        <button data-pm="-" data-r="${r}">−</button>
-        <button data-pm="+" data-r="${r}">+</button>
+        <button data-pm="-" data-r="${r}" aria-label="One fewer ${RES_NAME[r]}">−</button>
+        <button data-pm="+" data-r="${r}" aria-label="One more ${RES_NAME[r]}">+</button>
       </div>
       ${have}</div>`;
   }).join('');
@@ -1867,11 +1858,10 @@ function openPickRes(kind) {
     const draw = () => {
       $('pickres-picker').innerHTML = RESOURCES.map((r) => `
         <div class="pick-col">
-          <button class="pick-btn${chosen === r ? ' on' : ''}" data-pick="${r}" style="--c:${RES_COLOR[r]}">
-            <span class="pick-ico">${RES_ICON[r]}</span>
-            <span class="pick-n">${chosen === r ? '✓' : ''}</span>
+          <button class="pick-plain" data-pick="${r}" aria-label="${RES_NAME[r]}">
+            ${resCard(r, { size: 'sm', selected: chosen === r, dim: chosen !== null && chosen !== r })}
           </button>
-          <span class="pick-have">${r}</span>
+          <span class="pick-have">${RES_NAME[r]}</span>
         </div>`).join('');
       for (const b of document.querySelectorAll('#pickres-picker [data-pick]')) {
         b.addEventListener('click', () => { chosen = b.dataset.pick; sfx.tap(); draw(); }, { once: true });
@@ -1941,12 +1931,18 @@ function drawBankTrades(g) {
   for (const give of RESOURCES) {
     const rate = R.tradeRate(g, board, playerId, give);
     const able = (p.res[give] || 0) >= rate;
-    rows.push(`<div class="bank-row${able ? '' : ' dim'}"${able ? '' : ' style="opacity:.4"'}>
-      <span class="bank-give">${rate}× ${RES_ICON[give]}</span>
-      <span class="rate-badge">${rate}:1</span>
-      <span class="bank-arrow">→</span>
+    rows.push(`<div class="bank-row${able ? '' : ' is-off'}">
+      <span class="bank-give">
+        ${resCard(give, { count: rate, size: 'sm', dim: !able })}
+        <span class="rate-badge">${rate}:1</span>
+      </span>
+      <span class="bank-arrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m0 0-5-5m5 5-5 5"
+          fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
       <span class="bank-want">${RESOURCES.filter((w) => w !== give).map((w) => `
-        <b data-bank="${give}:${w}"${able && g.bank[w] > 0 ? '' : ' style="opacity:.35;pointer-events:none"'}>${RES_ICON[w]}</b>`).join('')}</span>
+        <button class="bank-pick" data-bank="${give}:${w}"${able && g.bank[w] > 0 ? '' : ' disabled'}
+          aria-label="Trade for ${RES_NAME[w]}">${resCard(w, { size: 'xs' })}</button>`).join('')}</span>
     </div>`);
   }
   $('bank-list').innerHTML = rows.join('');
@@ -1966,13 +1962,10 @@ function drawOfferPickers() {
   const build = (elId, sel, cap) => {
     $(elId).innerHTML = RESOURCES.map((r) => `
       <div class="pick-col">
-        <button class="pick-btn${sel[r] ? ' on' : ''}" style="--c:${RES_COLOR[r]}" disabled>
-          <span class="pick-ico">${RES_ICON[r]}</span>
-          <span class="pick-n">${sel[r] || 0}</span>
-        </button>
+        ${resCard(r, { size: 'sm', count: sel[r] || null, selected: !!sel[r], dim: !sel[r] })}
         <div class="pick-pm">
-          <button data-off="${elId}:-:${r}">−</button>
-          <button data-off="${elId}:+:${r}">+</button>
+          <button data-off="${elId}:-:${r}" aria-label="One fewer ${RES_NAME[r]}">−</button>
+          <button data-off="${elId}:+:${r}" aria-label="One more ${RES_NAME[r]}">+</button>
         </div>
         ${cap ? `<span class="pick-have">have ${p.res[r] || 0}</span>` : ''}
       </div>`).join('');
@@ -2008,8 +2001,7 @@ $('btn-offer').addEventListener('click', () => {
   });
 });
 
-const cardBits = (obj) => Object.entries(obj)
-  .flatMap(([r, n]) => Array(n).fill(`<span>${RES_ICON[r]} ${r}</span>`)).join('');
+const cardBits = (obj) => cardRow(obj, { size: 'sm' });
 
 function openOffer(g) {
   const t = g.trade;
@@ -2021,14 +2013,15 @@ function openOffer(g) {
   const youGet = mine ? t.want : t.give;
   const youGive = mine ? t.give : t.want;
   $('offer-body').innerHTML = `
-    <div class="offer-side">
-      <div class="offer-side-l">You give</div>
-      <div class="offer-cards">${cardBits(youGive) || '<span>—</span>'}</div>
+    <div class="offer-row offer-row--give">
+      <span class="offer-tag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v14m0 0-6-6m6 6 6-6"
+        fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>You give</span>
+      <span class="offer-cards">${cardBits(youGive)}</span>
     </div>
-    <div class="offer-swap">⇄</div>
-    <div class="offer-side">
-      <div class="offer-side-l">You get</div>
-      <div class="offer-cards">${cardBits(youGet) || '<span>—</span>'}</div>
+    <div class="offer-row offer-row--get">
+      <span class="offer-tag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V6m0 0-6 6m6-6 6 6"
+        fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>You get</span>
+      <span class="offer-cards">${cardBits(youGet)}</span>
     </div>`;
 
   if (mine) {
