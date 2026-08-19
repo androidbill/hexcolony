@@ -348,7 +348,16 @@ async function loadSamples() {
         const r = await fetch(`sfx/${file}`);
         if (!r.ok) return;
         const buf = await ctx.decodeAudioData(await r.arrayBuffer());
-        samples.set(name, { buf, gain: Number.isFinite(cfg.gain) ? cfg.gain : 1, room: cfg.room ?? 0.1 });
+        samples.set(name, {
+          buf,
+          gain: Number.isFinite(cfg.gain) ? cfg.gain : 1,
+          room: cfg.room ?? 0.1,
+          // Generators export fixed-length clips, so a half-second effect can arrive in a
+          // two-second file. `offset` and `trim` play the part that matters and leave the
+          // padding alone — no re-encoding, no tools, one number in index.json.
+          offset: Number.isFinite(cfg.offset) ? Math.max(0, cfg.offset) : 0,
+          trim: Number.isFinite(cfg.trim) ? Math.max(0.02, cfg.trim) : 0,
+        });
       } catch { /* this one stays synthesised */ }
     }));
   } catch { /* offline, or no index — synthesis covers everything */ }
@@ -370,7 +379,15 @@ function playSample(name) {
       g.connect(send);
       send.connect(roomSend);
     }
-    src.start();
+    if (s.trim) {
+      // A hard stop clicks. Fade the last 30ms instead.
+      const end = ctx.currentTime + s.trim;
+      g.gain.setValueAtTime(s.gain, Math.max(ctx.currentTime, end - 0.03));
+      g.gain.linearRampToValueAtTime(0.0001, end);
+      src.start(0, s.offset, s.trim);
+    } else {
+      src.start(0, s.offset);
+    }
     return true;
   } catch { return false; }
 }

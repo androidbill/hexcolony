@@ -947,13 +947,13 @@ function botActor(g) {
 // what happened — the dice in particular need a beat to be seen.
 function paceFor(move) {
   switch (move?.type) {
-    // Long enough for the recorded effects to finish before the next thing happens:
-    // the dice run to 1.6s and a city to 2.7s, and a bot that moved on at the old pace
-    // was talking over its own sound.
-    case 'roll': return 1750;
+    // Paced against the recorded effects, but not slaved to them — a bot that waited out
+    // every sound in full would crawl. Rolling gets the longest beat because the number
+    // has to be read, not just heard.
+    case 'roll': return 1200;
     case 'moveRobber': return 900;
     case 'steal': return 800;
-    case 'build': return move.what === 'city' ? 1500 : 1000;
+    case 'build': return move.what === 'city' ? 1200 : 1000;
     case 'playDev': return 900;
     case 'endTurn': return 500;
     default: return 620;

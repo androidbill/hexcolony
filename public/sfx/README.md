@@ -71,22 +71,30 @@ so it is not lost.
 
 | file | source | licence |
 |------|--------|---------|
-| `dice_roll.mp3` | supplied by Bill | — |
-| `build-house.mp3` | supplied by Bill | — |
-| `build-city.mp3` | supplied by Bill | — |
+| all `*-v2.mp3` | supplied by Bill | — |
 
 ## What is in here now
 
-| file | effect | length | size |
-|------|--------|--------|------|
-| `dice_roll.mp3` | `dice` | 1.58s | 31 KB |
-| `build-house.mp3` | `build` | 1.20s | 23 KB |
-| `build-city.mp3` | `city` | 2.72s | 85 KB |
+| file | effect | length |
+|------|--------|--------|
+| `dice-v2.mp3` | `dice` | 0.53s |
+| `house-v2.mp3` | `build` | 2.06s |
+| `city-v2.mp3` | `city` | 1.03s |
+| `road-v2.mp3` | `road` | 2.06s |
+| `resource-pickupv2.mp3` | `gain` | 2.06s |
+| `your-turn-notifv2.mp3` | `yourTurn` | 2.06s |
 
-`build-city.mp3` is 256 kbps stereo at 44.1 kHz, which is why it is four times the size
-of the others for twice the length. Re-encoding it mono at 128 kbps would take it to
-roughly 20 KB with no audible difference through a phone speaker — worth doing if more
-files land and the total starts to matter.
+Four of them are exactly 2.064s, which is a generator exporting to a fixed length rather
+than four sounds that happen to match. If any of them turns out to be a short effect
+padded with silence, `trim` fixes it without re-encoding anything:
 
-The bots' pacing in `paceFor` was lengthened to match these: a bot that moved on after
-1.1s was talking over its own dice.
+```json
+{ "road": { "file": "road-v2.mp3", "trim": 0.6 } }
+```
+
+`trim` stops playback after that many seconds, with a 30 ms fade so the cut does not
+click. `offset` does the same at the front, for a clip that starts late. Both are in
+seconds and both are optional.
+
+Still synthesised: `card`, `trade`, `robber`, `steal`, `tap`, `error`, `win`, `lose`,
+`join`.
