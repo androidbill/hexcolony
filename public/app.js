@@ -1489,15 +1489,17 @@ view.onPick = (hit) => {
     send({ type: 'moveRobber', hex: hit.id }).then((ok) => ok && sfx.robber());
     return;
   }
-  if (intent === 'road' && hit.kind === 'edge') {
+  // Only legal, affordable targets are ever highlighted, and only highlighted things can
+  // be hit — so what was tapped is the whole instruction. No mode to choose first.
+  if (hit.kind === 'edge') {
     send({ type: 'build', what: 'road', e: hit.id }).then((ok) => { if (ok) { sfx.road(); clearIntent(); } });
     return;
   }
-  if (intent === 'settlement' && hit.kind === 'vertex') {
+  if (hit.kind === 'vertex') {
     send({ type: 'build', what: 'settlement', v: hit.id }).then((ok) => { if (ok) { sfx.build(); clearIntent(); } });
     return;
   }
-  if (intent === 'city' && hit.kind === 'vertex') {
+  if (hit.kind === 'city') {
     send({ type: 'build', what: 'city', v: hit.id }).then((ok) => { if (ok) { sfx.city(); clearIntent(); } });
   }
 };
@@ -1759,6 +1761,15 @@ function renderTurnBadge(g) {
   if (intent) {
     text = intent === 'road' ? 'Tap a highlighted edge' :
            intent === 'city' ? 'Tap one of your settlements' : 'Tap a highlighted corner';
+  } else if (mine && g.phase === 'build') {
+    // Say what is actually lit, so the highlights are self-explanatory rather than
+    // something to be decoded.
+    const h = R.highlightsFor(g, playerId, null);
+    const bits = [];
+    if (h.edges.length) bits.push('road');
+    if (h.verts.length) bits.push('settlement');
+    if (h.cities.length) bits.push('city');
+    if (bits.length) text = `Tap the board — ${bits.join(', ')}`;
   }
   badge.textContent = text;
   badge.classList.toggle('mine', !!mine);
@@ -2165,26 +2176,40 @@ const bundleTotal = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 const kindsIn = (o) => Object.keys(o).filter((r) => o[r] > 0);
 
 /**
- * Can this selection go to the bank, and at what price?
+ * What this selection is worth at the bank, and whether it balances.
  *
- * The bank deals in one kind for one kind at a fixed rate, so the selection has to be
- * exactly that shape. Multiples are allowed — eight wood for two brick at 4:1 — because
- * refusing them would just mean tapping the button twice.
+ * Any basket, either way. Each given resource is priced at its own rate, so six wood
+ * through a 2:1 port is three cards and they can be three different cards — the engine
+ * settles the whole thing as one move rather than as three trades in a row.
+ *
+ * The note is the useful half of this: when the sides do not balance it says what the
+ * cards are actually worth, so "buys 3 — asked for 2" tells you to add one rather than
+ * leaving a dead button and no explanation.
  */
 function bankPlan(g) {
   const gk = kindsIn(giveSel), wk = kindsIn(wantSel);
   if (!gk.length || !wk.length) return { ok: false, note: 'Pick both sides' };
-  if (gk.length > 1 || wk.length > 1) return { ok: false, note: 'One kind each way' };
-  const give = gk[0], want = wk[0];
-  if (give === want) return { ok: false, note: 'Ask for something else' };
+  for (const r of wk) if (giveSel[r]) return { ok: false, note: 'Same card both ways' };
 
-  const rate = R.tradeRate(g, board, playerId, give);
-  const lots = wantSel[want];
-  const need = rate * lots;
-  if (giveSel[give] !== need) return { ok: false, note: `${rate}:1 — needs ${need} ${RES_NAME[give].toLowerCase()}` };
-  if ((g.players[playerId].res[give] || 0) < need) return { ok: false, note: `You have ${g.players[playerId].res[give] || 0}` };
-  if ((g.bank[want] || 0) < lots) return { ok: false, note: `Bank is out of ${RES_NAME[want].toLowerCase()}` };
-  return { ok: true, give, want, rate, note: `${rate}:1` };
+  const held = g.players[playerId].res;
+  let credits = 0;
+  const odd = [];
+  for (const r of gk) {
+    const rate = R.tradeRate(g, board, playerId, r);
+    if ((held[r] || 0) < giveSel[r]) return { ok: false, note: 'More than you hold' };
+    if (giveSel[r] % rate !== 0) odd.push(`${RES_NAME[r].toLowerCase()} goes in ${rate}s`);
+    credits += Math.floor(giveSel[r] / rate);
+  }
+  if (odd.length) return { ok: false, note: odd[0] };
+
+  const asked = bundleTotal(wantSel);
+  if (!credits) return { ok: false, note: 'Not enough to trade' };
+  if (credits !== asked) return { ok: false, note: `Buys ${credits} — asked for ${asked}` };
+  for (const r of wk) {
+    if ((g.bank[r] || 0) < wantSel[r]) return { ok: false, note: `Bank is short of ${RES_NAME[r].toLowerCase()}` };
+  }
+  const rates = [...new Set(gk.map((r) => R.tradeRate(g, board, playerId, r)))].sort();
+  return { ok: true, note: `${rates.join('/')}:1 — ${credits} card${credits > 1 ? 's' : ''}` };
 }
 
 /** Can this selection be put to the table? */
@@ -2314,21 +2339,16 @@ function drawMyOffers(g) {
 
 $('btn-trade-bank').addEventListener('click', () => {
   const g = game();
-  if (!g) return;
-  const plan = bankPlan(g);
-  if (!plan.ok) return;
-  // Several lots at once are still one bank trade each, sent in order.
-  const lots = wantSel[plan.want];
-  (async () => {
-    for (let i = 0; i < lots; i++) {
-      const ok = await send({ type: 'bankTrade', give: plan.give, want: plan.want });
-      if (!ok) break;
-    }
+  if (!g || !bankPlan(g).ok) return;
+  // One move for the whole basket. Sending it as several trades in a row meant a failure
+  // partway through left the player halfway into something they asked for as one thing.
+  send({ type: 'bankTrade', give: giveSel, want: wantSel }).then((ok) => {
+    if (!ok) return;
     sfx.trade();
     giveSel = {}; wantSel = {};
     const now = game();
     if (now) drawTrade(now);
-  })();
+  });
 });
 
 $('btn-trade-players').addEventListener('click', () => {
@@ -2465,7 +2485,7 @@ function logLine(e) {
     case 'discard': text = `<b>${who(e.p)}</b> discarded ${e.count}`; break;
     case 'mono': text = `<b>${who(e.p)}</b> monopolised ${e.res} — ${e.count} cards`; break;
     case 'plenty': text = `<b>${who(e.p)}</b> took ${bits(e.res)} from the bank`; break;
-    case 'bankTrade': text = `<b>${who(e.p)}</b> traded ${e.rate}${RES_ICON[e.give]} for 1${RES_ICON[e.want]}`; break;
+    case 'bankTrade': text = `<b>${who(e.p)}</b> traded ${bits(e.give)} to the bank for ${bits(e.want)}`; break;
     case 'offer': text = `<b>${who(e.p)}</b> offered ${bits(e.give)} for ${bits(e.want)}`; break;
     case 'trade': text = `<b>${who(e.p)}</b> traded with <b>${who(e.with)}</b>`; break;
     case 'longest': text = `<span class="g"><b>${who(e.p)}</b> takes Longest Road (${e.len})</span>`; break;

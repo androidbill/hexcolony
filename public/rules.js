@@ -973,18 +973,51 @@ export function applyMove(state, pid, move, rng = Math.random) {
     }
 
     // ------------------------------------------------------------ trading
+    /**
+     * A whole basket at the bank, in one move.
+     *
+     * The bank has always dealt in single swaps, which meant six wood at 2:1 was three
+     * separate trades and three separate taps — and if the third one failed you were left
+     * halfway through something you had asked for as one thing. Now it takes any bundle
+     * either way and settles it atomically.
+     *
+     * Each given resource is priced at its own rate, which is the part worth having in
+     * one place: a player with a 2:1 wood port can put in four wood and four brick and
+     * get three cards back — two for the wood, one for the brick — and no interface
+     * should be doing that sum on its own.
+     */
     case 'bankTrade': {
       if (!myTurn) return fail('Not your turn.');
       if (g.phase !== 'build') return fail('Roll the dice first.');
-      const { give, want } = move;
-      if (!RESOURCES.includes(give) || !RESOURCES.includes(want)) return fail('Unknown resource.');
-      if (give === want) return fail('Trade for something else.');
-      const rate = tradeRate(g, board, pid, give);
-      if ((me.res[give] || 0) < rate) return fail(`You need ${rate} ${give}.`);
-      if (g.bank[want] <= 0) return fail(`The bank is out of ${want}.`);
-      me.res[give] -= rate; g.bank[give] += rate;
-      me.res[want] += 1;  g.bank[want] -= 1;
-      note(g, events, { t: 'bankTrade', p: pid, give, want, rate });
+      const give = move.give || {}, want = move.want || {};
+      const badBank = badBundle(give) || badBundle(want);
+      if (badBank) return fail(badBank);
+
+      const giving = Object.entries(give).filter(([, n]) => n > 0);
+      const wanting = Object.entries(want).filter(([, n]) => n > 0);
+      if (!giving.length || !wanting.length) return fail('Offer something and ask for something.');
+      for (const [r] of wanting) {
+        if (give[r]) return fail('Asking for what you are handing over.');
+      }
+
+      // What the given cards are worth, in cards back. A remainder means some of them
+      // would simply vanish, so it is refused rather than quietly swallowed.
+      let credits = 0;
+      for (const [r, n] of giving) {
+        const rate = tradeRate(g, board, pid, r);
+        if (n % rate !== 0) return fail(`${n} ${r} is not a whole number of ${rate}:1 trades.`);
+        if ((me.res[r] || 0) < n) return fail(`You do not have ${n} ${r}.`);
+        credits += n / rate;
+      }
+      const asked = wanting.reduce((t, [, n]) => t + n, 0);
+      if (credits !== asked) return fail(`That buys ${credits}, and you asked for ${asked}.`);
+      for (const [r, n] of wanting) {
+        if ((g.bank[r] || 0) < n) return fail(`The bank does not have ${n} ${r}.`);
+      }
+
+      for (const [r, n] of giving) { me.res[r] -= n; g.bank[r] += n; }
+      for (const [r, n] of wanting) { me.res[r] += n; g.bank[r] -= n; }
+      note(g, events, { t: 'bankTrade', p: pid, give, want });
       bumpClock(g);
       return ok();
     }
@@ -1181,23 +1214,42 @@ export function whatCanIBuild(g, pid) {
 export function highlightsFor(g, pid, intent) {
   if (g.phase === 'setup' && isTurn(g, pid)) {
     return g.setup.need === 's'
-      ? { verts: legalSettlements(g, pid, true), edges: [], hexes: [] }
-      : { verts: [], edges: legalRoads(g, pid, g.setup.lastV), hexes: [] };
+      ? { verts: legalSettlements(g, pid, true), edges: [], hexes: [], cities: [] }
+      : { verts: [], edges: legalRoads(g, pid, g.setup.lastV), hexes: [], cities: [] };
   }
   if (g.phase === 'robber' && isTurn(g, pid)) {
-    return { verts: [], edges: [], hexes: HEXES.map((h) => h.i).filter((i) => i !== g.robber) };
+    return { verts: [], edges: [], cities: [], hexes: HEXES.map((h) => h.i).filter((i) => i !== g.robber) };
   }
-  if (g.phase === 'take') return { verts: [], edges: [], hexes: [] };
+  if (g.phase === 'take') return { verts: [], edges: [], hexes: [], cities: [] };
 
-  // A build intent only means anything on your own turn. Without this check a stale
-  // intent — one left behind when a turn ended out from under the player — keeps
-  // lighting up their legal roads while somebody else is playing.
-  if (intent && g.phase === 'build' && isTurn(g, pid)) {
-    if (intent === 'road') return { verts: [], edges: legalRoads(g, pid), hexes: [] };
-    if (intent === 'settlement') return { verts: legalSettlements(g, pid), edges: [], hexes: [] };
-    if (intent === 'city') return { verts: legalCities(g, pid), edges: [], hexes: [] };
+  if (g.phase !== 'build' || !isTurn(g, pid)) return { verts: [], edges: [], hexes: [], cities: [] };
+
+  // Free roads from a Road Building card have to be placed before anything else, so
+  // nothing else is offered.
+  if (g.turn.freeRoads > 0) {
+    return { verts: [], edges: legalRoads(g, pid), hexes: [], cities: [] };
   }
-  return { verts: [], edges: [], hexes: [] };
+
+  // An explicit choice from the Build sheet narrows it to that one thing.
+  if (intent === 'road') return { verts: [], edges: legalRoads(g, pid), hexes: [], cities: [] };
+  if (intent === 'settlement') return { verts: legalSettlements(g, pid), edges: [], hexes: [], cities: [] };
+  if (intent === 'city') return { verts: [], edges: [], hexes: [], cities: legalCities(g, pid) };
+
+  /**
+   * Otherwise: everything affordable, all at once.
+   *
+   * The three never collide, which is what makes this safe to do without asking first.
+   * Roads are edges. A settlement spot is an empty corner and an upgrade is a corner with
+   * your own settlement already on it, so no vertex can mean two things — a tap resolves
+   * to exactly one action by where it landed.
+   */
+  const p = g.players[pid];
+  return {
+    edges: canAfford(p, COSTS.road) && p.left.road > 0 ? legalRoads(g, pid) : [],
+    verts: canAfford(p, COSTS.settlement) && p.left.settlement > 0 ? legalSettlements(g, pid) : [],
+    cities: canAfford(p, COSTS.city) && p.left.city > 0 ? legalCities(g, pid) : [],
+    hexes: [],
+  };
 }
 
 /** True when the engine is waiting on this player specifically. */

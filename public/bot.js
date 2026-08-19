@@ -373,7 +373,7 @@ function findBankTrade(g, board, pid, cost) {
     if (spare[give] < rate) continue;
     for (const want of wanted) {
       if (want === give || g.bank[want] <= 0) continue;
-      return { type: 'bankTrade', give, want };
+      return { type: 'bankTrade', give: { [give]: rate }, want: { [want]: 1 } };
     }
   }
   return null;

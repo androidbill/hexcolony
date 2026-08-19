@@ -242,6 +242,138 @@ check('the robber still takes the only victim without asking', () => {
   eq(R.handSize(done.game.players[me]), 1, 'stolen card');
 });
 
+// ---------------------------------------------------------------- the bank as a basket
+
+/**
+ * Give this player exactly the ports named and no others.
+ *
+ * Opening placement can drop a settlement on a port by chance, so a test that assumed
+ * 4:1 was really testing the shuffle. Clearing first makes the rate a property of the
+ * test rather than of the seed.
+ */
+function setPorts(g, board, pid, kinds = []) {
+  const mine = Object.keys(g.bldg).filter((v) => g.bldg[v].p === pid);
+  for (const v of mine) delete board.portAt[v];
+  kinds.forEach((kind, i) => { if (mine[i] !== undefined) board.portAt[mine[i]] = kind; });
+  return mine;
+}
+
+check('a basket buys several cards in one move', () => {
+  const { g, me } = tradeState({ wood: 8 });
+  const board = makeBoard(g.seed, g.mode, g.layout);
+  setPorts(g, board, me, ['wood']);                     // 2:1 wood, nothing else
+  eq(R.tradeRate(g, board, me, 'wood'), 2, 'wood rate with the port');
+
+  // Six wood at 2:1 is three cards, and they may be three different ones.
+  const res = R.applyMove(g, me, {
+    type: 'bankTrade', give: { wood: 6 }, want: { brick: 1, ore: 1, sheep: 1 },
+  });
+  assert(res.ok, `basket refused: ${res.error}`);
+  eq(res.game.players[me].res.wood, 2, 'wood left');
+  eq(res.game.players[me].res.brick, 1, 'brick gained');
+  eq(res.game.players[me].res.ore, 1, 'ore gained');
+  eq(res.game.players[me].res.sheep, 1, 'sheep gained');
+});
+
+check('resources in one basket are priced separately', () => {
+  const { g, me } = tradeState({ wood: 4, brick: 4 });
+  const board = makeBoard(g.seed, g.mode, g.layout);
+  setPorts(g, board, me, ['wood']);                     // wood 2:1, brick left at 4:1
+  eq(R.tradeRate(g, board, me, 'wood'), 2, 'wood rate');
+  eq(R.tradeRate(g, board, me, 'brick'), 4, 'brick rate');
+  // 4 wood at 2:1 is two, 4 brick at 4:1 is one — three cards.
+  const good = R.applyMove(g, me, {
+    type: 'bankTrade', give: { wood: 4, brick: 4 }, want: { ore: 3 },
+  });
+  assert(good.ok, `mixed basket refused: ${good.error}`);
+  eq(good.game.players[me].res.ore, 3, 'ore gained');
+
+  const wrong = R.applyMove(g, me, {
+    type: 'bankTrade', give: { wood: 4, brick: 4 }, want: { ore: 2 },
+  });
+  assert(!wrong.ok, 'a basket that did not balance was accepted');
+});
+
+check('cards that do not make a whole trade are refused', () => {
+  const { g, me } = tradeState({ wood: 9 });
+  const board = makeBoard(g.seed, g.mode, g.layout);
+  setPorts(g, board, me, []);
+  const rate = R.tradeRate(g, board, me, 'wood');
+  // One card over a whole trade would simply vanish, so it is refused rather than eaten.
+  assert(!R.applyMove(g, me, { type: 'bankTrade', give: { wood: rate + 1 }, want: { ore: 1 } }).ok,
+    'a basket with a remainder was accepted');
+  assert(R.applyMove(g, me, { type: 'bankTrade', give: { wood: rate }, want: { ore: 1 } }).ok,
+    'the exact basket was refused');
+});
+
+check('the bank cannot be asked for what it does not have', () => {
+  const { g, me } = tradeState({ wood: 8 });
+  const board = makeBoard(g.seed, g.mode, g.layout);
+  setPorts(g, board, me, []);
+  const rate = R.tradeRate(g, board, me, 'wood');
+  g.bank.ore = 0;
+  assert(!R.applyMove(g, me, { type: 'bankTrade', give: { wood: rate }, want: { ore: 1 } }).ok,
+    'traded for a resource the bank had run out of');
+});
+
+check('a basket cannot ask for what it is handing over', () => {
+  const { g, me } = tradeState({ wood: 8 });
+  assert(!R.applyMove(g, me, { type: 'bankTrade', give: { wood: 8 }, want: { wood: 2 } }).ok,
+    'traded wood for wood');
+});
+
+check('the bank is settled whole or not at all', () => {
+  const { g, me } = tradeState({ wood: 8 });
+  const board = makeBoard(g.seed, g.mode, g.layout);
+  setPorts(g, board, me, []);
+  const rate = R.tradeRate(g, board, me, 'wood');
+  // Enough wood for two cards, but the bank can only supply one of them.
+  g.bank.ore = 0;
+  const before = JSON.stringify(g.players[me].res);
+  const res = R.applyMove(g, me, {
+    type: 'bankTrade', give: { wood: rate * 2 }, want: { ore: 1, sheep: 1 },
+  });
+  assert(!res.ok, 'a basket the bank could not fill went through anyway');
+  eq(JSON.stringify(g.players[me].res), before, 'a refused basket still moved cards');
+});
+
+// ---------------------------------------------------------------- what the board offers
+
+check('everything affordable lights up at once', () => {
+  const { g, me } = tradeState({ wood: 6, brick: 6, sheep: 6, wheat: 6, ore: 6 });
+  const h = R.highlightsFor(g, me, null);
+  assert(h.edges.length, 'no roads offered while holding everything');
+  assert(h.verts.length || h.cities.length, 'neither settlements nor cities offered');
+  // A corner is one thing or the other, never both — which is what makes a bare tap
+  // unambiguous.
+  const overlap = h.verts.filter((v) => h.cities.includes(v));
+  eq(overlap.length, 0, 'corners offered as both a settlement and an upgrade');
+});
+
+check('nothing lights up that cannot be paid for', () => {
+  const { g, me } = tradeState({ wood: 0, brick: 0, sheep: 0, wheat: 0, ore: 0 });
+  const h = R.highlightsFor(g, me, null);
+  eq(h.edges.length, 0, 'roads offered with an empty hand');
+  eq(h.verts.length, 0, 'settlements offered with an empty hand');
+  eq(h.cities.length, 0, 'cities offered with an empty hand');
+});
+
+check('free roads crowd out everything else', () => {
+  const { g, me } = tradeState({ wood: 6, brick: 6, sheep: 6, wheat: 6, ore: 6 });
+  g.turn.freeRoads = 2;
+  const h = R.highlightsFor(g, me, null);
+  assert(h.edges.length, 'no roads offered while free roads are owed');
+  eq(h.verts.length, 0, 'settlements offered before the free roads were placed');
+  eq(h.cities.length, 0, 'cities offered before the free roads were placed');
+});
+
+check('the board offers nothing while you are waiting', () => {
+  const { g, me } = tradeState({ wood: 6, brick: 6, sheep: 6, wheat: 6, ore: 6 });
+  const other = SEATS.find((s) => s !== me);
+  const h = R.highlightsFor(g, other, null);
+  eq(h.edges.length + h.verts.length + h.cities.length, 0, 'targets lit for a waiting player');
+});
+
 // ---------------------------------------------------------------- hostile input
 
 check('a negative trade offer cannot pull cards out of a hand', () => {

@@ -172,7 +172,7 @@ export class BoardView {
     this.ctx = canvas.getContext('2d');
     this.board = null;
     this.game = null;
-    this.highlights = { verts: [], edges: [], hexes: [] };
+    this.highlights = { verts: [], edges: [], hexes: [], cities: [] };
     this.payout = null;                // what the last roll paid, and to whom
     this.sea = SEA_COLORS[0];
     this.colorOf = () => '#888';       // pid -> css colour, injected by the app
@@ -199,7 +199,7 @@ export class BoardView {
 
   setBoard(board) { this.board = board; this.fit(); }
   setGame(game) { this.game = game; }
-  setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [] }; }
+  setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [], cities: [] }; }
   setSea(idx) { this.sea = seaAt(idx); }
   /** `{ hexes, spots: [{ v, colour, city }], until }`, or null for nothing to show. */
   setPayout(p) { this.payout = p; }
@@ -347,13 +347,17 @@ export class BoardView {
     const [wx, wy] = this.toWorld(px, py);
     const h = this.highlights;
 
-    if (h.verts?.length) {
-      let best = null, bestD = 0.42;
-      for (const v of h.verts) {
+    if (h.verts?.length || h.cities?.length) {
+      let best = null, bestD = 0.42, kind = 'vertex';
+      for (const v of h.verts || []) {
         const d = Math.hypot(VERTS[v].x - wx, VERTS[v].y - wy);
-        if (d < bestD) { bestD = d; best = v; }
+        if (d < bestD) { bestD = d; best = v; kind = 'vertex'; }
       }
-      if (best !== null) return { kind: 'vertex', id: best };
+      for (const v of h.cities || []) {
+        const d = Math.hypot(VERTS[v].x - wx, VERTS[v].y - wy);
+        if (d < bestD) { bestD = d; best = v; kind = 'city'; }
+      }
+      if (best !== null) return { kind, id: best };
     }
     if (h.edges?.length) {
       let best = null, bestD = 0.34;
@@ -402,6 +406,7 @@ export class BoardView {
     this.drawBuildings();
     this.drawRobber();
     this.drawVertexHighlights();
+    this.drawCityHighlights();
   }
 
   drawWater(t = 0) {
@@ -913,6 +918,33 @@ export class BoardView {
       c.beginPath(); c.arc(x, y, R * grow, 0, Math.PI * 2);
       c.strokeStyle = `rgba(255,255,255,${0.65 + this.pulse * 0.3})`;
       c.lineWidth = Math.max(1.5, R * 0.05);
+      c.stroke();
+    }
+  }
+
+  /**
+   * Corners that would take an upgrade, ringed in gold rather than white.
+   *
+   * The distinction matters because both kinds of corner are tappable at the same time
+   * now: white means a new settlement goes here, gold means the settlement already here
+   * becomes a city. Drawn as a ring around the existing piece rather than a disc over it,
+   * so the piece and its owner stay visible.
+   */
+  drawCityHighlights() {
+    const list = this.highlights.cities || [];
+    if (!list.length) return;
+    const c = this.ctx;
+    const R = this.scale;
+    const rad = R * (0.30 + this.pulse * 0.05);
+    for (const vid of list) {
+      const [x, y] = this.toScreen(VERTS[vid].x, VERTS[vid].y);
+      c.beginPath(); c.arc(x, y, rad, 0, Math.PI * 2);
+      c.strokeStyle = `rgba(255, 214, 92, ${0.75 + this.pulse * 0.25})`;
+      c.lineWidth = Math.max(2, R * 0.06);
+      c.stroke();
+      c.beginPath(); c.arc(x, y, rad + Math.max(1.5, R * 0.045), 0, Math.PI * 2);
+      c.strokeStyle = `rgba(20, 12, 0, ${0.35 * (0.6 + this.pulse * 0.4)})`;
+      c.lineWidth = Math.max(1, R * 0.02);
       c.stroke();
     }
   }
