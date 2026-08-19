@@ -83,6 +83,8 @@ so it is not lost.
 | `road-v2.mp3` | `road` | 2.06s |
 | `resource-pickupv2.mp3` | `gain` | 2.06s |
 | `your-turn-notifv2.mp3` | `yourTurn` | 2.06s |
+| `draw-cardv2.mp3` | `card` | 1.06s |
+| `trade-cardv2.mp3` | `trade` | 1.06s |
 
 Four of them are exactly 2.064s, which is a generator exporting to a fixed length rather
 than four sounds that happen to match. If any of them turns out to be a short effect
@@ -96,5 +98,4 @@ padded with silence, `trim` fixes it without re-encoding anything:
 click. `offset` does the same at the front, for a clip that starts late. Both are in
 seconds and both are optional.
 
-Still synthesised: `card`, `trade`, `robber`, `steal`, `tap`, `error`, `win`, `lose`,
-`join`.
+Still synthesised: `robber`, `steal`, `tap`, `error`, `win`, `lose`, `join`.

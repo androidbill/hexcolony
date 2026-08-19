@@ -28,5 +28,15 @@
     "file": "your-turn-notifv2.mp3",
     "gain": 1,
     "room": 0
+  },
+  "card": {
+    "file": "draw-cardv2.mp3",
+    "gain": 1,
+    "room": 0
+  },
+  "trade": {
+    "file": "trade-cardv2.mp3",
+    "gain": 1,
+    "room": 0
   }
 }
