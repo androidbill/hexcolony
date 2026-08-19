@@ -49,6 +49,9 @@ const AVATARS = [
   '🔥', '🌋', '⛰️', '🌾', '🌲', '🧱', '🐑', '💎', '🏰', '🎲',
 ];
 let myAvatar = localStorage.getItem('hexcolony_avatar') || AVATARS[Math.floor(Math.random() * AVATARS.length)];
+// The colour you would like, if it is free when you sit down.
+let myColorIdx = Number(localStorage.getItem('hexcolony_color') ?? 0);
+if (!Number.isInteger(myColorIdx) || myColorIdx < 0 || myColorIdx >= R.PLAYER_COLORS.length) myColorIdx = 0;
 
 // ---------------------------------------------------------------- dom helpers
 const $ = (id) => document.getElementById(id);
@@ -152,10 +155,30 @@ const isHost = () => room && room.hostId === playerId;
 const game = () => room && room.game;
 const seatOrder = () => (room?.order || Object.keys(room?.players || {}));
 
-function colorFor(pid) {
+function paletteFor(pid) {
   const p = room?.players?.[pid];
   const idx = p?.colorIdx ?? 0;
-  return R.PLAYER_COLORS[idx % R.PLAYER_COLORS.length].hex;
+  return R.PLAYER_COLORS[idx % R.PLAYER_COLORS.length];
+}
+const colorFor = (pid) => paletteFor(pid).hex;
+const inkFor = (pid) => paletteFor(pid).ink;
+
+/** Colours already spoken for by somebody else in this room. */
+function takenColours() {
+  const out = new Map();
+  for (const [id, p] of Object.entries(room?.players || {})) {
+    if (id === playerId) continue;
+    out.set(p.colorIdx ?? 0, p);
+  }
+  return out;
+}
+
+/** The colour you want if it is free, otherwise the first that is. */
+function freeColourIdx(players) {
+  const used = new Set(Object.values(players || {}).map((p) => p.colorIdx ?? 0));
+  if (!used.has(myColorIdx)) return myColorIdx;
+  for (let i = 0; i < R.PLAYER_COLORS.length; i++) if (!used.has(i)) return i;
+  return myColorIdx;
 }
 function nameFor(pid) { return room?.players?.[pid]?.name || 'Someone'; }
 function faceFor(pid) { return room?.players?.[pid]?.avatar || '🎲'; }
@@ -167,7 +190,43 @@ $('avatar-face').textContent = myAvatar;
 
 $('avatar-big').addEventListener('click', () => { unlock(); sfx.tap(); openAvatarPicker(); });
 
+function drawColourGrid() {
+  const taken = takenColours();
+  const mine = room?.players?.[playerId]?.colorIdx ?? myColorIdx;
+  $('colour-grid').innerHTML = R.PLAYER_COLORS.map((c, i) => {
+    const by = taken.get(i);
+    return `<button class="colour-cell${i === mine ? ' on' : ''}" data-colour="${i}"
+      style="--c:${c.hex};--ink:${c.ink}"${by ? ' disabled' : ''}
+      aria-label="${esc(c.name)}${by ? ` — taken by ${esc(by.name)}` : ''}">
+      ${by ? `<span class="taken-by">${esc(by.avatar || '')}</span>` : (i === mine ? '✓' : '')}
+    </button>`;
+  }).join('');
+  for (const b of document.querySelectorAll('[data-colour]')) {
+    b.addEventListener('click', () => pickColour(Number(b.dataset.colour)), { once: true });
+  }
+}
+
+function pickColour(idx) {
+  if (!R.PLAYER_COLORS[idx]) return;
+  if (takenColours().has(idx)) return toast('Somebody already has that colour.');
+  if (room && room.state !== 'lobby') return toast('Colours are locked once the game starts.');
+  myColorIdx = idx;
+  localStorage.setItem('hexcolony_color', String(idx));
+  sfx.tap();
+  paintLookButton();
+  if (roomRef) updateDoc(roomRef, { [`players.${playerId}.colorIdx`]: idx }).catch(() => {});
+  else if (solo && room?.players?.[playerId]) { room.players[playerId].colorIdx = idx; saveSolo(); render(); }
+  drawColourGrid();
+}
+
+/** The swatch on the home screen button, so your colour is visible before you sit down. */
+function paintLookButton() {
+  const c = R.PLAYER_COLORS[myColorIdx] || R.PLAYER_COLORS[0];
+  $('look-swatch').style.setProperty('--c', c.hex);
+}
+
 function openAvatarPicker() {
+  drawColourGrid();
   // Avatars already spoken for in this room, so you can see them before choosing.
   const taken = new Set(
     Object.entries(room?.players || {})
@@ -255,7 +314,7 @@ async function createRoom() {
       hostId: playerId,
       state: 'lobby',
       settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0 },
-      players: { [playerId]: freshPlayer(name, 0) },
+      players: { [playerId]: freshPlayer(name, myColorIdx) },
       order: [],
       game: null,
     }).catch((e) => { console.error(e); toast('Could not create the room — check your connection.'); });
@@ -293,10 +352,7 @@ async function joinRoom() {
       if (Object.keys(data.players || {}).length >= 6) return toast('That room is full.');
     }
     if (!data || !data.players?.[playerId]) {
-      const used = new Set(Object.values(data?.players || {}).map((p) => p.colorIdx));
-      let colorIdx = 0;
-      while (used.has(colorIdx) && colorIdx < R.PLAYER_COLORS.length - 1) colorIdx++;
-      updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name, colorIdx) }).catch(() => {});
+      updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name, freeColourIdx(data?.players)) }).catch(() => {});
     }
     sfx.join();
     enterRoom(code);
@@ -337,16 +393,13 @@ async function joinDiscordRoom() {
         hostId: playerId,
         state: 'lobby',
         settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0 },
-        players: { [playerId]: freshPlayer(name, 0) },
+        players: { [playerId]: freshPlayer(name, myColorIdx) },
         order: [],
         game: null,
       }), 8000);
     } else if (!data.players?.[playerId]) {
       if (data.state !== 'lobby') return toast('That game has already started.');
-      const used = new Set(Object.values(data.players || {}).map((p) => p.colorIdx));
-      let colorIdx = 0;
-      while (used.has(colorIdx) && colorIdx < R.PLAYER_COLORS.length - 1) colorIdx++;
-      await withTimeout(updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name, colorIdx) }), 8000);
+      await withTimeout(updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name, freeColourIdx(data.players)) }), 8000);
     }
     sfx.join();
     enterRoom(code);
@@ -989,10 +1042,10 @@ function enterSolo(saved) {
 }
 
 function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true) {
-  const bots = makeBots(botCount, level);
+  const bots = makeBots(botCount, level, myColorIdx);
   const me = myName() || 'You';
   const players = {
-    [playerId]: { name: me, avatar: myAvatar, colorIdx: 0, joinedAt: Date.now() },
+    [playerId]: { name: me, avatar: myAvatar, colorIdx: myColorIdx, joinedAt: Date.now() },
   };
   for (const b of bots) {
     players[b.id] = {
@@ -1026,6 +1079,7 @@ function exitSolo() {
   closeSheet();
   keepAwake(false);
   showScreen('screen-home');
+  paintLookButton();
   refreshResume();
 }
 
@@ -1231,8 +1285,9 @@ function renderLobby() {
     // have left the home screen, and the only place the "already taken" marks mean
     // anything, since that is when you can see who else is at the table.
     const tag = pid === playerId ? 'button' : 'div';
-    const extra = pid === playerId ? ' data-my-seat title="Tap to change your avatar"' : '';
-    return `<${tag} class="seat${pid === playerId ? ' seat-me' : ''}" style="border-left-color:${esc(c)}"${extra}>
+    const extra = pid === playerId ? ' data-my-seat title="Tap to change your colour and avatar"' : '';
+    return `<${tag} class="seat${pid === playerId ? ' seat-me' : ''}" style="border-left-color:${esc(c)};--c:${esc(c)}"${extra}>
+      <span class="seat-swatch"></span>
       <span class="seat-face">${esc(p.avatar || '🎲')}</span>
       <span class="seat-name">${esc(p.name)}</span>${tags.join('')}
     </${tag}>`;
@@ -1545,7 +1600,7 @@ function renderScoreStrip(g) {
   $('score-strip').innerHTML = g.seats.map((pid) => {
     const p = g.players[pid];
     const crowns = (g.award.road === pid ? '🛣️' : '') + (g.award.army === pid ? '⚔️' : '');
-    return `<button class="chip${pid === up ? ' up' : ''}" style="--c:${esc(colorFor(pid))}" data-pcard>
+    return `<button class="chip${pid === up ? ' up' : ''}" style="--c:${esc(colorFor(pid))};--ink:${esc(inkFor(pid))}" data-pcard>
       <span class="chip-face">${esc(faceFor(pid))}</span>
       <span class="chip-vp">${R.publicVP(g, pid)}</span>
       <span class="chip-cards">${R.handSize(p)}🂠</span>

@@ -42,8 +42,11 @@
       <input id="name-input" class="text-input" type="text" maxlength="14" autocomplete="off"
              autocapitalize="words" spellcheck="false" placeholder="Nickname">
 
-      <div class="field-label">Your avatar <em id="avatar-hint">tap to choose</em></div>
-      <button class="avatar-big" id="avatar-big" aria-label="Change avatar"><span id="avatar-face">🐺</span></button>
+      <div class="field-label">Your look <em id="avatar-hint">tap to choose</em></div>
+      <button class="avatar-big" id="avatar-big" aria-label="Choose your colour and avatar">
+        <span class="look-swatch" id="look-swatch"></span>
+        <span id="avatar-face">🐺</span>
+      </button>
     </div>
 
     <div class="card" id="discord-panel" hidden>
@@ -452,8 +455,11 @@
 </div>
 
 <div class="sheet" id="sheet-avatar">
-  <h3 class="sheet-title">Choose your avatar</h3>
-  <p class="sheet-sub">Tap one to make it yours.</p>
+  <h3 class="sheet-title">Your look</h3>
+  <p class="sheet-sub">Your colour is how everyone finds your roads and towns on the board.</p>
+  <div class="set-label">Colour</div>
+  <div class="colour-grid" id="colour-grid"></div>
+  <div class="set-label">Avatar</div>
   <div class="avatar-grid" id="avatar-grid"></div>
   <div class="sheet-actions">
     <button class="btn btn-ghost" data-close>Close</button>

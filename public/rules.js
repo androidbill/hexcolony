@@ -51,13 +51,24 @@ export const DEV_INFO = {
 // Six, because the expansion deck holds six point cards to the classic deck's five.
 const VP_NAMES = ['Great Hall', 'Library', 'Market', 'Chapel', 'University', 'Cathedral'];
 
+// Fourteen colours for at most six players, so there is a real choice rather than
+// whatever was left. Each carries the ink to write on it: these run from near-white to
+// near-black, and a single text colour would be unreadable on half of them.
 export const PLAYER_COLORS = [
-  { key: 'red',    hex: '#e5484d', name: 'Red' },
-  { key: 'blue',   hex: '#3b82f6', name: 'Blue' },
-  { key: 'orange', hex: '#f59e0b', name: 'Orange' },
-  { key: 'white',  hex: '#e8eaf0', name: 'White' },
-  { key: 'green',  hex: '#22c55e', name: 'Green' },
-  { key: 'purple', hex: '#a855f7', name: 'Purple' },
+  { key: 'red',    hex: '#e5484d', ink: '#ffffff', name: 'Red' },
+  { key: 'blue',   hex: '#3b82f6', ink: '#ffffff', name: 'Blue' },
+  { key: 'orange', hex: '#f59e0b', ink: '#2a1e08', name: 'Orange' },
+  { key: 'white',  hex: '#eef1f6', ink: '#0d1b28', name: 'White' },
+  { key: 'green',  hex: '#22c55e', ink: '#06301a', name: 'Green' },
+  { key: 'purple', hex: '#a855f7', ink: '#ffffff', name: 'Purple' },
+  { key: 'teal',   hex: '#14b8a6', ink: '#04302b', name: 'Teal' },
+  { key: 'pink',   hex: '#ec4899', ink: '#ffffff', name: 'Pink' },
+  { key: 'yellow', hex: '#facc15', ink: '#3a2f05', name: 'Yellow' },
+  { key: 'sky',    hex: '#38bdf8', ink: '#04283a', name: 'Sky' },
+  { key: 'lime',   hex: '#84cc16', ink: '#1c3003', name: 'Lime' },
+  { key: 'brown',  hex: '#a16207', ink: '#ffffff', name: 'Brown' },
+  { key: 'slate',  hex: '#64748b', ink: '#ffffff', name: 'Slate' },
+  { key: 'black',  hex: '#26303f', ink: '#ffffff', name: 'Black' },
 ];
 
 const clone = (o) => (typeof structuredClone === 'function'

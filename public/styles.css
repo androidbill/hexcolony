@@ -248,6 +248,12 @@ button { background: none; border: 0; cursor: pointer; }
   padding: 10px 12px;
 }
 .seat-face { font-size: 24px; line-height: 1; }
+.seat-swatch {
+  width: 16px; height: 16px; border-radius: 5px;
+  background: var(--c, #888);
+  border: 1px solid rgba(0, 0, 0, .4);
+  flex: 0 0 auto;
+}
 /* Your own row is a button — it opens the avatar picker. */
 .seat-me { width: 100%; text-align: left; cursor: pointer; }
 .seat-me:active { background: rgba(255, 255, 255, 0.1); }
@@ -395,18 +401,27 @@ button { background: none; border: 0; cursor: pointer; }
 
 .chip {
   display: flex; align-items: center; gap: 5px;
-  padding: 5px 9px 5px 6px;
+  padding: 5px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid transparent;
-  border-left: 4px solid var(--c, #888);
+  /* The chip IS the player's colour — quicker to find yourself than reading names. */
+  background: var(--c, #888);
+  color: var(--ink, #fff);
+  border: 1px solid rgba(0, 0, 0, 0.35);
   flex-shrink: 0;
   font-size: 12.5px;
+  opacity: 0.72;
+  transition: opacity .18s, box-shadow .18s, transform .18s;
 }
-.chip.up { background: rgba(227, 186, 87, 0.16); border-color: rgba(227, 186, 87, 0.5); }
+/* Whose turn it is: full strength with a gold ring, rather than a different colour —
+   the colour is spoken for. */
+.chip.up {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--gold), 0 3px 10px rgba(0, 0, 0, 0.4);
+  transform: translateY(-1px);
+}
 .chip-face { font-size: 15px; line-height: 1; }
 .chip-vp { font-weight: 800; }
-.chip-cards { color: var(--dim); font-size: 11.5px; }
+.chip-cards { font-size: 11.5px; opacity: 0.8; }
 .chip-crown { font-size: 11px; }
 
 /* ------------------------------------------------------------ resource cards */
@@ -994,6 +1009,40 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 .kebab-menu button span { font-size: 16px; width: 20px; text-align: center; }
 .kebab-menu button:active { background: rgba(255, 255, 255, 0.1); }
+
+/* ------------------------------------------------------------ colour picker */
+.colour-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.colour-cell {
+  aspect-ratio: 1;
+  border-radius: 13px;
+  background: var(--c);
+  border: 2px solid rgba(0, 0, 0, .35);
+  display: grid; place-items: center;
+  color: var(--ink);
+  font-size: 18px; font-weight: 800;
+  transition: transform .12s, box-shadow .15s;
+}
+.colour-cell:active { transform: scale(0.92); }
+.colour-cell.on { box-shadow: 0 0 0 3px var(--gold); }
+/* Taken is not a style choice — two players in the same colour makes the board
+   unreadable, so these are genuinely unavailable rather than merely discouraged. */
+.colour-cell:disabled { opacity: 0.28; }
+.colour-cell .taken-by { font-size: 15px; }
+
+.look-swatch {
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  background: var(--c, #888);
+  border: 2px solid rgba(0, 0, 0, .4);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, .25);
+  margin-right: 12px;
+  flex: 0 0 auto;
+}
 
 /* ------------------------------------------------------------ avatar picker */
 .avatar-grid {

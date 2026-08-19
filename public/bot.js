@@ -52,19 +52,21 @@ export const LEVELS = {
 const BOT_NAMES = ['Astrid', 'Bjorn', 'Cora', 'Dag', 'Eira', 'Finn', 'Greta', 'Hakon'];
 const BOT_FACES = ['🦊', '🐗', '🦉', '🐻', '🦌', '🐺', '🦅', '🐢'];
 
-/** Seat descriptors for `count` bots, avoiding the human's colour (always index 0). */
-export function makeBots(count, level) {
+/** Seat descriptors for `count` bots, in colours the human has not taken. */
+export function makeBots(count, level, avoidColour = 0) {
   const picked = [];
   const names = BOT_NAMES.slice();
   const faces = BOT_FACES.slice();
+  let colour = 0;
   for (let i = 0; i < count; i++) {
+    if (colour === avoidColour) colour++;
     const n = Math.floor(Math.random() * names.length);
     const f = Math.floor(Math.random() * faces.length);
     picked.push({
       id: `bot${i + 1}`,
       name: names.splice(n, 1)[0],
       avatar: faces.splice(f, 1)[0],
-      colorIdx: i + 1,
+      colorIdx: colour++,
       level,
       bot: true,
     });
