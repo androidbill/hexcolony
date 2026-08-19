@@ -2411,6 +2411,38 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeKebab
  * caches and the registration both have to go first, which is the whole point of a
  * Refresh the player can reach.
  */
+/**
+ * Pull fresh bytes for every file this page is built from, into the browser's own cache.
+ *
+ * This is the step the Refresh button was missing, and the reason it looked dead.
+ * Unregistering the worker removes the one thing that was revalidating anything, so the
+ * reload afterwards is served entirely by the HTTP cache — and GitHub Pages sends these
+ * files with max-age=600. index.html came back fresh because of the ?fresh= marker, and
+ * everything it pulls in came back ten minutes old, APP_VERSION included. The app then
+ * compared the real version against a stale constant and put the banner right back up.
+ *
+ * cache:'reload' skips the cache on the way out and replaces what is stored on the way
+ * back, so the reload that follows reads new code.
+ *
+ * The list is not written down anywhere: the page reports what it actually loaded, so
+ * this cannot drift out of step with the imports the way a hand-kept list would.
+ */
+async function refetchEverything() {
+  const here = location.origin + location.pathname.replace(/[^/]*$/, '');
+  const urls = new Set(['index.html', 'sw.js', 'version.js', 'manifest.webmanifest']
+    .map((f) => here + f));
+  for (const entry of performance.getEntriesByType('resource')) {
+    if (entry.name.startsWith(here) && /\.(js|css|webmanifest)(\?|$)/.test(entry.name)) {
+      urls.add(entry.name.split('?')[0]);
+    }
+  }
+  // Never hang on a bad connection — a stale reload beats a button that never returns.
+  await Promise.race([
+    Promise.all([...urls].map((u) => fetch(u, { cache: 'reload' }).catch(() => {}))),
+    new Promise((r) => setTimeout(r, 6000)),
+  ]);
+}
+
 let refreshing = false;
 async function fullRefresh() {
   // Say so immediately. Clearing caches and reloading takes a moment, and with no
@@ -2430,6 +2462,7 @@ async function fullRefresh() {
       const regs = await navigator.serviceWorker.getRegistrations();
       await Promise.all(regs.map((r) => r.unregister()));
     }
+    await refetchEverything();
   } catch { /* best effort — reload anyway */ }
 
   // Emptying the service worker's caches is not enough: the browser's own HTTP cache
@@ -2437,6 +2470,14 @@ async function fullRefresh() {
   // minute max-age. That brought back the very build we were trying to escape, the
   // version check fired again, and the banner reappeared — which looks exactly like
   // the button doing nothing. A URL it has never seen cannot be answered from cache.
+  // Note what we were trying to reach. If the next load is still on the old build, the
+  // refresh did not take and the app should say so rather than offer the same button.
+  try {
+    const res = await fetch(`version.js?nocache=${Date.now()}`, { cache: 'no-store' });
+    const m = (await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/);
+    if (m) sessionStorage.setItem('hexcolony_tried', m[1]);
+  } catch { /* offline — nothing to record */ }
+
   const url = new URL(location.href);
   url.searchParams.set('fresh', Date.now().toString(36));
   location.replace(url.toString());
@@ -2487,6 +2528,21 @@ $('update-banner').addEventListener('click', (e) => {
  * reloaded, so this also runs whenever the app comes back to the foreground — otherwise
  * a phone can sit on a stale build for days without ever asking.
  */
+let refreshStuck = false;
+
+/** The refresh ran and changed nothing. Only the player can clear this one. */
+function announceStuck(want) {
+  const banner = $('update-banner');
+  banner.querySelector('span').textContent = `Still on v${APP_VERSION}`;
+  refreshStuck = true;
+  const btn = $('btn-refresh');
+  if (btn) btn.textContent = 'Why?';
+  $('stuck-have').textContent = APP_VERSION;
+  $('stuck-want').textContent = want;
+  banner.classList.add('show');
+  console.warn('HexColony: refresh did not take —', APP_VERSION, 'wanted', want);
+}
+
 function announceUpdate(why) {
   const banner = $('update-banner');
   if (banner.classList.contains('show')) return;
@@ -2501,7 +2557,12 @@ async function checkForUpdate() {
     const res = await fetch(`version.js?nocache=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return;
     const m = (await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/);
-    if (m && m[1] !== APP_VERSION) announceUpdate('version.js');
+    if (m && m[1] === APP_VERSION) { sessionStorage.removeItem('hexcolony_tried'); return; }
+    if (!m) return;
+    // A refresh that lands back on the same build means something below the app is
+    // holding the old files. Say that, instead of offering the same button again.
+    if (sessionStorage.getItem('hexcolony_tried') === m[1]) { announceStuck(m[1]); return; }
+    announceUpdate('version.js');
   } catch { /* offline — nothing to compare against */ }
 }
 checkForUpdate();
@@ -2575,7 +2636,10 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-$('btn-refresh').addEventListener('click', fullRefresh);
+$('btn-refresh').addEventListener('click', () => {
+  if (refreshStuck) { sheet('sheet-stuck'); return; }
+  fullRefresh();
+});
 
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {

@@ -466,6 +466,28 @@
   </div>
 </div>
 
+<div class="sheet" id="sheet-stuck">
+  <h3 class="sheet-title">The update isn't taking</h3>
+  <p class="sheet-sub">You're on v<b id="stuck-have"></b> and v<b id="stuck-want"></b> is
+    out. The app has cleared everything it is allowed to clear, so something outside it
+    is still handing back the old files.</p>
+  <ol class="how-list">
+    <li>Close HexColony completely — swipe it out of your recent apps, not just back to
+      the home screen.</li>
+    <li>Open it again. That is usually enough.</li>
+    <li>Still stuck? Open <b>androidbill.github.io/hexcolony</b> in a browser tab and pull
+      down to reload. The browser and the installed app share the same storage, so
+      clearing it in one clears it for both.</li>
+  </ol>
+  <div class="how-note">
+    Nothing is lost either way — games live on the server, and solo games are saved
+    separately.
+  </div>
+  <div class="sheet-actions">
+    <button class="btn btn-key" data-close><span class="btn-label">Got it</span></button>
+  </div>
+</div>
+
 <div class="sheet" id="sheet-ios-install">
   <h3 class="sheet-title">Add to Home Screen</h3>
   <p class="sheet-sub">iPhones and iPads cannot be prompted automatically — Safari only
