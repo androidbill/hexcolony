@@ -1240,7 +1240,7 @@ export function whatCanIBuild(g, pid) {
 }
 
 /** Everything the board needs to highlight for the move in progress. */
-export function highlightsFor(g, pid, intent) {
+export function highlightsFor(g, pid) {
   if (g.phase === 'setup' && isTurn(g, pid)) {
     return g.setup.need === 's'
       ? { verts: legalSettlements(g, pid, true), edges: [], hexes: [], cities: [] }
@@ -1259,13 +1259,8 @@ export function highlightsFor(g, pid, intent) {
     return { verts: [], edges: legalRoads(g, pid), hexes: [], cities: [] };
   }
 
-  // An explicit choice from the Build sheet narrows it to that one thing.
-  if (intent === 'road') return { verts: [], edges: legalRoads(g, pid), hexes: [], cities: [] };
-  if (intent === 'settlement') return { verts: legalSettlements(g, pid), edges: [], hexes: [], cities: [] };
-  if (intent === 'city') return { verts: [], edges: [], hexes: [], cities: legalCities(g, pid) };
-
   /**
-   * Otherwise: everything affordable, all at once.
+   * Everything affordable, all at once.
    *
    * The three never collide, which is what makes this safe to do without asking first.
    * Roads are edges. A settlement spot is an empty corner and an upgrade is a corner with

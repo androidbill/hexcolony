@@ -166,7 +166,6 @@ const view = new BoardView($('board-cv'));
 loadTerrainArt(() => view.draw(performance.now()));
 let board = null;              // regenerated whenever the seed changes
 let boardSeed = null;
-let intent = null;             // 'road' | 'settlement' | 'city' | null — what a board tap means
 let lastSeq = 0;               // highest game-log id already reacted to
 let lastPhaseKey = '';
 let seenLogAt = 0;
@@ -718,7 +717,7 @@ async function leaveRoom(removeSelf = true) {
 
   setConnBadge(false);
   roomCode = null; roomRef = null; pulseRef = null; room = null;
-  board = null; boardSeed = null; intent = null;
+  board = null; boardSeed = null;
   localStorage.removeItem('hexcolony_room');
   keepAwake(false);
   closeSheet();
@@ -1130,7 +1129,7 @@ function exitSolo() {
   clearTimeout(soloTimer);
   solo = false;
   room = null;
-  board = null; boardSeed = null; intent = null;
+  board = null; boardSeed = null;
   clearSolo();
   closeSheet();
   keepAwake(false);
@@ -1500,26 +1499,18 @@ view.onPick = (hit) => {
   // Only legal, affordable targets are ever highlighted, and only highlighted things can
   // be hit — so what was tapped is the whole instruction. No mode to choose first.
   if (hit.kind === 'edge') {
-    send({ type: 'build', what: 'road', e: hit.id }).then((ok) => { if (ok) { sfx.road(); clearIntent(); } });
+    send({ type: 'build', what: 'road', e: hit.id }).then((ok) => ok && sfx.road());
     return;
   }
   if (hit.kind === 'vertex') {
-    send({ type: 'build', what: 'settlement', v: hit.id }).then((ok) => { if (ok) { sfx.build(); clearIntent(); } });
+    send({ type: 'build', what: 'settlement', v: hit.id }).then((ok) => ok && sfx.build());
     return;
   }
   if (hit.kind === 'city') {
-    send({ type: 'build', what: 'city', v: hit.id }).then((ok) => { if (ok) { sfx.city(); clearIntent(); } });
+    send({ type: 'build', what: 'city', v: hit.id }).then((ok) => ok && sfx.city());
   }
 };
 
-function setIntent(kind) { intent = kind; render(); }
-function clearIntent() {
-  // Road Building hands out two free roads; stay in road mode until they are placed.
-  const g = game();
-  if (g && g.turn?.freeRoads > 0 && intent === 'road') { render(); return; }
-  intent = null;
-  render();
-}
 
 $('btn-recenter').addEventListener('click', () => { view.resetView(); sfx.tap(); });
 
@@ -1612,8 +1603,6 @@ async function fireTimeout() {
   if (autoFiredFor === key) return;
   autoFiredFor = key;
 
-  intent = null;      // whatever you were about to place, you are out of time for it
-
   // One move type for every stalled step. The engine works out what was owed and credits
   // it to whoever owed it — this used to send `endTurn` as the local player, which the
   // engine rightly refused as "Not your turn", and then showed that refusal to every
@@ -1654,8 +1643,7 @@ function render() {
   // Whatever ended the moment you were in — the timer running out, a 7, someone
   // leaving — the pending "tap the board" is over with it. Clearing it here covers
   // every route out of your turn instead of each one having to remember.
-  if (intent && (g.phase !== 'build' || !R.isTurn(g, playerId))) intent = null;
-  view.setHighlights(R.highlightsFor(g, playerId, intent));
+  view.setHighlights(R.highlightsFor(g, playerId));
 
   reactToLog(g);
   updatePayout(g);
@@ -1775,13 +1763,10 @@ function renderTurnBadge(g) {
   const badge = $('turn-badge');
   const mine = R.isTurn(g, playerId) || (g.phase === 'discard' && g.pending.discard[playerId]);
   let text = turnText(g);
-  if (intent) {
-    text = intent === 'road' ? 'Tap a highlighted edge' :
-           intent === 'city' ? 'Tap one of your settlements' : 'Tap a highlighted corner';
-  } else if (mine && g.phase === 'build') {
+  if (mine && g.phase === 'build') {
     // Say what is actually lit, so the highlights are self-explanatory rather than
     // something to be decoded.
-    const h = R.highlightsFor(g, playerId, null);
+    const h = R.highlightsFor(g, playerId);
     // Icons rather than words: this shares the row with the clock and the dice now, and
     // the highlights on the board say the same thing at full length.
     const bits = [];
@@ -1923,10 +1908,8 @@ function renderActions(g) {
 
   // build phase
   const can = R.whatCanIBuild(g, playerId);
-  const anyBuild = can.road || can.settlement || can.city;
   const mustPlace = g.turn.freeRoads > 0;
   bar.innerHTML =
-    actBtn('build', '🏗️', 'Build', { disabled: !anyBuild && !mustPlace, primary: mustPlace }) +
     actBtn('trade', '🤝', 'Trade', { disabled: R.handSize(p) === 0 }) +
     actBtn('dev', '🃏', 'Cards', { disabled: !held && !can.dev, badge: devBadge || 0, ready: can.dev }) +
     actBtn('end', '✔️', 'End turn', { primary: !mustPlace, disabled: mustPlace });
@@ -1956,8 +1939,7 @@ function onAction(id) {
   sfx.tap();
   switch (id) {
     case 'roll': send({ type: 'roll' }); break;
-    case 'end': intent = null; send({ type: 'endTurn' }); break;
-    case 'build': openBuild(g); break;
+    case 'end': send({ type: 'endTurn' }); break;
     case 'trade': openTrade(g); break;
     case 'dev': openDev(g); break;
     case 'discard': openDiscard(g); break;
@@ -1974,34 +1956,6 @@ function onAction(id) {
 // see at a glance both what it costs and how close you are.
 const COST_BITS = (cost, have = null) => costRow(cost, have);
 
-function openBuild(g) {
-  const p = g.players[playerId];
-  const can = R.whatCanIBuild(g, playerId);
-  const items = [
-    { k: 'road', ico: '🛣️', name: 'Road', cost: R.COSTS.road, ok: can.road, left: p.left.road },
-    { k: 'settlement', ico: '🏠', name: 'Settlement', cost: R.COSTS.settlement, ok: can.settlement, left: p.left.settlement },
-    { k: 'city', ico: '🏛️', name: 'City', cost: R.COSTS.city, ok: can.city, left: p.left.city },
-  ];
-  $('build-grid').innerHTML = items.map((it) => `
-    <button class="build-item" data-build="${it.k}"${it.ok ? '' : ' disabled'}>
-      <span class="build-ico">${it.ico}</span>
-      <span class="build-txt">
-        <span class="build-name">${it.name}</span>
-        <span class="build-cost">${COST_BITS(it.cost, p.res)}</span>
-      </span>
-      <span class="build-left">${it.left} left</span>
-    </button>`).join('');
-
-  for (const b of document.querySelectorAll('[data-build]')) {
-    b.addEventListener('click', () => {
-      const k = b.dataset.build;
-      closeSheet();
-      setIntent(k);
-      toast(k === 'city' ? 'Tap one of your settlements.' : 'Tap a highlighted spot on the board.');
-    });
-  }
-  sheet('sheet-build');
-}
 
 // ---------------------------------------------------------------- dev cards
 function openDev(g) {
@@ -2064,7 +2018,7 @@ function openDev(g) {
       const k = b.dataset.dev;
       closeSheet();
       if (k === 'knight') { send({ type: 'playDev', card: 'knight' }); return; }
-      if (k === 'road') { send({ type: 'playDev', card: 'road' }).then((ok) => ok && setIntent('road')); return; }
+      if (k === 'road') { send({ type: 'playDev', card: 'road' }); return; }
       if (k === 'plenty') { openPickRes('plenty'); return; }
       if (k === 'mono') { openPickRes('mono'); return; }
     });
@@ -2523,6 +2477,10 @@ function openPlayers() {
       `<span class="pstat">${R.devCount(p)} dev</span>`,
       `<span class="pstat">⚔️ ${p.knights}</span>`,
       `<span class="pstat">🛣️ ${p.roadLen}</span>`,
+      // What is left in the box. This used to live in the Build sheet, where it was only
+      // ever about you — but an opponent down to their last settlement is real
+      // information, and this is the card that already answers "how is everyone doing".
+      `<span class="pstat">left ${p.left.road}🛣️ ${p.left.settlement}🏠 ${p.left.city}🏛️</span>`,
     ];
     if (g.award.road === pid) stats.push('<span class="pstat award">Longest Road</span>');
     if (g.award.army === pid) stats.push('<span class="pstat award">Largest Army</span>');

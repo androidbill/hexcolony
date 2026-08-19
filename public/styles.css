@@ -801,20 +801,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 
 /* ------------------------------------------------------------ build sheet */
-.build-grid { display: flex; flex-direction: column; gap: 9px; }
-.build-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px 12px;
-  border-radius: var(--r);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--line);
-  text-align: left;
-  width: 100%;
-}
-.build-item:disabled { opacity: 0.4; pointer-events: none; }
-.build-ico { font-size: 24px; }
-.build-txt { flex: 1; }
-.build-name { font-weight: 700; }
 .build-cost { display: flex; gap: 7px; margin-top: 8px; padding-top: 4px; }
 .build-left { font-size: 11px; color: var(--dim); }
 
