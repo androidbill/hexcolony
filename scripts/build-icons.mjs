@@ -176,6 +176,10 @@ for (const [name, size, maskable] of [
   ['icon-192.png', 192, false],
   ['icon-512.png', 512, false],
   ['icon-maskable-512.png', 512, true],
+  // iOS ignores transparency and composites the icon onto black, so the home-screen
+  // icon uses the full-bleed drawing rather than the round one — otherwise an iPhone
+  // shows the island in a black square.
+  ['apple-touch-icon.png', 180, true],
 ]) {
   const buf = drawIcon(size, maskable);
   writeFileSync(join(OUT, name), buf);

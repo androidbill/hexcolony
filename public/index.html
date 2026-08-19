@@ -6,6 +6,7 @@
 <title>HexColony</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="theme-color" content="#0b2540">
 <meta name="description" content="HexColony — settle the island with friends. Online multiplayer, no accounts, join by room code.">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -23,7 +24,6 @@
 <meta property="og:image:width" content="512">
 <meta property="og:image:height" content="512">
 <meta name="twitter:card" content="summary">
-<meta name="theme-color" content="#0b2540">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -466,6 +466,24 @@
   </div>
 </div>
 
+<div class="sheet" id="sheet-ios-install">
+  <h3 class="sheet-title">Add to Home Screen</h3>
+  <p class="sheet-sub">iPhones and iPads cannot be prompted automatically — Safari only
+    installs an app when you ask it to. It takes two taps.</p>
+  <ol class="how-list">
+    <li>Tap the <b>Share</b> button in Safari's toolbar — the square with an arrow
+      coming out of the top.</li>
+    <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</li>
+  </ol>
+  <div class="how-note">
+    It then opens like any other app: full screen, its own icon, and it keeps working
+    on a bad connection. Solo games work with no connection at all.
+  </div>
+  <div class="sheet-actions">
+    <button class="btn btn-key" data-close><span class="btn-label">Got it</span></button>
+  </div>
+</div>
+
 <div class="sheet" id="sheet-about">
   <div class="about-hero">
     <img class="about-icon" src="icons/icon-192.png" width="96" height="96" alt="">
@@ -488,9 +506,9 @@
   <button class="banner-x" onclick="this.parentElement.classList.remove('show')">&#10005;</button>
 </div>
 <div class="banner" id="install-banner">
-  <span>Install HexColony</span>
+  <span id="install-text">Install HexColony</span>
   <button id="btn-install">Install</button>
-  <button class="banner-x" onclick="this.parentElement.classList.remove('show')">&#10005;</button>
+  <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
 <script type="module" src="app.js"></script>

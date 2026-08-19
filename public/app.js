@@ -2579,21 +2579,50 @@ $('btn-refresh').addEventListener('click', fullRefresh);
 
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
+  // Chrome will show its own bar unless we take the event; we show ours instead so it
+  // appears where the rest of the app's messages do.
   e.preventDefault();
   installPrompt = e;
   updateInstallBanner();
 });
+
+/** Already installed — running from the home screen rather than in a browser tab. */
+const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches
+  || window.navigator.standalone === true;
+
+// Safari never fires beforeinstallprompt, on any device. An iPhone can still install
+// the app, but only through the Share menu, so it gets told how rather than nothing.
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);   // iPadOS
+
+const installDismissed = () => localStorage.getItem('hexcolony_install_off') === '1';
+
 function updateInstallBanner() {
   const onHome = $('screen-home').classList.contains('is-active');
   // One bar at a time, and an available update outranks an install offer — they share
   // the same corner of the screen and would otherwise cover each other.
   const updating = $('update-banner').classList.contains('show');
-  $('install-banner').classList.toggle('show', !!installPrompt && onHome && !updating);
+  const canOffer = !isStandalone() && !installDismissed() && (!!installPrompt || isIOS());
+  if (canOffer && isIOS() && !installPrompt) {
+    $('install-text').textContent = 'Add HexColony to your Home Screen';
+    $('btn-install').textContent = 'How';
+  }
+  $('install-banner').classList.toggle('show', canOffer && onHome && !updating);
 }
+
 $('btn-install').addEventListener('click', async () => {
-  if (!installPrompt) return;
-  installPrompt.prompt();
-  installPrompt = null;
+  if (installPrompt) {
+    installPrompt.prompt();
+    installPrompt = null;
+    $('install-banner').classList.remove('show');
+    return;
+  }
+  sheet('sheet-ios-install');
+});
+
+// "Not now" has to mean it. Without remembering, the bar comes back on every visit.
+$('install-dismiss').addEventListener('click', () => {
+  localStorage.setItem('hexcolony_install_off', '1');
   $('install-banner').classList.remove('show');
 });
 
