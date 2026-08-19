@@ -937,9 +937,15 @@ export function highlightsFor(g, pid, intent) {
     return { verts: [], edges: [], hexes: HEXES.map((h) => h.i).filter((i) => i !== g.robber) };
   }
   if (g.phase === 'take') return { verts: [], edges: [], hexes: [] };
-  if (intent === 'road') return { verts: [], edges: legalRoads(g, pid), hexes: [] };
-  if (intent === 'settlement') return { verts: legalSettlements(g, pid), edges: [], hexes: [] };
-  if (intent === 'city') return { verts: legalCities(g, pid), edges: [], hexes: [] };
+
+  // A build intent only means anything on your own turn. Without this check a stale
+  // intent — one left behind when a turn ended out from under the player — keeps
+  // lighting up their legal roads while somebody else is playing.
+  if (intent && g.phase === 'build' && isTurn(g, pid)) {
+    if (intent === 'road') return { verts: [], edges: legalRoads(g, pid), hexes: [] };
+    if (intent === 'settlement') return { verts: legalSettlements(g, pid), edges: [], hexes: [] };
+    if (intent === 'city') return { verts: legalCities(g, pid), edges: [], hexes: [] };
+  }
   return { verts: [], edges: [], hexes: [] };
 }
 

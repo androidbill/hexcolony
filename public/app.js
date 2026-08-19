@@ -1429,6 +1429,7 @@ async function fireTimeout() {
   if (autoFiredFor === key) return;
   autoFiredFor = key;
 
+  intent = null;      // whatever you were about to place, you are out of time for it
   if (g.phase === 'roll') { await send({ type: 'roll' }); return; }
 
   // Free roads from a Road Building card have to be placed before a turn can end.
@@ -1469,6 +1470,10 @@ function render() {
   }
 
   view.setGame(g);
+  // Whatever ended the moment you were in — the timer running out, a 7, someone
+  // leaving — the pending "tap the board" is over with it. Clearing it here covers
+  // every route out of your turn instead of each one having to remember.
+  if (intent && (g.phase !== 'build' || !R.isTurn(g, playerId))) intent = null;
   view.setHighlights(R.highlightsFor(g, playerId, intent));
 
   reactToLog(g);
