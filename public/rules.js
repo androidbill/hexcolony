@@ -820,6 +820,8 @@ export function applyMove(state, pid, move, rng = Math.random) {
       for (const [r, n] of Object.entries(give)) if ((me.res[r] || 0) < n) return fail('You do not have that to give.');
       g.trade = { from: pid, give, want, replies: {} };
       note(g, events, { t: 'offer', p: pid, give, want });
+      // Waiting on other people should not cost you the turn you are waiting during.
+      bumpClock(g);
       return ok();
     }
 

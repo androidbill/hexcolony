@@ -202,7 +202,7 @@ function drawColourGrid() {
     </button>`;
   }).join('');
   for (const b of document.querySelectorAll('[data-colour]')) {
-    b.addEventListener('click', () => pickColour(Number(b.dataset.colour)), { once: true });
+    b.addEventListener('click', () => pickColour(Number(b.dataset.colour)));
   }
 }
 
@@ -241,7 +241,7 @@ function openAvatarPicker() {
       aria-label="Avatar ${esc(a)}"${a === myAvatar ? ' aria-current="true"' : ''}>${esc(a)}</button>`;
   }).join('');
   for (const b of document.querySelectorAll('[data-avatar]')) {
-    b.addEventListener('click', () => pickAvatar(b.dataset.avatar), { once: true });
+    b.addEventListener('click', () => pickAvatar(b.dataset.avatar));
   }
   sheet('sheet-avatar');
 }
@@ -868,7 +868,7 @@ function renderMapPreview() {
       else if (what === 'prev') stepMap(-1);
       else if (what === 'back') backToLobby();
       else acceptMap();
-    }, { once: true });
+    });
   }
 }
 
@@ -1689,44 +1689,38 @@ function renderActions(g) {
   const devHand = p ? Object.entries(p.dev).filter(([k, n]) => k !== 'vp' && n > 0) : [];
   const devBadge = devHand.reduce((n, [, c]) => n + c, 0);
 
-  if (!p) { bar.innerHTML = actBtn('log', '📜', 'Game log', { wide: true }); wireActions(); return; }
+  if (!p) { bar.innerHTML = actBtn('log', '📜', 'Game log', { wide: true }); return; }
 
   if (g.phase === 'over') {
-    bar.innerHTML = actBtn('over', '🏆', 'Results', { primary: true, wide: true }) + actBtn('log', '📜', 'Log');
-    wireActions(); return;
+    bar.innerHTML = actBtn('over', '🏆', 'Results', { primary: true, wide: true }) + actBtn('log', '📜', 'Log'); return;
   }
 
   if (g.phase === 'discard') {
     bar.innerHTML = g.pending.discard[playerId]
       ? actBtn('discard', '🗑️', `Discard ${g.pending.discard[playerId]}`, { primary: true, wide: true })
-      : `<div class="act-prompt"><span class="act-ico">⏳</span>Waiting for others to discard</div>`;
-    wireActions(); return;
+      : `<div class="act-prompt"><span class="act-ico">⏳</span>Waiting for others to discard</div>`; return;
   }
 
   if (!mine || g.phase === 'setup') {
-    bar.innerHTML = actBtn('players', '👥', 'Players') + actBtn('log', '📜', 'Log', { badge: 0 });
-    wireActions(); return;
+    bar.innerHTML = actBtn('players', '👥', 'Players') + actBtn('log', '📜', 'Log', { badge: 0 }); return;
   }
 
   if (g.phase === 'robber') {
     bar.innerHTML = `<div class="act-prompt"><span class="act-ico">🥷</span>Tap a highlighted tile to move the robber</div>`
-      + actBtn('log', '📜', 'Log');
-    wireActions(); return;
+      + actBtn('log', '📜', 'Log'); return;
   }
 
   if (g.phase === 'steal' || g.phase === 'take') {
     // A button back into the sheet, in case it was somehow closed.
     bar.innerHTML = actBtn('steal', '🥷', g.phase === 'take' ? 'Take a card' : 'Rob a player', { primary: true, wide: true })
-      + actBtn('log', '📜', 'Log');
-    wireActions(); return;
+      + actBtn('log', '📜', 'Log'); return;
   }
 
   if (g.phase === 'roll') {
     bar.innerHTML =
       actBtn('roll', '🎲', 'Roll', { primary: true, wide: true }) +
       actBtn('dev', '🃏', 'Cards', { disabled: !devHand.length, badge: devBadge || 0 }) +
-      actBtn('log', '📜', 'Log');
-    wireActions(); return;
+      actBtn('log', '📜', 'Log'); return;
   }
 
   // build phase
@@ -1738,17 +1732,24 @@ function renderActions(g) {
     actBtn('trade', '🤝', 'Trade', { disabled: R.handSize(p) === 0 }) +
     actBtn('dev', '🃏', 'Cards', { disabled: !devHand.length && !can.dev, badge: devBadge || 0 }) +
     actBtn('end', '✔️', 'End turn', { primary: !mustPlace, disabled: mustPlace });
-  wireActions();
 }
 
-function wireActions() {
-  for (const b of document.querySelectorAll('[data-act]')) {
-    b.addEventListener('click', () => onAction(b.dataset.act), { once: true });
-  }
-  for (const b of document.querySelectorAll('[data-pcard]')) {
-    b.addEventListener('click', () => { openPlayers(); }, { once: true });
-  }
-}
+// Delegated, and bound once to the containers rather than to the buttons.
+//
+// The action bar is rebuilt with innerHTML on every render, so a listener attached to a
+// button dies with that button. Re-binding after each rebuild looks like it covers that,
+// but the handlers were registered with { once: true }: the first tap consumed the
+// listener, and opening or closing a sheet does not change any game state, so nothing
+// re-rendered and nothing re-bound. Every button in the bar therefore worked exactly
+// once per render — tap Trade, wave the sheet away, and Trade was dead. So were Build,
+// Cards and End turn. A listener on the container survives the buttons being replaced.
+$('actions').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-act]');
+  if (b && !b.disabled) onAction(b.dataset.act);
+});
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-pcard]')) openPlayers();
+});
 
 function onAction(id) {
   unlock();
@@ -1801,7 +1802,7 @@ function openBuild(g) {
       if (k === 'dev') { send({ type: 'buyDev' }).then((ok) => ok && sfx.card()); return; }
       setIntent(k);
       toast(k === 'city' ? 'Tap one of your settlements.' : 'Tap a highlighted spot on the board.');
-    }, { once: true });
+    });
   }
   sheet('sheet-build');
 }
@@ -1847,7 +1848,7 @@ function openDev(g) {
       if (k === 'road') { send({ type: 'playDev', card: 'road' }).then((ok) => { if (ok) { sfx.card(); setIntent('road'); } }); return; }
       if (k === 'plenty') { openPickRes('plenty'); return; }
       if (k === 'mono') { openPickRes('mono'); return; }
-    }, { once: true });
+    });
   }
   sheet('sheet-dev');
 }
@@ -1893,7 +1894,7 @@ function openDiscard(g) {
         }
         sfx.tap();
         draw();
-      }, { once: true });
+      });
     }
   };
   draw();
@@ -1924,7 +1925,7 @@ function openPickRes(kind) {
           <span class="pick-have">${RES_NAME[r]}</span>
         </div>`).join('');
       for (const b of document.querySelectorAll('#pickres-picker [data-pick]')) {
-        b.addEventListener('click', () => { chosen = b.dataset.pick; sfx.tap(); draw(); }, { once: true });
+        b.addEventListener('click', () => { chosen = b.dataset.pick; sfx.tap(); draw(); });
       }
       $('btn-pickres').disabled = !chosen;
     };
@@ -1950,7 +1951,7 @@ function openPickRes(kind) {
           }
           sfx.tap();
           draw();
-        }, { once: true });
+        });
       }
     };
     draw();
@@ -1975,6 +1976,12 @@ for (const b of document.querySelectorAll('[data-trade-tab]')) {
 }
 
 function openTrade(g) {
+  // Trim anything left over from a previous visit that the hand no longer covers — the
+  // offer would only be refused on the way out.
+  const held = g.players[playerId]?.res || {};
+  for (const r of Object.keys(giveSel)) {
+    if ((held[r] || 0) < giveSel[r]) { if (held[r]) giveSel[r] = held[r]; else delete giveSel[r]; }
+  }
   tradeTab = 'bank';
   for (const x of document.querySelectorAll('[data-trade-tab]')) x.classList.toggle('on', x.dataset.tradeTab === 'bank');
   $('trade-bank').hidden = false;
@@ -2011,7 +2018,7 @@ function drawBankTrades(g) {
       const [give, want] = b.dataset.bank.split(':');
       closeSheet();
       send({ type: 'bankTrade', give, want }).then((ok) => ok && sfx.trade());
-    }, { once: true });
+    });
   }
 }
 
@@ -2047,7 +2054,7 @@ function drawOfferPickers() {
       }
       sfx.tap();
       drawOfferPickers();
-    }, { once: true });
+    });
   }
   const gTotal = Object.values(giveSel).reduce((a, b) => a + b, 0);
   const wTotal = Object.values(wantSel).reduce((a, b) => a + b, 0);
@@ -2102,7 +2109,7 @@ function openOffer(g) {
       b.addEventListener('click', () => {
         closeSheet();
         send({ type: 'acceptTrade', with: b.dataset.accept }).then((ok) => ok && sfx.trade());
-      }, { once: true });
+      });
     }
   } else {
     const me = g.players[playerId];
@@ -2136,7 +2143,7 @@ function openSteal(g) {
       closeSheet();
       const type = game()?.phase === 'take' ? 'takeCard' : 'steal';
       send({ type, from: b.dataset.steal }).then((ok) => ok && sfx.steal());
-    }, { once: true });
+    });
   }
   sheet('sheet-steal');
 }
@@ -2215,7 +2222,15 @@ function openLog(g) {
 // Some phases stop the game until you act. Those sheets reopen if dismissed; optional
 // ones (a trade offer) stay closed once you've waved them away.
 function syncSheets(g) {
-  const key = `${g.phase}:${g.turn.num}:${g.trade ? g.trade.from + g.seq : ''}`;
+  // Replies have to be part of this. Answering an offer does not write to the game log,
+  // so it does not move g.seq, so the key did not change, so the offer sheet was never
+  // redrawn — the player who made the offer sat looking at "Thinking…" while the
+  // acceptance was already in. It was never a failed trade; it was a screen that never
+  // caught up.
+  const replies = g.trade
+    ? Object.keys(g.trade.replies).sort().map((k) => `${k}${g.trade.replies[k]}`).join(',')
+    : '';
+  const key = `${g.phase}:${g.turn.num}:${g.trade ? g.trade.from + g.seq : ''}:${replies}`;
   const changed = key !== lastPhaseKey;
   lastPhaseKey = key;
 
@@ -2230,7 +2245,6 @@ function syncSheets(g) {
   if (openSheet === 'sheet-discard' || openSheet === 'sheet-steal') closeSheet();
 
   if (g.trade) {
-    const tradeKey = `${g.trade.from}:${Object.keys(g.trade.replies).length}`;
     const iReplied = g.trade.from === playerId || g.trade.replies[playerId];
     if (dismissedTrade !== g.trade.from && (!iReplied || g.trade.from === playerId)) {
       if (openSheet !== 'sheet-offer') openOffer(g);
