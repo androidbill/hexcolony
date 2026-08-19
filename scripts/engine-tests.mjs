@@ -242,6 +242,60 @@ check('the robber still takes the only victim without asking', () => {
   eq(R.handSize(done.game.players[me]), 1, 'stolen card');
 });
 
+// ---------------------------------------------------------------- a card that does nothing
+
+check('a knight always says what it did', () => {
+  for (const useRobber of [true, false]) {
+    for (const phase of ['roll', 'build']) {
+      let g = R.newGame(SEATS, { seed: 12345, layout: 'classic', useRobber }, rngFrom(7));
+      const rng = rngFrom(50);
+      while (g.phase === 'setup') g = R.applyMove(g, 'p1', { type: 'timeout' }, rng).game;
+      const me = R.currentPid(g);
+      g.phase = phase;
+      g.turn.rolled = phase === 'build';
+      g.players[me].dev.knight = 1;
+      for (const s2 of SEATS) if (s2 !== me) for (const r of RESOURCES) g.players[s2].res[r] = 2;
+
+      const res = R.applyMove(g, me, { type: 'playDev', card: 'knight' }, rngFrom(11));
+      assert(res.ok, `knight refused (robber=${useRobber}, ${phase}): ${res.error}`);
+      const want = useRobber ? 'robber' : 'take';
+      eq(res.game.phase, want, `phase after a knight (robber=${useRobber}, from ${phase})`);
+      if (useRobber) {
+        const lit = R.highlightsFor(res.game, me, null);
+        assert(lit.hexes.length > 0, 'no tiles offered for the robber');
+      }
+    }
+  }
+});
+
+check('a raid with nobody to rob says so instead of vanishing', () => {
+  const { g, me } = raidState(['p1', 'p2'], 0);      // nobody else holds anything
+  const done = raid(g, me, 21);
+  assert(done.ok, `knight refused: ${done.error}`);
+  assert(done.events.some((e) => e.t === 'noloot'), 'a knight was spent in total silence');
+  eq(done.game.players[me].knights, 1, 'the knight still counted toward Largest Army');
+});
+
+check('a robber landing on nobody says so too', () => {
+  const ids = ['p1', 'p2'];
+  let g = R.newGame(ids, { seed: 909, layout: 'classic', useRobber: true }, rngFrom(6));
+  let guard = 0;
+  while (g.phase === 'setup') {
+    g = R.applyMove(g, ids[0], { type: 'timeout' }, rngFrom(guard + 20)).game;
+    if (guard++ > 40) throw new Error('setup did not finish');
+  }
+  const me = R.currentPid(g);
+  g.phase = 'robber';
+  g.turn.rolled = true;
+  // A tile with nothing built on it at all.
+  const bare = HEXES.find((h) => h.i !== g.robber && !h.corners.some((v) => g.bldg[v]));
+  if (!bare) return;
+  const done = R.applyMove(g, me, { type: 'moveRobber', hex: bare.i }, rngFrom(22));
+  assert(done.ok, `moveRobber refused: ${done.error}`);
+  assert(done.events.some((e) => e.t === 'noloot'), 'the robber moved in silence');
+  eq(done.game.phase, 'build', 'phase after robbing an empty tile');
+});
+
 // ---------------------------------------------------------------- the bank as a basket
 
 /**

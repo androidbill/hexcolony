@@ -510,6 +510,9 @@ function moveRobber(g, hexIndex, pid, events, rng) {
   note(g, events, { t: 'robber', p: pid, hex: hexIndex });
   const victims = stealCandidates(g, hexIndex, pid);
   if (victims.length === 0) {
+    // The robber landed somewhere with nobody worth robbing. Worth saying, for the same
+    // reason as the raid above.
+    note(g, events, { t: 'noloot', p: pid });
     g.pending.stealFrom = [];
     resumeTurn(g);
     return;
@@ -549,7 +552,14 @@ function afterSeven(g, events, rng) {
   if (g.useRobber !== false) { g.phase = 'robber'; startClock(g, g.turnSeconds); return; }
   const pid = currentPid(g);
   const targets = g.seats.filter((s) => s !== pid && handSize(g.players[s]) > 0);
-  if (!targets.length) { resumeTurn(g); return; }
+  if (!targets.length) {
+    // Nobody is holding anything, so the raid is over before it starts. Recorded, because
+    // otherwise a knight is spent and absolutely nothing appears to happen — the single
+    // most confusing thing this game can do.
+    note(g, events, { t: 'noloot', p: pid });
+    resumeTurn(g);
+    return;
+  }
   // One possible target is not a choice. Asking "who?" of a two-player game — or of any
   // game where only one person is holding cards — is a tap that can only be answered one
   // way. The robber's own path has always taken it automatically; this is the same rule

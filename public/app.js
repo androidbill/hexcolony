@@ -1699,6 +1699,15 @@ function reactToLog(g) {
           ? `You monopolised ${e.count} ${e.res}.`
           : `${nameFor(e.p)} monopolised ${e.res} — ${e.count} cards.`);
         break;
+      case 'playDev': {
+        const name = R.DEV_INFO[e.card]?.name || 'a card';
+        sfx.card();
+        toast(e.p === playerId ? `You played ${name}.` : `${nameFor(e.p)} played ${name}.`);
+        break;
+      }
+      case 'noloot':
+        if (e.p === playerId) toast('Nobody had a card to take.');
+        break;
       case 'trade': sfx.trade(); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
       case 'longest': toast(`${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Longest Road (${e.len}).`); break;
@@ -2052,8 +2061,8 @@ function openDev(g) {
     b.addEventListener('click', () => {
       const k = b.dataset.dev;
       closeSheet();
-      if (k === 'knight') { send({ type: 'playDev', card: 'knight' }).then((ok) => ok && sfx.card()); return; }
-      if (k === 'road') { send({ type: 'playDev', card: 'road' }).then((ok) => { if (ok) { sfx.card(); setIntent('road'); } }); return; }
+      if (k === 'knight') { send({ type: 'playDev', card: 'knight' }); return; }
+      if (k === 'road') { send({ type: 'playDev', card: 'road' }).then((ok) => ok && setIntent('road')); return; }
       if (k === 'plenty') { openPickRes('plenty'); return; }
       if (k === 'mono') { openPickRes('mono'); return; }
     });
@@ -2488,6 +2497,7 @@ function logLine(e) {
     case 'build': text = `<b>${who(e.p)}</b> built a ${e.what}${e.free ? ' (free)' : ''}`; break;
     case 'buyDev': text = `<b>${who(e.p)}</b> bought a development card`; break;
     case 'playDev': text = `<b>${who(e.p)}</b> played ${esc(R.DEV_INFO[e.card]?.name || e.card)}`; break;
+    case 'noloot': text = `<span class="r">Nobody had a card for <b>${who(e.p)}</b> to take</span>`; break;
     case 'robber': text = `<b>${who(e.p)}</b> moved the robber`; break;
     case 'steal': text = `<b>${who(e.p)}</b> robbed <b>${who(e.from)}</b>`; break;
     case 'discard': text = `<b>${who(e.p)}</b> discarded ${e.count}`; break;
