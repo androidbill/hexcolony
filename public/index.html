@@ -42,7 +42,7 @@
       <input id="name-input" class="text-input" type="text" maxlength="14" autocomplete="off"
              autocapitalize="words" spellcheck="false" placeholder="Nickname">
 
-      <div class="field-label">Your avatar <em id="avatar-hint">tap to change</em></div>
+      <div class="field-label">Your avatar <em id="avatar-hint">tap to choose</em></div>
       <button class="avatar-big" id="avatar-big" aria-label="Change avatar"><span id="avatar-face">🐺</span></button>
     </div>
 
@@ -148,7 +148,7 @@
       </div>
 
       <div class="opt-row col">
-        <span class="opt-l">Rolling a 7<em id="robber-blurb">Move the robber and rob whoever it lands on.</em></span>
+        <span class="opt-l">Rolling a 7<em id="robber-blurb">Discard down, move the robber, rob whoever it lands on.</em></span>
         <div class="seg-row">
           <button class="seg on" data-robber="on">Robber</button>
           <button class="seg" data-robber="off">No robber</button>
@@ -372,9 +372,9 @@
       robber moves on.</p>
 
     <p><b>Playing without the robber.</b> The host can switch it off before the game
-      starts. Then a 7 still costs big hands their cards, but instead of moving the
-      robber you simply take one card at random from any player you like &mdash; no tile
-      is ever blocked.</p>
+      starts. Then a 7 costs nobody their cards &mdash; there is no discard at all
+      &mdash; and instead of moving the robber you simply take one card at random from
+      any player you like. No tile is ever blocked.</p>
 
     <p><b>Trading.</b> Four of a kind gets you any one card from the bank. Standing on a
       generic port makes that three, and a matching two-for-one port makes it two. You can
@@ -425,6 +425,15 @@
     <button id="kebab-refresh" role="menuitem"><span>&#128260;</span>Refresh</button>
     <button id="kebab-share" role="menuitem"><span>&#128228;</span>Share</button>
     <button id="kebab-about" role="menuitem"><span>&#8505;&#65039;</span>About</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-avatar">
+  <h3 class="sheet-title">Choose your avatar</h3>
+  <p class="sheet-sub">Tap one to make it yours.</p>
+  <div class="avatar-grid" id="avatar-grid"></div>
+  <div class="sheet-actions">
+    <button class="btn btn-ghost" data-close>Close</button>
   </div>
 </div>
 

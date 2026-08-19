@@ -248,6 +248,9 @@ button { background: none; border: 0; cursor: pointer; }
   padding: 10px 12px;
 }
 .seat-face { font-size: 24px; line-height: 1; }
+/* Your own row is a button — it opens the avatar picker. */
+.seat-me { width: 100%; text-align: left; cursor: pointer; }
+.seat-me:active { background: rgba(255, 255, 255, 0.1); }
 .seat-name { flex: 1; font-weight: 700; }
 .seat-tag {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
@@ -831,6 +834,36 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .kebab-menu button span { font-size: 16px; width: 20px; text-align: center; }
 .kebab-menu button:active { background: rgba(255, 255, 255, 0.1); }
+
+/* ------------------------------------------------------------ avatar picker */
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(54px, 1fr));
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px;
+}
+.avatar-cell {
+  aspect-ratio: 1;
+  display: grid; place-items: center;
+  font-size: 26px;
+  line-height: 1;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  transition: transform .12s, background .15s, border-color .15s;
+}
+.avatar-cell:active { transform: scale(0.92); }
+.avatar-cell.on {
+  background: rgba(227, 186, 87, 0.24);
+  border-color: var(--gold);
+  box-shadow: 0 0 0 1px var(--gold) inset;
+}
+/* Someone else in the room already has this one. Still choosable — two identical
+   avatars are only a nuisance, not a problem — but worth flagging before you pick it. */
+.avatar-cell.taken { opacity: 0.34; }
 
 /* ------------------------------------------------------------ about */
 .about-hero { text-align: center; padding: 6px 0 10px; }

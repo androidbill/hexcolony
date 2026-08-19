@@ -43,7 +43,7 @@ if (!playerId) { playerId = rid(); localStorage.setItem('hexcolony_pid', playerI
 
 const AVATARS = [
   '🐺', '🦊', '🦅', '🐗', '🦌', '🐻', '🦉', '🐍', '🦂', '🐙',
-  '🦈', '🐊', '🦏', '🐫', '🦬', '🐉', '🦅', '🦭', '🐅', '🦍',
+  '🦈', '🐊', '🦏', '🐫', '🦬', '🐉', '🦡', '🦭', '🐅', '🦍',
   '⚔️', '🛡️', '🏹', '⚒️', '👑', '🗿', '⛵', '🧭', '🗺️', '⚓',
   '🔥', '🌋', '⛰️', '🌾', '🌲', '🧱', '🐑', '💎', '🏰', '🎲',
 ];
@@ -164,15 +164,43 @@ view.colorOf = colorFor;
 $('name-input').value = localStorage.getItem('hexcolony_name') || '';
 $('avatar-face').textContent = myAvatar;
 
-$('avatar-big').addEventListener('click', () => {
-  // A tap rolls to the next unused-looking avatar. No picker grid: it's one control.
-  const i = AVATARS.indexOf(myAvatar);
-  myAvatar = AVATARS[(i + 1 + Math.floor(Math.random() * 3)) % AVATARS.length];
+$('avatar-big').addEventListener('click', () => { unlock(); sfx.tap(); openAvatarPicker(); });
+
+function openAvatarPicker() {
+  // Avatars already spoken for in this room, so you can see them before choosing.
+  const taken = new Set(
+    Object.entries(room?.players || {})
+      .filter(([id]) => id !== playerId)
+      .map(([, p]) => p.avatar)
+  );
+  $('avatar-grid').innerHTML = AVATARS.map((a) => {
+    const cls = ['avatar-cell'];
+    if (a === myAvatar) cls.push('on');
+    if (taken.has(a)) cls.push('taken');
+    return `<button class="${cls.join(' ')}" data-avatar="${esc(a)}"
+      aria-label="Avatar ${esc(a)}"${a === myAvatar ? ' aria-current="true"' : ''}>${esc(a)}</button>`;
+  }).join('');
+  for (const b of document.querySelectorAll('[data-avatar]')) {
+    b.addEventListener('click', () => pickAvatar(b.dataset.avatar), { once: true });
+  }
+  sheet('sheet-avatar');
+}
+
+function pickAvatar(avatar) {
+  if (!AVATARS.includes(avatar)) return;
+  myAvatar = avatar;
   localStorage.setItem('hexcolony_avatar', myAvatar);
   $('avatar-face').textContent = myAvatar;
-  unlock(); sfx.tap();
+  sfx.tap();
+  closeSheet();
+  // Push it to whichever kind of game is in progress, if any.
   if (roomRef) updateDoc(roomRef, { [`players.${playerId}.avatar`]: myAvatar }).catch(() => {});
-});
+  else if (solo && room?.players?.[playerId]) {
+    room.players[playerId].avatar = myAvatar;
+    saveSolo();
+    render();
+  }
+}
 
 $('code-input').addEventListener('input', (e) => {
   e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
@@ -858,8 +886,8 @@ function drawSoloSheet() {
     b.classList.toggle('on', (b.dataset.soloRobber === 'on') === soloRobber);
   }
   $('solo-robber-blurb').textContent = soloRobber
-    ? 'Move the robber and rob whoever it lands on.'
-    : 'No robber: take a card from any player instead.';
+    ? 'Discard down, move the robber, rob whoever it lands on.'
+    : 'No discard, no robber — just take a card from any player.';
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
 }
@@ -1013,11 +1041,19 @@ function renderLobby() {
     const tags = [];
     if (pid === room.hostId) tags.push('<span class="seat-tag host">Host</span>');
     if (pid === playerId) tags.push('<span class="seat-tag you">You</span>');
-    return `<div class="seat" style="border-left-color:${esc(c)}">
+    // Your own row opens the avatar picker — the only place it is reachable once you
+    // have left the home screen, and the only place the "already taken" marks mean
+    // anything, since that is when you can see who else is at the table.
+    const tag = pid === playerId ? 'button' : 'div';
+    const extra = pid === playerId ? ' data-my-seat title="Tap to change your avatar"' : '';
+    return `<${tag} class="seat${pid === playerId ? ' seat-me' : ''}" style="border-left-color:${esc(c)}"${extra}>
       <span class="seat-face">${esc(p.avatar || '🎲')}</span>
       <span class="seat-name">${esc(p.name)}</span>${tags.join('')}
-    </div>`;
+    </${tag}>`;
   }).join('');
+
+  const mySeat = document.querySelector('[data-my-seat]');
+  if (mySeat) mySeat.addEventListener('click', () => { unlock(); sfx.tap(); openAvatarPicker(); });
 
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 10);
@@ -1027,8 +1063,12 @@ function renderLobby() {
     b.classList.toggle('on', (b.dataset.robber === 'on') === useRobber);
   }
   $('robber-blurb').textContent = useRobber
-    ? 'Move the robber and rob whoever it lands on.'
-    : 'No robber: take a card from any player instead.';
+    ? 'Discard down, move the robber, rob whoever it lands on.'
+    : 'No discard, no robber — just take a card from any player.';
+  // The discard limit has nothing to govern once the robber is off.
+  for (const b of document.querySelectorAll('[data-set="discard"]')) b.disabled = !useRobber;
+  const discardRow = $('set-discard').closest('.opt-row');
+  if (discardRow) discardRow.style.opacity = useRobber ? '' : '0.4';
 
   const layout = s.layout || 'classic';
   for (const b of document.querySelectorAll('[data-layout]')) {

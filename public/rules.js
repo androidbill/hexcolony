@@ -430,8 +430,8 @@ function steal(g, thief, victim, events, rng) {
  * Where a 7 goes once everyone has discarded.
  *
  * With the robber in play you move it and rob whoever it lands on. With it switched
- * off you simply take a card from any player who has one — which is the whole point of
- * the option, since the robber's real sting is being blocked, not the stolen card.
+ * off nobody discards and you simply take a card from any player who has one — a 7
+ * stops being a punishment and becomes a small raid.
  * Either way, if there is nobody worth robbing the turn moves on rather than parking on
  * a step with no legal move.
  */
@@ -541,7 +541,9 @@ export function applyMove(state, pid, move, rng = Math.random) {
       note(g, events, { t: 'roll', p: pid, dice: [d1, d2], roll });
 
       if (roll === 7) {
-        const owed = computeDiscards(g);
+        // No robber means no discard either: switching it off takes the whole penalty
+        // out of a 7, leaving only the raid.
+        const owed = g.useRobber === false ? {} : computeDiscards(g);
         if (Object.keys(owed).length) {
           g.pending.discard = owed;
           g.phase = 'discard';
