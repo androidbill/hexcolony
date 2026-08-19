@@ -833,6 +833,34 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .dev-txt { flex: 1; }
 .dev-name { font-weight: 700; }
 .dev-blurb { font-size: 12px; color: var(--dim); margin-top: 2px; }
+
+.dev-buy {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  padding: 13px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--r);
+  border: 1px solid rgba(227, 186, 87, 0.45);
+  background: linear-gradient(180deg, rgba(227, 186, 87, 0.16), rgba(227, 186, 87, 0.06));
+  text-align: left;
+}
+.dev-buy:disabled { opacity: 0.45; border-color: var(--line); background: rgba(255, 255, 255, 0.04); }
+.dev-buy:not(:disabled):active { transform: scale(0.985); }
+.dev-buy-ico { font-size: 22px; flex: 0 0 auto; }
+.dev-buy-txt { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.dev-buy-name { font-size: 14px; font-weight: 800; }
+.dev-buy-left {
+  font-size: 10px; color: var(--dim);
+  text-transform: uppercase; letter-spacing: .05em;
+  flex: 0 0 auto;
+}
+
+/* An action you can afford right now, distinct from one that is merely tappable. */
+.act.ready {
+  border-color: rgba(227, 186, 87, 0.55);
+  background: rgba(227, 186, 87, 0.14);
+}
+.act.ready .act-ico { filter: drop-shadow(0 0 6px rgba(227, 186, 87, 0.6)); }
 .dev-lock { font-size: 11px; color: var(--gold); margin-top: 3px; }
 
 /* ------------------------------------------------------------ trading */

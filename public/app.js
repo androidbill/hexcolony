@@ -1834,6 +1834,9 @@ function actBtn(id, ico, label, opts = {}) {
   const cls = ['act'];
   if (opts.primary) cls.push('primary');
   if (opts.wide) cls.push('wide');
+  // Enabled says "you may press this". Ready says "there is something here worth pressing
+  // it for" — for Cards that means the resources for a new one are in hand.
+  if (opts.ready) cls.push('ready');
   const badge = opts.badge ? `<span class="badge">${opts.badge}</span>` : '';
   return `<button class="${cls.join(' ')}" data-act="${id}"${opts.disabled ? ' disabled' : ''}>
     <span class="act-ico">${ico}</span><span>${esc(label)}</span>${badge}</button>`;
@@ -1887,7 +1890,7 @@ function renderActions(g) {
   bar.innerHTML =
     actBtn('build', '🏗️', 'Build', { disabled: !anyBuild && !mustPlace, primary: mustPlace }) +
     actBtn('trade', '🤝', 'Trade', { disabled: R.handSize(p) === 0 }) +
-    actBtn('dev', '🃏', 'Cards', { disabled: !devHand.length && !can.dev, badge: devBadge || 0 }) +
+    actBtn('dev', '🃏', 'Cards', { disabled: !devHand.length && !can.dev, badge: devBadge || 0, ready: can.dev }) +
     actBtn('end', '✔️', 'End turn', { primary: !mustPlace, disabled: mustPlace });
 }
 
@@ -1940,7 +1943,6 @@ function openBuild(g) {
     { k: 'road', ico: '🛣️', name: 'Road', cost: R.COSTS.road, ok: can.road, left: p.left.road },
     { k: 'settlement', ico: '🏠', name: 'Settlement', cost: R.COSTS.settlement, ok: can.settlement, left: p.left.settlement },
     { k: 'city', ico: '🏛️', name: 'City', cost: R.COSTS.city, ok: can.city, left: p.left.city },
-    { k: 'dev', ico: '🃏', name: 'Development card', cost: R.COSTS.dev, ok: can.dev, left: g.deck.length },
   ];
   $('build-grid').innerHTML = items.map((it) => `
     <button class="build-item" data-build="${it.k}"${it.ok ? '' : ' disabled'}>
@@ -1956,7 +1958,6 @@ function openBuild(g) {
     b.addEventListener('click', () => {
       const k = b.dataset.build;
       closeSheet();
-      if (k === 'dev') { send({ type: 'buyDev' }).then((ok) => ok && sfx.card()); return; }
       setIntent(k);
       toast(k === 'city' ? 'Tap one of your settlements.' : 'Tap a highlighted spot on the board.');
     });
@@ -1967,6 +1968,29 @@ function openBuild(g) {
 // ---------------------------------------------------------------- dev cards
 function openDev(g) {
   const p = g.players[playerId];
+
+  // Buying sits above the hand rather than under "Build", because a development card is
+  // not a building — and this is the sheet people open when they want one. It states the
+  // price and what is left in the deck whether or not it can be pressed, so an
+  // unaffordable card explains itself instead of just being greyed out.
+  const can = R.whatCanIBuild(g, playerId);
+  const empty = !g.deck.length;
+  $('dev-buy').innerHTML = `
+    <button class="dev-buy" id="btn-buy-dev"${can.dev ? '' : ' disabled'}>
+      <span class="dev-buy-ico">🃏</span>
+      <span class="dev-buy-txt">
+        <span class="dev-buy-name">Buy a development card</span>
+        <span class="build-cost">${COST_BITS(R.COSTS.dev, p.res)}</span>
+      </span>
+      <span class="dev-buy-left">${empty ? 'deck empty' : `${g.deck.length} left`}</span>
+    </button>`;
+  if (can.dev) {
+    $('btn-buy-dev').addEventListener('click', () => {
+      closeSheet();
+      send({ type: 'buyDev' }).then((ok) => ok && sfx.card());
+    });
+  }
+
   const rows = [];
   for (const [k, info] of Object.entries(R.DEV_INFO)) {
     if (k === 'vp') continue;
@@ -1995,7 +2019,7 @@ function openDev(g) {
       </span></div>`);
   }
   $('dev-list').innerHTML = rows.length ? rows.join('')
-    : '<p class="hint">No development cards yet. Buy one with sheep, wheat and ore.</p>';
+    : '<p class="hint">Nothing in hand yet.</p>';
 
   for (const b of document.querySelectorAll('[data-dev]')) {
     b.addEventListener('click', () => {
