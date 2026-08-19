@@ -19,6 +19,24 @@ const TERRAIN_STYLE = {
   desert:    { a: '#ddc48d', b: '#c2a469', ink: '#8a734a' },
 };
 
+// A bright band just inside each hex's edge, in that tile's own resource colour. On an
+// illustrated board every tile is a photograph and they all read as "picture" from a
+// arm's length; this puts the thing the tile actually pays out back on its rim, where it
+// can be scanned without looking at the middle of the tile at all.
+//
+// Brighter than TERRAIN_STYLE, deliberately — those are the body colours, chosen to sit
+// behind artwork, and at the rim they would be one more dark edge. The two greens are
+// pulled apart the way the resources are: forest is a true green, pasture a yellow-green,
+// because a ring that cannot be told apart at a glance is not worth drawing.
+const TERRAIN_EDGE = {
+  forest:    '#3fd964',   // wood
+  hills:     '#ff8a5c',   // brick
+  pasture:   '#c3f04a',   // sheep
+  fields:    '#ffd34d',   // wheat
+  mountains: '#c7d2e4',   // ore
+  desert:    '#f0d9a0',   // pays nothing, so it gets its own sand rather than a resource
+};
+
 const RES_COLOR = {
   wood: '#2f6b3a', brick: '#b8613a', sheep: '#78bf5c', wheat: '#e3ba57', ore: '#8d94a8',
 };
@@ -419,6 +437,15 @@ export class BoardView {
     c.clip();
     if (art && art.naturalWidth) this.drawTerrainArt(art, cx, cy, R);
     else this.drawTerrainMotif(tile, cx, cy, R, st);
+
+    // Still inside the clip, which is what makes this an inside border: the stroke is
+    // drawn at twice its intended width and the outer half is clipped away, leaving a
+    // band that hugs the edge exactly instead of straddling it.
+    this.hexPath(tile, 0.985);
+    c.strokeStyle = TERRAIN_EDGE[tile.terrain] || st.a;
+    c.lineWidth = Math.max(2, R * 0.15);
+    c.globalAlpha = 0.9;
+    c.stroke();
     c.restore();
 
     this.hexPath(tile, 0.985);
