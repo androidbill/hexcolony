@@ -283,6 +283,8 @@
     <button class="menu-item" id="menu-players"><b>Players</b><i>Scores, cards and awards</i></button>
     <button class="menu-item" id="menu-how"><b>How to Play</b><i>Costs, rules and the robber</i></button>
     <button class="menu-item" id="menu-settings"><b>Settings</b><i>Sound, haptics, board</i></button>
+    <button class="menu-item" id="menu-share"><b>Share</b><i>Send the game to a friend</i></button>
+    <button class="menu-item" id="menu-about"><b>About</b><i>Version and credits</i></button>
     <button class="menu-item danger" id="menu-leave"><b>Leave game</b><i>Your buildings stay on the board</i></button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
@@ -391,13 +393,39 @@
   </div>
 </div>
 
+<!-- ============================== KEBAB ============================== -->
+<div class="kebab-wrap" id="kebab-wrap" hidden>
+  <button class="kebab-btn" id="btn-kebab" aria-label="Menu" aria-haspopup="true" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/>
+    </svg>
+  </button>
+  <div class="kebab-menu" id="kebab-menu" hidden role="menu">
+    <button id="kebab-refresh" role="menuitem"><span>&#128260;</span>Refresh</button>
+    <button id="kebab-share" role="menuitem"><span>&#128228;</span>Share</button>
+    <button id="kebab-about" role="menuitem"><span>&#8505;&#65039;</span>About</button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-about">
+  <div class="about-hero">
+    <img class="about-icon" src="icons/icon-192.png" width="96" height="96" alt="">
+    <h3 class="about-name">HexColony</h3>
+    <p class="about-ver" id="about-version"></p>
+    <p class="about-credit">Created by: Bill Parsons</p>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn btn-key" data-close><span class="btn-label">Close</span></button>
+  </div>
+</div>
+
 <!-- ============================== CHROME ============================== -->
 <div class="conn-badge" id="conn-badge" hidden>Reconnecting…</div>
 <div class="toast" id="toast"></div>
 
 <div class="banner" id="update-banner">
   <span>A new version is ready.</span>
-  <button onclick="location.reload()">Refresh</button>
+  <button id="banner-refresh">Refresh</button>
   <button class="banner-x" onclick="this.parentElement.classList.remove('show')">&#10005;</button>
 </div>
 <div class="banner" id="install-banner">

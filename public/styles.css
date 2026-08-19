@@ -760,6 +760,60 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .banner .banner-x { background: none; color: var(--dim); padding: 6px 4px; }
 
+/* ------------------------------------------------------------ kebab menu */
+.kebab-wrap {
+  position: fixed;
+  top: calc(var(--safe-t) + 10px);
+  right: 12px;
+  z-index: 60;
+}
+.kebab-btn {
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  background: rgba(5, 18, 32, 0.72);
+  border: 1px solid var(--line);
+  color: var(--text);
+  backdrop-filter: blur(8px);
+}
+.kebab-btn svg { width: 22px; height: 22px; fill: currentColor; }
+.kebab-btn:active { background: rgba(5, 18, 32, 0.92); }
+
+.kebab-menu {
+  position: absolute;
+  top: 48px; right: 0;
+  min-width: 172px;
+  padding: 6px;
+  border-radius: var(--r);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.5);
+  display: flex; flex-direction: column; gap: 2px;
+  animation: kebab-in .14s ease-out;
+}
+@keyframes kebab-in { from { opacity: 0; transform: translateY(-6px); } }
+.kebab-menu button {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 12px;
+  border-radius: 10px;
+  font-size: 14.5px; font-weight: 600;
+  text-align: left;
+  color: var(--text);
+}
+.kebab-menu button span { font-size: 16px; width: 20px; text-align: center; }
+.kebab-menu button:active { background: rgba(255, 255, 255, 0.1); }
+
+/* ------------------------------------------------------------ about */
+.about-hero { text-align: center; padding: 6px 0 10px; }
+.about-icon {
+  width: 96px; height: 96px;
+  border-radius: 22px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.45);
+}
+.about-name { margin: 12px 0 0; font-size: 24px; font-weight: 800; }
+.about-ver { margin: 4px 0 0; color: var(--dim); font-size: 13.5px; }
+.about-credit { margin: 12px 0 0; font-size: 14px; font-weight: 600; }
+
 [hidden] { display: none !important; }
 
 /* Wider screens get a little breathing room, but the game stays a phone game. */

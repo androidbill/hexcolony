@@ -61,6 +61,10 @@ const esc = (s) => String(s ?? '')
 const SCREENS = ['screen-home', 'screen-lobby', 'screen-game'];
 function showScreen(id) {
   for (const s of SCREENS) $(s).classList.toggle('is-active', s === id);
+  // The game screen's top bar already occupies both corners, so the kebab steps aside
+  // there; its three entries live in that screen's own menu instead.
+  $('kebab-wrap').hidden = id === 'screen-game';
+  closeKebab();
   if (id === 'screen-game') {
     // Size it now, then again after layout settles. The second pass catches the real
     // box once flex has run; the first means a throttled requestAnimationFrame — a
@@ -1947,6 +1951,100 @@ $('brand-mark').innerHTML = `
     fill="#b3261e" font-family="system-ui, sans-serif">8</text>
 </svg>`;
 
+// ---------------------------------------------------------------- app menu
+function closeKebab() {
+  const menu = $('kebab-menu');
+  if (menu) { menu.hidden = true; $('btn-kebab').setAttribute('aria-expanded', 'false'); }
+}
+
+$('btn-kebab').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const menu = $('kebab-menu');
+  const open = menu.hidden;
+  menu.hidden = !open;
+  $('btn-kebab').setAttribute('aria-expanded', String(open));
+  unlock(); sfx.tap();
+});
+// Any tap elsewhere, or Escape, puts it away.
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#kebab-wrap')) closeKebab();
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeKebab(); });
+
+/**
+ * Throw away everything cached and start clean.
+ *
+ * A plain reload is not enough: the service worker would serve the same build back. The
+ * caches and the registration both have to go first, which is the whole point of a
+ * Refresh the player can reach.
+ */
+async function fullRefresh() {
+  try {
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map((k) => caches.delete(k)));
+    }
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map((r) => r.unregister()));
+    }
+  } catch { /* best effort — reload anyway */ }
+  location.reload();
+}
+
+/** Hand the app to the phone's own share sheet. */
+async function shareApp() {
+  const url = location.origin + location.pathname;
+  const inRoom = !!roomCode && !solo;
+  const text = inRoom
+    ? `Join my HexColony game — room code ${roomCode}`
+    : 'Play HexColony with me — settle the island.';
+  try {
+    if (navigator.share) { await navigator.share({ title: 'HexColony', text, url }); return; }
+    await navigator.clipboard.writeText(`${text} ${url}`);
+    toast('Link copied');
+  } catch { /* the player dismissed the share sheet — nothing to report */ }
+}
+
+function openAbout() {
+  $('about-version').textContent = `Version ${APP_VERSION}`;
+  sheet('sheet-about');
+}
+
+$('kebab-refresh').addEventListener('click', () => { closeKebab(); fullRefresh(); });
+$('kebab-share').addEventListener('click', () => { closeKebab(); shareApp(); });
+$('kebab-about').addEventListener('click', () => { closeKebab(); openAbout(); });
+$('menu-share').addEventListener('click', () => { closeSheet(); shareApp(); });
+$('menu-about').addEventListener('click', () => { closeSheet(); openAbout(); });
+$('banner-refresh').addEventListener('click', fullRefresh);
+
+// ---------------------------------------------------------------- update check
+/**
+ * Is the running build the one that is deployed?
+ *
+ * version.js is fetched with no-store so the answer comes from the server rather than
+ * from the cache we are trying to check. An installed PWA is resumed rather than
+ * reloaded, so this also runs whenever the app comes back to the foreground — otherwise
+ * a phone can sit on a stale build for days without ever asking.
+ */
+async function checkForUpdate() {
+  try {
+    const res = await fetch(`version.js?nocache=${Date.now()}`, { cache: 'no-store' });
+    if (!res.ok) return;
+    const m = (await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/);
+    if (m && m[1] !== APP_VERSION) $('update-banner').classList.add('show');
+  } catch { /* offline — nothing to compare against */ }
+}
+checkForUpdate();
+
+let lastUpdateCheck = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (Date.now() - lastUpdateCheck < 600000) return;
+  lastUpdateCheck = Date.now();
+  checkForUpdate();
+});
+
 // ---------------------------------------------------------------- PWA
 $('ver-home').textContent = `v${APP_VERSION}`;
 $('ver-about').textContent = `HexColony v${APP_VERSION}`;
@@ -1955,26 +2053,9 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
   });
-  // The version file is fetched fresh; if the running build is behind, offer a refresh.
-  setTimeout(async () => {
-    try {
-      const res = await fetch(`version.js?t=${Date.now()}`, { cache: 'no-store' });
-      const text = await res.text();
-      const m = text.match(/APP_VERSION\s*=\s*'([^']+)'/);
-      if (m && m[1] !== APP_VERSION) $('update-banner').classList.add('show');
-    } catch { /* offline — nothing to check against */ }
-  }, 4000);
 }
 
-$('btn-refresh').addEventListener('click', async () => {
-  try {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    await Promise.all(regs.map((r) => r.unregister()));
-    const keys = await caches.keys();
-    await Promise.all(keys.map((k) => caches.delete(k)));
-  } catch { /* fine */ }
-  location.reload();
-});
+$('btn-refresh').addEventListener('click', fullRefresh);
 
 let installPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
@@ -2010,6 +2091,7 @@ window.HEXCOLONY = {
   // The board topology, so a console driver can reason about what a corner touches
   // without re-importing the module.
   topo: { VERTS, EDGES, HEXES },
+  checkForUpdate,
   legalSettlements: (setup = false) => R.legalSettlements(game(), playerId, setup),
   legalRoads: (from = null) => R.legalRoads(game(), playerId, from),
   tap: (kind, id) => view.onPick({ kind, id }),
