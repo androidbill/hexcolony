@@ -40,6 +40,10 @@ export const SETUP_SECONDS = 90;
 export const ACTION_BONUS_MS = 10000;              // earned by actually doing something
 export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expansion
 
+// How many offers one player may have on the table at once. There is no rule of the game
+// here; it is a limit on how much other people have to read before they can act.
+export const MAX_OFFERS = 4;
+
 // The development deck and the bank both scale with the board — a 30-tile island with
 // six players would drain a 19-card bank and a 25-card deck long before anyone won.
 // The per-layout numbers live in LAYOUT_INFO.
@@ -58,24 +62,34 @@ export const DEV_INFO = {
 // Six, because the expansion deck holds six point cards to the classic deck's five.
 const VP_NAMES = ['Great Hall', 'Library', 'Market', 'Chapel', 'University', 'Cathedral'];
 
-// Fourteen colours for at most six players, so there is a real choice rather than
-// whatever was left. Each carries the ink to write on it: these run from near-white to
-// near-black, and a single text colour would be unreadable on half of them.
+// Player colours.
+//
+// Eleven, for at most six players, so there is a real choice rather than whatever was
+// left. Each carries the ink to write on it: these run from near-white to near-black and
+// a single text colour would be unreadable on half of them.
+//
+// They are bright because they no longer have to carry the whole job of separating a
+// piece from the board — every road, settlement and city is outlined in white now, so a
+// colour only has to be told apart from the other ten, not from a photograph of a forest.
+//
+// The pairs that used to be confusable are gone rather than nudged: blue against sky,
+// green against lime, orange against yellow. Picking between two shades of the same hue
+// under a table lamp is not a choice worth offering. What is left is spaced around the
+// wheel — red, sky, yellow, lime, teal, purple, pink — plus four neutrals. Copper is the
+// one to watch: it is the old orange's corner of the wheel, kept deliberately darker than
+// yellow so value separates them even where hue nearly does not.
 export const PLAYER_COLORS = [
-  { key: 'red',    hex: '#e5484d', ink: '#ffffff', name: 'Red' },
-  { key: 'blue',   hex: '#3b82f6', ink: '#ffffff', name: 'Blue' },
-  { key: 'orange', hex: '#f59e0b', ink: '#2a1e08', name: 'Orange' },
-  { key: 'white',  hex: '#eef1f6', ink: '#0d1b28', name: 'White' },
-  { key: 'green',  hex: '#22c55e', ink: '#06301a', name: 'Green' },
-  { key: 'purple', hex: '#a855f7', ink: '#ffffff', name: 'Purple' },
-  { key: 'teal',   hex: '#14b8a6', ink: '#04302b', name: 'Teal' },
-  { key: 'pink',   hex: '#ec4899', ink: '#ffffff', name: 'Pink' },
-  { key: 'yellow', hex: '#facc15', ink: '#3a2f05', name: 'Yellow' },
-  { key: 'sky',    hex: '#38bdf8', ink: '#04283a', name: 'Sky' },
-  { key: 'lime',   hex: '#84cc16', ink: '#1c3003', name: 'Lime' },
-  { key: 'brown',  hex: '#a16207', ink: '#ffffff', name: 'Brown' },
-  { key: 'slate',  hex: '#64748b', ink: '#ffffff', name: 'Slate' },
-  { key: 'black',  hex: '#26303f', ink: '#ffffff', name: 'Black' },
+  { key: 'red',    hex: '#ff4d4f', ink: '#ffffff', name: 'Red' },
+  { key: 'sky',    hex: '#35c4ff', ink: '#03293c', name: 'Sky' },
+  { key: 'yellow', hex: '#ffd52b', ink: '#3a2f05', name: 'Yellow' },
+  { key: 'lime',   hex: '#9ef01a', ink: '#1c3003', name: 'Lime' },
+  { key: 'teal',   hex: '#13e3c8', ink: '#032f2a', name: 'Teal' },
+  { key: 'purple', hex: '#b06cff', ink: '#ffffff', name: 'Purple' },
+  { key: 'pink',   hex: '#ff5cb8', ink: '#40062a', name: 'Pink' },
+  { key: 'white',  hex: '#f4f7fb', ink: '#0d1b28', name: 'White' },
+  { key: 'slate',  hex: '#93a7bd', ink: '#0d1b28', name: 'Slate' },
+  { key: 'copper', hex: '#c8802e', ink: '#ffffff', name: 'Copper' },
+  { key: 'black',  hex: '#2a3444', ink: '#ffffff', name: 'Black' },
 ];
 
 /**
@@ -183,7 +197,9 @@ export function newGame(seats, settings, rng = Math.random) {
     },
     award: { road: null, roadLen: 0, army: null, armySize: 0 },
     pending: { discard: {}, stealFrom: [] },
-    trade: null,
+    // More than one offer can be on the table at once — see the offerTrade case.
+    trades: [],
+    tradeIds: 0,
     winner: null,
     seq: 0,
     log: [],
@@ -470,7 +486,7 @@ function startTurn(g, events) {
   g.turn.freeRoads = 0;
   g.turn.num += 1;
   g.phase = 'roll';
-  g.trade = null;
+  g.trades = [];
   startClock(g, ROLL_SECONDS);
   note(g, events, { t: 'turn', p: pid });
 }
@@ -667,6 +683,10 @@ const fail = (msg) => ({ ok: false, error: msg });
  */
 export function applyMove(state, pid, move, rng = Math.random) {
   const g = clone(state);
+  // A game that started on a build where only one offer could exist has no `trades`.
+  // Rather than carry the old shape around, the list simply starts empty: a live offer is
+  // lost across that one deploy and can be made again, which costs nothing.
+  if (!Array.isArray(g.trades)) { g.trades = []; g.tradeIds = g.tradeIds || 0; }
   const events = [];
   // Rebuilding the board here is also what switches the shared topology to this
   // game's layout, so every rules helper below reads the right island.
@@ -979,7 +999,16 @@ export function applyMove(state, pid, move, rng = Math.random) {
       const wTotal = Object.values(want).reduce((a, b) => a + b, 0);
       if (gTotal <= 0 || wTotal <= 0) return fail('Offer something and ask for something.');
       for (const [r, n] of Object.entries(give)) if ((me.res[r] || 0) < n) return fail('You do not have that to give.');
-      g.trade = { from: pid, give, want, replies: {} };
+      if (g.trades.filter((t) => t.from === pid).length >= MAX_OFFERS) {
+        return fail(`You can have ${MAX_OFFERS} offers out at once.`);
+      }
+
+      // Offers are checked against the hand one at a time, not against all of them added
+      // up. Putting the same sheep in front of two people is a normal thing to do — you
+      // want whichever of them bites first, not both — and acceptTrade re-checks the hand
+      // at the moment it closes, so the second one simply fails rather than conjuring a
+      // card that is already gone.
+      g.trades.push({ id: ++g.tradeIds, from: pid, give, want, replies: {} });
       note(g, events, { t: 'offer', p: pid, give, want });
       // Waiting on other people should not cost you the turn you are waiting during.
       bumpClock(g);
@@ -987,39 +1016,49 @@ export function applyMove(state, pid, move, rng = Math.random) {
     }
 
     case 'replyTrade': {
-      if (!g.trade) return fail('There is no offer on the table.');
-      if (g.trade.from === pid) return fail('You made this offer.');
+      const offer = g.trades.find((t) => t.id === move.id);
+      if (!offer) return fail('That offer is no longer on the table.');
+      if (offer.from === pid) return fail('You made this offer.');
       // Only accept if you can actually pay — saves a dead-end handshake.
       if (move.yes) {
-        for (const [r, n] of Object.entries(g.trade.want)) {
+        for (const [r, n] of Object.entries(offer.want)) {
           if ((me.res[r] || 0) < n) return fail('You do not have what they asked for.');
         }
       }
-      g.trade.replies[pid] = move.yes ? 'yes' : 'no';
+      offer.replies[pid] = move.yes ? 'yes' : 'no';
       return ok();
     }
 
     case 'acceptTrade': {
-      if (!g.trade) return fail('There is no offer on the table.');
-      if (g.trade.from !== pid) return fail('Only the player who offered can close the trade.');
+      const deal = g.trades.find((t) => t.id === move.id);
+      if (!deal) return fail('That offer is no longer on the table.');
+      if (deal.from !== pid) return fail('Only the player who offered can close the trade.');
       const withPid = move.with;
-      if (g.trade.replies[withPid] !== 'yes') return fail('They have not accepted.');
+      if (deal.replies[withPid] !== 'yes') return fail('They have not accepted.');
       const them = g.players[withPid];
-      // Re-check both hands: the offer may have been sitting while things changed.
-      for (const [r, n] of Object.entries(g.trade.give)) if ((me.res[r] || 0) < n) return fail('You no longer have that.');
-      for (const [r, n] of Object.entries(g.trade.want)) if ((them.res[r] || 0) < n) return fail('They no longer have that.');
-      for (const [r, n] of Object.entries(g.trade.give)) { me.res[r] -= n; them.res[r] += n; }
-      for (const [r, n] of Object.entries(g.trade.want)) { them.res[r] -= n; me.res[r] += n; }
-      note(g, events, { t: 'trade', p: pid, with: withPid, give: g.trade.give, want: g.trade.want });
+      // Re-check both hands. An offer may have been sitting while things changed — and
+      // with several offers live at once, closing one can be what empties the hand the
+      // next one was promising.
+      for (const [r, n] of Object.entries(deal.give)) if ((me.res[r] || 0) < n) return fail('You no longer have that.');
+      for (const [r, n] of Object.entries(deal.want)) if ((them.res[r] || 0) < n) return fail('They no longer have that.');
+      for (const [r, n] of Object.entries(deal.give)) { me.res[r] -= n; them.res[r] += n; }
+      for (const [r, n] of Object.entries(deal.want)) { them.res[r] -= n; me.res[r] += n; }
+      note(g, events, { t: 'trade', p: pid, with: withPid, give: deal.give, want: deal.want });
       bumpClock(g);
-      g.trade = null;
+      // Only this one closes. The rest stay up; they are separate offers.
+      g.trades = g.trades.filter((t) => t.id !== deal.id);
       return ok();
     }
 
     case 'cancelTrade': {
-      if (!g.trade) return fail('Nothing to cancel.');
-      if (g.trade.from !== pid) return fail('Not your offer.');
-      g.trade = null;
+      const mine = g.trades.filter((t) => t.from === pid);
+      if (!mine.length) return fail('Nothing to cancel.');
+      // No id withdraws the lot, which is what the "clear" control sends.
+      const before = g.trades.length;
+      g.trades = move.id === undefined || move.id === null
+        ? g.trades.filter((t) => t.from !== pid)
+        : g.trades.filter((t) => !(t.id === move.id && t.from === pid));
+      if (g.trades.length === before) return fail('Not your offer.');
       return ok();
     }
 
@@ -1028,7 +1067,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!myTurn) return fail('Not your turn.');
       if (g.phase !== 'build') return fail('You still have something to do.');
       if (g.turn.freeRoads > 0) return fail('Place your free roads first.');
-      g.trade = null;
+      g.trades = [];
       g.pending.stealFrom = [];
       advanceSeat(g);
       startTurn(g, events);
@@ -1053,8 +1092,8 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (g.turn.seat >= g.seats.length) g.turn.seat = 0;
       delete g.pending.discard[gone];
       g.pending.stealFrom = g.pending.stealFrom.filter((x) => x !== gone);
-      if (g.trade && g.trade.from === gone) g.trade = null;
-      if (g.trade) delete g.trade.replies[gone];
+      g.trades = g.trades.filter((t) => t.from !== gone);
+      for (const t of g.trades) delete t.replies[gone];
       note(g, events, { t: 'left', p: gone });
       if (g.phase === 'setup') {
         // Rebuilding the snake mid-setup is not worth the corner cases — drop the
@@ -1165,6 +1204,6 @@ export function highlightsFor(g, pid, intent) {
 export function waitingOn(g, pid) {
   if (g.phase === 'over') return false;
   if (g.phase === 'discard') return !!g.pending.discard[pid];
-  if (g.trade && g.trade.from !== pid && !g.trade.replies[pid]) return true;
+  if (g.trades.some((t) => t.from !== pid && !t.replies[pid])) return true;
   return isTurn(g, pid);
 }

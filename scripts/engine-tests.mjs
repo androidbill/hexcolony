@@ -282,6 +282,139 @@ check('unknown resources are refused', () => {
     'an offer of gold was accepted');
 });
 
+// ---------------------------------------------------------------- several offers at once
+
+/** A game in the build phase with a known hand, ready to make offers. */
+function tradeState(hand = { wood: 2, brick: 2, sheep: 2, wheat: 2, ore: 2 }) {
+  let g = autoSetup(newG());
+  g.phase = 'build';
+  g.turn.rolled = true;
+  for (const pid of SEATS) {
+    for (const r of RESOURCES) g.players[pid].res[r] = hand[r] || 0;
+  }
+  return { g, me: R.currentPid(g) };
+}
+
+check('two offers can be on the table at once', () => {
+  let { g, me } = tradeState();
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { brick: 1 } }).game;
+  const second = R.applyMove(g, me, { type: 'offerTrade', give: { ore: 1 }, want: { wood: 1 } });
+  assert(second.ok, `second offer refused: ${second.error}`);
+  g = second.game;
+  eq(g.trades.length, 2, 'offers on the table');
+  assert(g.trades[0].id !== g.trades[1].id, 'the two offers share an id');
+});
+
+check('closing one offer leaves the others up', () => {
+  let { g, me } = tradeState();
+  const them = SEATS.find((s) => s !== me);
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { brick: 1 } }).game;
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { ore: 1 }, want: { wood: 1 } }).game;
+  const [a, b] = g.trades;
+
+  g = R.applyMove(g, them, { type: 'replyTrade', id: a.id, yes: true }).game;
+  const done = R.applyMove(g, me, { type: 'acceptTrade', id: a.id, with: them });
+  assert(done.ok, `accept refused: ${done.error}`);
+  g = done.game;
+
+  eq(g.trades.length, 1, 'offers left');
+  eq(g.trades[0].id, b.id, 'the wrong offer survived');
+  eq(g.players[me].res.sheep, 1, 'my sheep after the swap');
+  eq(g.players[me].res.brick, 3, 'my brick after the swap');
+  eq(g.players[them].res.sheep, 3, 'their sheep after the swap');
+});
+
+check('the same card may be promised twice, but only spent once', () => {
+  let { g, me } = tradeState({ sheep: 1, wood: 4 });
+  const [them, other] = SEATS.filter((s) => s !== me);
+  // One sheep, offered to the table twice. Both offers are legal to make.
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { wood: 1 } }).game;
+  const twice = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { wood: 2 } });
+  assert(twice.ok, 'could not offer the same card to two people');
+  g = twice.game;
+  const [a, b] = g.trades;
+
+  g = R.applyMove(g, them, { type: 'replyTrade', id: a.id, yes: true }).game;
+  g = R.applyMove(g, other, { type: 'replyTrade', id: b.id, yes: true }).game;
+  g = R.applyMove(g, me, { type: 'acceptTrade', id: a.id, with: them }).game;
+  eq(g.players[me].res.sheep, 0, 'sheep after the first deal');
+
+  // The second cannot close: the sheep is gone.
+  const second = R.applyMove(g, me, { type: 'acceptTrade', id: b.id, with: other });
+  assert(!second.ok, 'the same sheep was traded away twice');
+});
+
+check('offers are capped', () => {
+  let { g, me } = tradeState({ wood: 9 });
+  for (let i = 0; i < R.MAX_OFFERS; i++) {
+    const res = R.applyMove(g, me, { type: 'offerTrade', give: { wood: 1 }, want: { ore: 1 } });
+    assert(res.ok, `offer ${i + 1} refused: ${res.error}`);
+    g = res.game;
+  }
+  assert(!R.applyMove(g, me, { type: 'offerTrade', give: { wood: 1 }, want: { ore: 1 } }).ok,
+    `a ${R.MAX_OFFERS + 1}th offer was accepted`);
+});
+
+check('withdrawing takes one offer or all of them', () => {
+  let { g, me } = tradeState();
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { brick: 1 } }).game;
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { ore: 1 }, want: { wood: 1 } }).game;
+  const first = g.trades[0].id;
+
+  const one = R.applyMove(g, me, { type: 'cancelTrade', id: first });
+  assert(one.ok, `single withdraw refused: ${one.error}`);
+  eq(one.game.trades.length, 1, 'after withdrawing one');
+
+  const all = R.applyMove(g, me, { type: 'cancelTrade' });
+  assert(all.ok, `withdraw-all refused: ${all.error}`);
+  eq(all.game.trades.length, 0, 'after withdrawing all');
+});
+
+check('only the offerer can withdraw or close', () => {
+  let { g, me } = tradeState();
+  const them = SEATS.find((s) => s !== me);
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { brick: 1 } }).game;
+  const id = g.trades[0].id;
+  assert(!R.applyMove(g, them, { type: 'cancelTrade', id }).ok, 'someone else withdrew my offer');
+  g = R.applyMove(g, them, { type: 'replyTrade', id, yes: true }).game;
+  assert(!R.applyMove(g, them, { type: 'acceptTrade', id, with: me }).ok, 'the replier closed the deal');
+});
+
+check('ending the turn clears the table', () => {
+  let { g, me } = tradeState();
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { brick: 1 } }).game;
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { ore: 1 }, want: { wood: 1 } }).game;
+  const done = R.applyMove(g, me, { type: 'endTurn' });
+  assert(done.ok, `endTurn refused: ${done.error}`);
+  eq(done.game.trades.length, 0, 'offers left after the turn ended');
+});
+
+check('a player leaving takes their offers and replies with them', () => {
+  let { g, me } = tradeState();
+  const [them, other] = SEATS.filter((s) => s !== me);
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { brick: 1 } }).game;
+  const id = g.trades[0].id;
+  g = R.applyMove(g, other, { type: 'replyTrade', id, yes: false }).game;
+
+  const gone = R.applyMove(g, me, { type: 'dropPlayer', who: other });
+  assert(gone.ok, `dropPlayer refused: ${gone.error}`);
+  assert(!(other in gone.game.trades[0].replies), 'a departed player left a reply behind');
+
+  const hostLeft = R.applyMove(g, me, { type: 'dropPlayer', who: me });
+  assert(hostLeft.ok, `dropPlayer refused: ${hostLeft.error}`);
+  eq(hostLeft.game.trades.length, 0, 'the offers of the player who left');
+});
+
+check('an offer nobody can pay for cannot be accepted', () => {
+  let { g, me } = tradeState({ sheep: 2 });      // nobody holds any brick
+  const them = SEATS.find((s) => s !== me);
+  g = R.applyMove(g, me, { type: 'offerTrade', give: { sheep: 1 }, want: { brick: 1 } }).game;
+  const id = g.trades[0].id;
+  assert(!R.applyMove(g, them, { type: 'replyTrade', id, yes: true }).ok,
+    'accepted an offer they could not pay for');
+  assert(R.applyMove(g, them, { type: 'replyTrade', id, yes: false }).ok, 'could not decline');
+});
+
 // ---------------------------------------------------------------- leaving
 
 check('leaving mid-setup does not skip the players behind you', () => {

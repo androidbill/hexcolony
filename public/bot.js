@@ -251,8 +251,10 @@ export function botMove(game, board, pid, level, rng = Math.random) {
     return { type: 'discard', res: chooseDiscard(g, board, pid, cfg, rng) };
   }
 
-  if (g.trade && g.trade.from !== pid && !g.trade.replies[pid]) {
-    return { type: 'replyTrade', yes: judgeTrade(g, board, pid, cfg, rng) };
+  // Answer the oldest offer still waiting on us; the rest come round on later calls.
+  const asked = (g.trades || []).find((t) => t.from !== pid && !t.replies[pid]);
+  if (asked) {
+    return { type: 'replyTrade', id: asked.id, yes: judgeTrade(g, asked, board, pid, cfg, rng) };
   }
 
   if (!R.isTurn(g, pid)) return null;
@@ -443,8 +445,7 @@ function chooseDiscard(g, board, pid, cfg, rng) {
 }
 
 /** Is an offered trade worth taking? */
-function judgeTrade(g, board, pid, cfg, rng) {
-  const t = g.trade;
+function judgeTrade(g, t, board, pid, cfg, rng) {
   const p = g.players[pid];
   for (const [res, n] of Object.entries(t.want)) {
     if ((p.res[res] || 0) < n) return false;         // cannot pay

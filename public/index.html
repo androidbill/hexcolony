@@ -243,32 +243,35 @@
 
 <div class="sheet" id="sheet-trade">
   <h3 class="sheet-title">Trade</h3>
-  <div class="seg-row wide">
-    <button class="seg on" data-trade-tab="bank">With the bank</button>
-    <button class="seg" data-trade-tab="players">With players</button>
+  <p class="sheet-sub">Choose what to swap, then who with. Offers to players stay up until
+    somebody takes them, so you can put out more than one.</p>
+
+  <div class="field-label">You give</div>
+  <div class="res-picker" id="give-picker"></div>
+  <div class="rate-strip" id="rate-strip"></div>
+
+  <div class="field-label">You want</div>
+  <div class="res-picker" id="want-picker"></div>
+
+  <div class="trade-go">
+    <button class="btn btn-key" id="btn-trade-bank">
+      <span class="btn-label">Bank</span>
+      <span class="btn-note" id="bank-note"></span>
+    </button>
+    <button class="btn btn-key" id="btn-trade-players">
+      <span class="btn-label">Players</span>
+      <span class="btn-note" id="players-note"></span>
+    </button>
   </div>
 
-  <div id="trade-bank">
-    <p class="hint">Your rate improves if you own the right port.</p>
-    <div class="bank-list" id="bank-list"></div>
-  </div>
-
-  <div id="trade-players" hidden>
-    <div class="field-label">You give</div>
-    <div class="res-picker" id="give-picker"></div>
-    <div class="field-label">You want</div>
-    <div class="res-picker" id="want-picker"></div>
-    <button class="btn btn-key" id="btn-offer"><span class="btn-label">Send offer</span></button>
-  </div>
+  <div class="offer-mine" id="my-offers" hidden></div>
 
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
 
 <div class="sheet" id="sheet-offer">
   <h3 class="sheet-title" id="offer-title">Trade offer</h3>
-  <div class="offer-body" id="offer-body"></div>
-  <div class="offer-replies" id="offer-replies"></div>
-  <div class="sheet-actions" id="offer-actions"></div>
+  <div class="offer-list" id="offer-list"></div>
 </div>
 
 <div class="sheet" id="sheet-discard">

@@ -390,6 +390,66 @@ button { background: none; border: 0; cursor: pointer; }
   min-width: 44px; width: auto; padding: 0 10px;
 }
 
+/* ------------------------------------------------------------ trading */
+/* The port rates, sitting under the "you give" row because that is the side they price. */
+.rate-strip {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin: 2px 0 12px;
+}
+.rate-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dim);
+  font-size: 11.5px; font-weight: 700;
+}
+/* A port you own is the only reason this number is ever below 4:1 — worth pointing at. */
+.rate-chip.good { color: var(--gold); border-color: rgba(227, 186, 87, 0.5); }
+
+.trade-go { display: flex; gap: 8px; margin-top: 14px; }
+.trade-go .btn { flex: 1; flex-direction: column; gap: 2px; padding: 11px 8px; }
+.trade-go .btn-note {
+  font-size: 10.5px; font-weight: 600;
+  opacity: 0.75;
+  text-align: center; line-height: 1.25;
+}
+.trade-go .btn:disabled { opacity: 0.45; }
+
+.offer-mine { margin-top: 16px; }
+.my-offer {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--panel-2);
+  padding: 9px 10px;
+  margin-bottom: 8px;
+}
+.my-offer-top { display: flex; align-items: center; gap: 8px; }
+.my-offer-top .offer-cards { display: flex; gap: 3px; flex-wrap: wrap; }
+.swap-arrow { color: var(--gold); font-size: 15px; }
+.offer-drop {
+  margin-left: auto;
+  width: 26px; height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dim);
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+/* Incoming offers, one card each — there can be several from the same player. */
+.offer-list { display: flex; flex-direction: column; gap: 10px; }
+.in-offer {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: var(--panel-2);
+  padding: 11px 12px;
+}
+.in-offer-who { font-size: 13px; font-weight: 800; margin-bottom: 7px; }
+.in-offer-actions { display: flex; gap: 8px; margin-top: 9px; }
+.in-offer-actions .btn { flex: 1; }
+
 /* ------------------------------------------------------------ sea picker */
 .sea-row {
   display: grid;
@@ -776,34 +836,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .dev-lock { font-size: 11px; color: var(--gold); margin-top: 3px; }
 
 /* ------------------------------------------------------------ trading */
-.bank-list { display: flex; flex-direction: column; gap: 8px; }
-.bank-row {
-  display: flex; align-items: center; gap: 12px;
-  padding: 12px 12px 12px 16px;
-  border-radius: var(--r);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--line);
-  width: 100%;
-}
-.bank-row.is-off { opacity: 0.45; }
-.bank-row.is-off .bank-pick { pointer-events: none; }
-.bank-give { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.bank-arrow { color: var(--dim); flex: 0 0 auto; }
-.bank-arrow svg { width: 22px; height: 22px; display: block; }
-.bank-want { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
-.bank-pick {
-  padding: 3px; border-radius: 9px;
-  border: 1px solid transparent;
-  transition: transform .12s, border-color .15s, background .15s;
-}
-.bank-pick:not(:disabled):active { transform: scale(.9); }
-.bank-pick:not(:disabled):hover { border-color: var(--gold); background: rgba(227, 186, 87, .14); }
-.bank-pick:disabled { opacity: .3; pointer-events: none; }
-.rate-badge {
-  font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 999px;
-  background: rgba(227, 186, 87, 0.2); color: var(--gold);
-}
-
 .res-picker {
   display: flex; gap: 8px; justify-content: center; margin-bottom: 14px;
   padding-top: 8px;               /* the corner badges overhang the cards */
@@ -821,10 +853,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 .pick-pm button:active { background: rgba(255, 255, 255, 0.18); }
 
-.offer-body {
-  display: flex; flex-direction: column; gap: 8px;
-  margin-bottom: 14px;
-}
 .offer-row {
   display: flex; align-items: center; gap: 14px;
   padding: 12px 14px;

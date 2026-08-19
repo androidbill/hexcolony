@@ -134,6 +134,12 @@ function closeSheet() {
 const MANDATORY_SHEETS = new Set(['sheet-discard', 'sheet-steal']);
 $('veil').addEventListener('click', () => {
   if (MANDATORY_SHEETS.has(openSheet)) return;
+  // Waving the offers away has to stick, or the next snapshot puts them straight back up.
+  // Recorded here rather than in a listener of its own because closeSheet() below clears
+  // the very thing that says which sheet was open.
+  if (openSheet === 'sheet-offer') {
+    for (const t of game()?.trades || []) if (t.from !== playerId) dismissedOffers.add(t.id);
+  }
   closeSheet();
 });
 document.addEventListener('click', (e) => {
@@ -164,7 +170,9 @@ let intent = null;             // 'road' | 'settlement' | 'city' | null — what
 let lastSeq = 0;               // highest game-log id already reacted to
 let lastPhaseKey = '';
 let seenLogAt = 0;
-let dismissedTrade = null;
+// Offers this player has waved away, by id. A Set rather than a single value because
+// several can be on the table at once and dismissing one must not silence the rest.
+const dismissedOffers = new Set();
 let sending = false;
 
 const myName = () => ($('name-input').value || '').trim().slice(0, 14);
@@ -651,7 +659,7 @@ function enterRoom(code) {
   lastFreshAt = now; lastPulseSeenAt = now;
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
   clockSamples = []; clockOffset = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null; payoutKey = null;
+  lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
   subscribeRoom();
   subscribePulse();
   // One immediate beat so this phone has a clock reading straight away.
@@ -931,14 +939,14 @@ function sendLocal(move, opts = {}) {
 function botActor(g) {
   if (!g || g.phase === 'over') return null;
   if (g.phase === 'discard') return Object.keys(g.pending.discard).find(isBot) || null;
-  if (g.trade) {
-    // Everyone still to answer an offer, then the proposer closing it out.
-    const pending = g.seats.filter((s) => s !== g.trade.from && !g.trade.replies[s]);
+  for (const t of g.trades || []) {
+    // Everyone still to answer this offer, then the proposer closing it out.
+    const pending = g.seats.filter((s) => s !== t.from && !t.replies[s]);
     const waiting = pending.find(isBot);
     if (waiting) return waiting;
-    if (!pending.length && isBot(g.trade.from)) return g.trade.from;
-    return null;
+    if (!pending.length && isBot(t.from)) return t.from;
   }
+  if ((g.trades || []).length) return null;
   const up = R.currentPid(g);
   return isBot(up) ? up : null;
 }
@@ -1067,7 +1075,7 @@ function clearSolo() { try { localStorage.removeItem(SOLO_KEY); } catch { /* fin
 function enterSolo(saved) {
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null; payoutKey = null;
+  lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
   room = {
     code: 'SOLO', hostId: playerId, state: 'playing', solo: true,
     players: saved.players, order: saved.order, game: saved.game,
@@ -1108,7 +1116,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   // Straight to the map picker: solo has a host too, and it is you.
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null; payoutKey = null;
+  lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
   boardSeed = null;
   room = {
     code: 'SOLO', hostId: playerId, state: 'map', solo: true,
@@ -2110,84 +2118,96 @@ function openPickRes(kind) {
 }
 
 // ---------------------------------------------------------------- trading
-let tradeTab = 'bank';
+//
+// One picker, two destinations. You choose what to hand over and what you want back, and
+// only then decide who with — which is the order people actually think in. The old two
+// tabs made you commit to a counterparty first and then discover you could not afford it.
+//
+// Offers to other players stack up: set one out, build another, send that too. They are
+// independent, and the same card may be promised in two of them — you want whoever bites
+// first, not both — because the engine re-checks the hand at the moment a deal closes.
+
 let giveSel = {}, wantSel = {};
 
-for (const b of document.querySelectorAll('[data-trade-tab]')) {
-  b.addEventListener('click', () => {
-    tradeTab = b.dataset.tradeTab;
-    for (const x of document.querySelectorAll('[data-trade-tab]')) x.classList.toggle('on', x === b);
-    $('trade-bank').hidden = tradeTab !== 'bank';
-    $('trade-players').hidden = tradeTab !== 'players';
-    sfx.tap();
-    if (tradeTab === 'players') drawOfferPickers();
-  });
+const bundleTotal = (o) => Object.values(o).reduce((a, b) => a + b, 0);
+const kindsIn = (o) => Object.keys(o).filter((r) => o[r] > 0);
+
+/**
+ * Can this selection go to the bank, and at what price?
+ *
+ * The bank deals in one kind for one kind at a fixed rate, so the selection has to be
+ * exactly that shape. Multiples are allowed — eight wood for two brick at 4:1 — because
+ * refusing them would just mean tapping the button twice.
+ */
+function bankPlan(g) {
+  const gk = kindsIn(giveSel), wk = kindsIn(wantSel);
+  if (!gk.length || !wk.length) return { ok: false, note: 'Pick both sides' };
+  if (gk.length > 1 || wk.length > 1) return { ok: false, note: 'One kind each way' };
+  const give = gk[0], want = wk[0];
+  if (give === want) return { ok: false, note: 'Ask for something else' };
+
+  const rate = R.tradeRate(g, board, playerId, give);
+  const lots = wantSel[want];
+  const need = rate * lots;
+  if (giveSel[give] !== need) return { ok: false, note: `${rate}:1 — needs ${need} ${RES_NAME[give].toLowerCase()}` };
+  if ((g.players[playerId].res[give] || 0) < need) return { ok: false, note: `You have ${g.players[playerId].res[give] || 0}` };
+  if ((g.bank[want] || 0) < lots) return { ok: false, note: `Bank is out of ${RES_NAME[want].toLowerCase()}` };
+  return { ok: true, give, want, rate, note: `${rate}:1` };
+}
+
+/** Can this selection be put to the table? */
+function offerPlan(g) {
+  if (!bundleTotal(giveSel) || !bundleTotal(wantSel)) return { ok: false, note: 'Pick both sides' };
+  const held = g.players[playerId].res;
+  for (const r of kindsIn(giveSel)) {
+    if ((held[r] || 0) < giveSel[r]) return { ok: false, note: 'More than you hold' };
+  }
+  const mine = (g.trades || []).filter((t) => t.from === playerId).length;
+  if (mine >= R.MAX_OFFERS) return { ok: false, note: `${R.MAX_OFFERS} offers is the limit` };
+  return { ok: true, note: mine ? `${mine} already out` : 'Offer to the table' };
 }
 
 function openTrade(g) {
-  tradeTab = 'bank';
-  for (const x of document.querySelectorAll('[data-trade-tab]')) x.classList.toggle('on', x.dataset.tradeTab === 'bank');
-  $('trade-bank').hidden = false;
-  $('trade-players').hidden = true;
   giveSel = {}; wantSel = {};
-  drawBankTrades(g);
-  drawOfferPickers();
+  drawTrade(g);
   sheet('sheet-trade');
 }
 
-function drawBankTrades(g) {
-  const p = g.players[playerId];
-  const rows = [];
-  for (const give of RESOURCES) {
-    const rate = R.tradeRate(g, board, playerId, give);
-    const able = (p.res[give] || 0) >= rate;
-    rows.push(`<div class="bank-row${able ? '' : ' is-off'}">
-      <span class="bank-give">
-        ${resCard(give, { count: rate, size: 'sm', dim: !able })}
-        <span class="rate-badge">${rate}:1</span>
-      </span>
-      <span class="bank-arrow">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h15m0 0-5-5m5 5-5 5"
-          fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </span>
-      <span class="bank-want">${RESOURCES.filter((w) => w !== give).map((w) => `
-        <button class="bank-pick" data-bank="${give}:${w}"${able && g.bank[w] > 0 ? '' : ' disabled'}
-          aria-label="Trade for ${RES_NAME[w]}">${resCard(w, { size: 'xs' })}</button>`).join('')}</span>
-    </div>`);
-  }
-  $('bank-list').innerHTML = rows.join('');
-  for (const b of document.querySelectorAll('[data-bank]')) {
-    b.addEventListener('click', () => {
-      const [give, want] = b.dataset.bank.split(':');
-      closeSheet();
-      send({ type: 'bankTrade', give, want }).then((ok) => ok && sfx.trade());
-    });
-  }
+/**
+ * The same sheet, opened because somebody accepted rather than because it was asked for.
+ *
+ * Keeps whatever was half-built in the pickers: being interrupted by good news should not
+ * cost you the offer you were in the middle of putting together.
+ */
+function openTradeKeepingSelection(g) {
+  drawTrade(g);
+  sheet('sheet-trade');
 }
 
-function drawOfferPickers() {
-  const g = game();
-  if (!g) return;
+function drawTrade(g) {
   const p = g.players[playerId];
-  const build = (elId, sel, cap) => {
+  if (!p) return;
+
+  const build = (elId, sel, capped) => {
     $(elId).innerHTML = RESOURCES.map((r) => `
       <div class="pick-col">
         ${resCard(r, { size: 'sm', count: sel[r] || null, selected: !!sel[r], dim: !sel[r] })}
         <div class="pick-pm">
-          <button data-off="${elId}:-:${r}" aria-label="One fewer ${RES_NAME[r]}">−</button>
-          <button data-off="${elId}:+:${r}" aria-label="One more ${RES_NAME[r]}">+</button>
+          <button data-tsel="${elId}:-:${r}" aria-label="One fewer ${RES_NAME[r]}">−</button>
+          <button data-tsel="${elId}:+:${r}" aria-label="One more ${RES_NAME[r]}">+</button>
         </div>
-        ${cap ? `<span class="pick-have">have ${p.res[r] || 0}</span>` : ''}
+        ${capped ? `<span class="pick-have">have ${p.res[r] || 0}</span>` : ''}
       </div>`).join('');
   };
   build('give-picker', giveSel, true);
   build('want-picker', wantSel, false);
 
-  for (const b of document.querySelectorAll('[data-off]')) {
+  for (const b of document.querySelectorAll('[data-tsel]')) {
     b.addEventListener('click', () => {
-      const [elId, op, r] = b.dataset.off.split(':');
+      const [elId, op, r] = b.dataset.tsel.split(':');
       const sel = elId === 'give-picker' ? giveSel : wantSel;
       if (op === '+') {
+        // You can only offer what is in your hand; there is no cap on what you may ask for.
         if (elId === 'give-picker' && (sel[r] || 0) >= (p.res[r] || 0)) return;
         sel[r] = (sel[r] || 0) + 1;
       } else {
@@ -2196,74 +2216,146 @@ function drawOfferPickers() {
         if (!sel[r]) delete sel[r];
       }
       sfx.tap();
-      drawOfferPickers();
+      drawTrade(g);
     });
   }
-  const gTotal = Object.values(giveSel).reduce((a, b) => a + b, 0);
-  const wTotal = Object.values(wantSel).reduce((a, b) => a + b, 0);
-  $('btn-offer').disabled = !gTotal || !wTotal;
+
+  // The port rates, which is the part of the old bank tab worth keeping — without it
+  // there is nowhere to discover that a port has improved your price.
+  $('rate-strip').innerHTML = RESOURCES.map((r) => {
+    const rate = R.tradeRate(g, board, playerId, r);
+    return `<span class="rate-chip${rate < 4 ? ' good' : ''}">${RES_ICON[r]} ${rate}:1</span>`;
+  }).join('');
+
+  const bank = bankPlan(g);
+  const offer = offerPlan(g);
+  $('btn-trade-bank').disabled = !bank.ok;
+  $('btn-trade-players').disabled = !offer.ok;
+  $('bank-note').textContent = bank.note;
+  $('players-note').textContent = offer.note;
+
+  drawMyOffers(g);
 }
 
-$('btn-offer').addEventListener('click', () => {
-  closeSheet();
-  send({ type: 'offerTrade', give: giveSel, want: wantSel }).then((ok) => {
-    if (ok) { giveSel = {}; wantSel = {}; }
-  });
-});
+/** Your own offers, and what people have said about them. */
+function drawMyOffers(g) {
+  const mine = (g.trades || []).filter((t) => t.from === playerId);
+  const box = $('my-offers');
+  if (!mine.length) { box.innerHTML = ''; box.hidden = true; return; }
+  box.hidden = false;
 
-const cardBits = (obj) => cardRow(obj, { size: 'sm' });
-
-function openOffer(g) {
-  const t = g.trade;
-  if (!t) return;
-  const mine = t.from === playerId;
-  $('offer-title').textContent = mine ? 'Your offer' : `${nameFor(t.from)} offers a trade`;
-
-  // Shown from the reader's point of view: what they'd hand over and what they'd get.
-  const youGet = mine ? t.want : t.give;
-  const youGive = mine ? t.give : t.want;
-  $('offer-body').innerHTML = `
-    <div class="offer-row offer-row--give">
-      <span class="offer-tag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v14m0 0-6-6m6 6 6-6"
-        fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>You give</span>
-      <span class="offer-cards">${cardBits(youGive)}</span>
-    </div>
-    <div class="offer-row offer-row--get">
-      <span class="offer-tag"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20V6m0 0-6 6m6-6 6 6"
-        fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>You get</span>
-      <span class="offer-cards">${cardBits(youGet)}</span>
-    </div>`;
-
-  if (mine) {
-    const others = g.seats.filter((s) => s !== playerId);
-    $('offer-replies').innerHTML = others.map((pid) => {
+  box.innerHTML = `<div class="field-label">On the table</div>` + mine.map((t) => {
+    const rows = g.seats.filter((s) => s !== playerId).map((pid) => {
       const r = t.replies[pid];
-      const cls = r === 'yes' ? ' yes' : r === 'no' ? ' no' : '';
       const tag = r === 'yes' ? 'Accepts — tap to trade' : r === 'no' ? 'Declined' : 'Thinking…';
-      return `<button class="reply-row${cls}"${r === 'yes' ? ` data-accept="${esc(pid)}"` : ' disabled'}>
+      return `<button class="reply-row${r === 'yes' ? ' yes' : r === 'no' ? ' no' : ''}"
+        ${r === 'yes' ? ` data-close-deal="${t.id}:${esc(pid)}"` : ' disabled'}>
         <span>${esc(faceFor(pid))}</span>
         <span class="reply-name">${esc(nameFor(pid))}</span>
         <span class="reply-tag">${tag}</span>
       </button>`;
     }).join('');
-    $('offer-actions').innerHTML = '<button class="btn btn-ghost" id="offer-cancel">Withdraw offer</button>';
-    $('offer-cancel').onclick = () => { closeSheet(); send({ type: 'cancelTrade' }); };
-    for (const b of document.querySelectorAll('[data-accept]')) {
-      b.addEventListener('click', () => {
-        closeSheet();
-        send({ type: 'acceptTrade', with: b.dataset.accept }).then((ok) => ok && sfx.trade());
-      });
+    return `<div class="my-offer">
+      <div class="my-offer-top">
+        <span class="offer-cards">${cardRow(t.give, { size: 'xs' })}</span>
+        <span class="swap-arrow" aria-hidden="true">⇄</span>
+        <span class="offer-cards">${cardRow(t.want, { size: 'xs' })}</span>
+        <button class="offer-drop" data-drop-offer="${t.id}" aria-label="Withdraw this offer">✕</button>
+      </div>
+      <div class="offer-replies">${rows}</div>
+    </div>`;
+  }).join('');
+
+  for (const b of box.querySelectorAll('[data-close-deal]')) {
+    b.addEventListener('click', () => {
+      const [id, who] = b.dataset.closeDeal.split(':');
+      send({ type: 'acceptTrade', id: Number(id), with: who }).then((ok) => ok && sfx.trade());
+    });
+  }
+  for (const b of box.querySelectorAll('[data-drop-offer]')) {
+    b.addEventListener('click', () => {
+      sfx.tap();
+      send({ type: 'cancelTrade', id: Number(b.dataset.dropOffer) });
+    });
+  }
+}
+
+$('btn-trade-bank').addEventListener('click', () => {
+  const g = game();
+  if (!g) return;
+  const plan = bankPlan(g);
+  if (!plan.ok) return;
+  // Several lots at once are still one bank trade each, sent in order.
+  const lots = wantSel[plan.want];
+  (async () => {
+    for (let i = 0; i < lots; i++) {
+      const ok = await send({ type: 'bankTrade', give: plan.give, want: plan.want });
+      if (!ok) break;
     }
-  } else {
-    const me = g.players[playerId];
+    sfx.trade();
+    giveSel = {}; wantSel = {};
+    const now = game();
+    if (now) drawTrade(now);
+  })();
+});
+
+$('btn-trade-players').addEventListener('click', () => {
+  const g = game();
+  if (!g || !offerPlan(g).ok) return;
+  send({ type: 'offerTrade', give: giveSel, want: wantSel }).then((ok) => {
+    if (!ok) return;
+    // Cleared for the next one — the whole point of the sheet staying open.
+    giveSel = {}; wantSel = {};
+    const now = game();
+    if (now) drawTrade(now);
+  });
+});
+
+const cardBits = (obj) => cardRow(obj, { size: 'sm' });
+
+/** Offers from other people that are waiting on an answer from you. */
+function openOffer(g) {
+  const waiting = (g.trades || []).filter((t) => t.from !== playerId && !t.replies[playerId]);
+  if (!waiting.length) return;
+  const me = g.players[playerId];
+
+  $('offer-title').textContent = waiting.length > 1
+    ? `${waiting.length} trade offers`
+    : `${nameFor(waiting[0].from)} offers a trade`;
+
+  $('offer-list').innerHTML = waiting.map((t) => {
+    // Shown from the reader's point of view: what they would hand over and what they get.
     const able = Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n);
-    $('offer-replies').innerHTML = able ? '' :
-      '<p class="hint">You do not have what they are asking for.</p>';
-    $('offer-actions').innerHTML =
-      `<button class="btn btn-key" id="offer-yes"${able ? '' : ' disabled'}><span class="btn-label">Accept</span></button>
-       <button class="btn btn-ghost" id="offer-no">No thanks</button>`;
-    $('offer-yes').onclick = () => { closeSheet(); send({ type: 'replyTrade', yes: true }); };
-    $('offer-no').onclick = () => { closeSheet(); send({ type: 'replyTrade', yes: false }); };
+    return `<div class="in-offer">
+      <div class="in-offer-who">${esc(faceFor(t.from))} ${esc(nameFor(t.from))}</div>
+      <div class="offer-row offer-row--give">
+        <span class="offer-tag">You give</span>
+        <span class="offer-cards">${cardBits(t.want)}</span>
+      </div>
+      <div class="offer-row offer-row--get">
+        <span class="offer-tag">You get</span>
+        <span class="offer-cards">${cardBits(t.give)}</span>
+      </div>
+      ${able ? '' : '<p class="hint">You do not have what they are asking for.</p>'}
+      <div class="in-offer-actions">
+        <button class="btn btn-key" data-say="${t.id}:yes"${able ? '' : ' disabled'}>
+          <span class="btn-label">Accept</span></button>
+        <button class="btn btn-ghost" data-say="${t.id}:no">No thanks</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  for (const b of $('offer-list').querySelectorAll('[data-say]')) {
+    b.addEventListener('click', () => {
+      const [id, yes] = b.dataset.say.split(':');
+      // Waving one away should not keep bringing it back while the rest are answered.
+      dismissedOffers.add(Number(id));
+      send({ type: 'replyTrade', id: Number(id), yes: yes === 'yes' });
+      const g2 = game();
+      const left = (g2?.trades || []).filter((t) => t.from !== playerId
+        && !t.replies[playerId] && !dismissedOffers.has(t.id));
+      if (left.length) openOffer(g2); else closeSheet();
+    });
   }
   sheet('sheet-offer');
 }
@@ -2370,10 +2462,11 @@ function syncSheets(g) {
   // redrawn — the player who made the offer sat looking at "Thinking…" while the
   // acceptance was already in. It was never a failed trade; it was a screen that never
   // caught up.
-  const replies = g.trade
-    ? Object.keys(g.trade.replies).sort().map((k) => `${k}${g.trade.replies[k]}`).join(',')
-    : '';
-  const key = `${g.phase}:${g.turn.num}:${g.trade ? g.trade.from + g.seq : ''}:${replies}`;
+  const trades = g.trades || [];
+  const shape = trades
+    .map((t) => t.id + Object.keys(t.replies).sort().map((k) => k + t.replies[k]).join(''))
+    .join('|');
+  const key = `${g.phase}:${g.turn.num}:${g.seq}:${shape}`;
   const changed = key !== lastPhaseKey;
   lastPhaseKey = key;
 
@@ -2387,26 +2480,29 @@ function syncSheets(g) {
   }
   if (openSheet === 'sheet-discard' || openSheet === 'sheet-steal') closeSheet();
 
-  if (g.trade) {
-    const iReplied = g.trade.from === playerId || g.trade.replies[playerId];
-    if (dismissedTrade !== g.trade.from && (!iReplied || g.trade.from === playerId)) {
-      if (openSheet !== 'sheet-offer') openOffer(g);
-      else if (changed) openOffer(g);
-    }
-  } else {
-    dismissedTrade = null;
-    if (openSheet === 'sheet-offer') closeSheet();
+  // Anything still waiting on an answer from me, minus what I have already waved away.
+  const asked = trades.filter((t) => t.from !== playerId
+    && !t.replies[playerId] && !dismissedOffers.has(t.id));
+  // Any of my own offers somebody has said yes to — I have to be shown that, or the deal
+  // sits there unclosed with nothing on screen to say so.
+  const accepted = trades.some((t) => t.from === playerId
+    && Object.values(t.replies).includes('yes'));
+
+  if (asked.length) {
+    if (openSheet !== 'sheet-offer' || changed) openOffer(g);
+  } else if (openSheet === 'sheet-offer') {
+    closeSheet();
+  } else if (accepted && openSheet !== 'sheet-trade') {
+    openTradeKeepingSelection(g);
+  } else if (openSheet === 'sheet-trade' && changed) {
+    drawTrade(g);            // replies landing while the sheet is open
   }
+
+  // Ids are never reused, so this only ever forgets offers that are gone.
+  if (!trades.length && dismissedOffers.size) dismissedOffers.clear();
 
   if (g.phase === 'over' && openSheet !== 'sheet-over') { renderOver(g); sheet('sheet-over'); }
 }
-
-// Waving away a trade offer should stick until the next one.
-$('sheet-offer').addEventListener('click', (e) => {
-  if (e.target.closest('#offer-no') || e.target.closest('#offer-cancel')) {
-    dismissedTrade = game()?.trade?.from || null;
-  }
-});
 
 // ---------------------------------------------------------------- game over
 function renderOver(g) {
