@@ -28,7 +28,8 @@ const CORE = [
 // actually shipped is listed — the fetch handler is network-first with a cache
 // fallback, so art in any other format still gets cached the first time it is used;
 // precaching every extension would just mean ten 404s on every install.
-const ART = ['wood', 'brick', 'sheep', 'wheat', 'ore', 'desert'].map((n) => `art/${n}.jpg`);
+const ART = ['wood', 'brick', 'sheep', 'wheat', 'ore', 'desert'].map((n) => `art/${n}.jpg`)
+  .concat(['art/pieces/house.png']);
 
 self.addEventListener('install', (e) => {
   // cache:'reload' so a new VERSION always pulls fresh bytes. Plain addAll() may answer

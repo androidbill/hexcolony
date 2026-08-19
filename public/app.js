@@ -20,7 +20,7 @@ import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
 import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO } from './board.js';
-import { BoardView, RES_ICON, loadTerrainArt } from './render.js';
+import { BoardView, RES_ICON, loadTerrainArt, loadPieceArt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
@@ -141,6 +141,7 @@ const view = new BoardView($('board-cv'));
 // Illustrated terrain tiles load in the background. Until they arrive (or if they are
 // not there at all) the board draws its procedural motifs, so play never waits on art.
 loadTerrainArt(() => view.draw(performance.now()));
+loadPieceArt(() => view.draw(performance.now()));
 let board = null;              // regenerated whenever the seed changes
 let boardSeed = null;
 let intent = null;             // 'road' | 'settlement' | 'city' | null — what a board tap means

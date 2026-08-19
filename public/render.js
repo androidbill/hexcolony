@@ -64,6 +64,65 @@ const TERRAIN_BY_RES = Object.fromEntries(
  * Kick off loading the terrain art. Safe to call repeatedly; each terrain is only
  * fetched once. `onLoad` fires per successful image so the caller can redraw.
  */
+// Playing pieces. Greyscale on transparent, tinted at draw time to whoever owns them,
+// so one file serves every player and every future colour.
+const PIECE_ART = ['house'];
+const pieceImages = {};
+
+export function loadPieceArt(onLoad) {
+  for (const name of PIECE_ART) {
+    if (pieceImages[name] !== undefined) continue;
+    pieceImages[name] = null;
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => { pieceImages[name] = img; onLoad?.(name); };
+    img.onerror = () => { /* no art — the drawn shapes below still work */ };
+    img.src = `art/pieces/${name}.png`;
+  }
+}
+
+/**
+ * A piece in a player's colour.
+ *
+ * Multiply turns the white stonework into the colour while leaving the black linework
+ * black, which is what keeps the drawing readable. On its own it also crushes the
+ * shading for dark colours, so a little of the original is laid back over the top —
+ * that is what stops a black or brown house becoming a silhouette. The final
+ * destination-in restores the sprite's own transparency, which the fill flooded.
+ *
+ * Results are cached: this runs per building per frame otherwise, and the widths are
+ * rounded to even pixels so panning does not miss the cache on every frame.
+ */
+const tintCache = new Map();
+function tintedPiece(name, hex, width) {
+  const img = pieceImages[name];
+  if (!img || !img.naturalWidth) return null;
+  const w = Math.max(2, Math.round(width / 2) * 2);
+  const key = `${name}|${hex}|${w}`;
+  const hit = tintCache.get(key);
+  if (hit) return hit;
+
+  const h = Math.max(2, Math.round(w * img.naturalHeight / img.naturalWidth));
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const c = cv.getContext('2d');
+  c.drawImage(img, 0, 0, w, h);
+  c.globalCompositeOperation = 'multiply';
+  c.fillStyle = hex;
+  c.fillRect(0, 0, w, h);
+  c.globalCompositeOperation = 'source-atop';
+  c.globalAlpha = 0.26;
+  c.drawImage(img, 0, 0, w, h);
+  c.globalAlpha = 1;
+  c.globalCompositeOperation = 'destination-in';
+  c.drawImage(img, 0, 0, w, h);
+
+  // Zooming generates a new width every frame; keep the map from growing without end.
+  if (tintCache.size > 120) tintCache.clear();
+  tintCache.set(key, cv);
+  return cv;
+}
+
 export function loadTerrainArt(onLoad) {
   for (const [terrain, base] of Object.entries(TILE_ART)) {
     if (artImages[terrain] !== undefined) continue;
@@ -635,13 +694,40 @@ export class BoardView {
 
   drawBuildings() {
     if (!this.game) return;
-    for (const [vid, b] of Object.entries(this.game.bldg)) {
+    // Farthest back first, so a piece lower on the board overlaps the one behind it the
+    // way the isometric drawing expects.
+    const all = Object.entries(this.game.bldg)
+      .sort((a, b) => VERTS[a[0]].y - VERTS[b[0]].y);
+    for (const [vid, b] of all) {
       const [x, y] = this.toScreen(VERTS[vid].x, VERTS[vid].y);
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p)) : this.drawSettlement(x, y, this.colorOf(b.p));
+      const colour = this.colorOf(b.p);
+      if (b.t === 'c') this.drawCity(x, y, colour);
+      else this.drawSettlement(x, y, colour);
     }
   }
 
+  /**
+   * Stand a piece on a corner.
+   *
+   * Anchored bottom-centre, because that is where an isometric building meets the
+   * ground; the small drop past the corner is what makes it sit ON the junction rather
+   * than hover above it.
+   */
+  drawPiece(name, x, y, colour, width) {
+    const sprite = tintedPiece(name, colour, width);
+    if (!sprite) return false;
+    const c = this.ctx;
+    c.save();
+    c.shadowColor = 'rgba(0, 0, 0, 0.45)';
+    c.shadowBlur = width * 0.18;
+    c.shadowOffsetY = width * 0.06;
+    c.drawImage(sprite, x - sprite.width / 2, y - sprite.height + width * 0.16);
+    c.restore();
+    return true;
+  }
+
   drawSettlement(x, y, color) {
+    if (this.drawPiece('house', x, y, color, this.scale * 0.60)) return;
     const c = this.ctx;
     const s = this.scale * 0.24;
     c.save();
@@ -666,6 +752,14 @@ export class BoardView {
   }
 
   drawCity(x, y, color) {
+    // A city is the same house twice: one set back and smaller, one in front and
+    // larger. Size alone reads as "bigger" but not reliably as "different", and two
+    // buildings says town without needing a second piece of artwork.
+    if (pieceImages.house) {
+      this.drawPiece('house', x - this.scale * 0.22, y - this.scale * 0.10, color, this.scale * 0.46);
+      this.drawPiece('house', x + this.scale * 0.10, y + this.scale * 0.03, color, this.scale * 0.62);
+      return;
+    }
     const c = this.ctx;
     const s = this.scale * 0.27;
     c.save();
