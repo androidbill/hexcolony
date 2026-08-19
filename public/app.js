@@ -380,6 +380,17 @@ const clockReady = () => clockOffset !== null;
  */
 const serverNow = () => Date.now() + (clockOffset || 0);
 
+/**
+ * Whether this device has actually measured its distance from the server clock.
+ *
+ * Until it has, `serverNow()` is just the device's own clock — and phones are routinely
+ * minutes out. Nothing timed may be shown or acted on before this is true, which is the
+ * difference between a timer that survives a bad clock and one that silently misfires
+ * on a single handset. Solo has no server and no other player to disagree with, so the
+ * local clock is authoritative there by definition.
+ */
+const clockTrusted = () => solo || clockReady();
+
 // ---------------------------------------------------------------- liveness
 // Phones dim, lock, background the browser or drop wifi, any of which can silently
 // wedge the Firestore stream and freeze that phone on a stale turn. One device beats
@@ -605,10 +616,14 @@ async function leaveRoom(removeSelf = true) {
             const patch = { [`players.${playerId}`]: deleteField() };
             if (data.hostId === playerId) patch.hostId = others[0];
             if (data.game) {
-              const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId }, Math.random, serverNow());
+              const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId });
               if (res.ok) {
                 patch.game = res.game;
                 if (res.game.phase === 'over') patch.state = 'over';
+                if (res.game.turn.clockRestart) {
+                  res.game.turn.clockRestart = false;
+                  patch.turnStartedAt = serverTimestamp();
+                }
               }
             }
             tx.update(ref, patch);
@@ -647,10 +662,17 @@ async function send(move) {
       if (!snap.exists()) { rejected = 'The room is gone.'; return; }
       const data = snap.data();
       if (!data.game) { rejected = 'The game has not started.'; return; }
-      const res = R.applyMove(data.game, playerId, move, Math.random, serverNow());
+      const res = R.applyMove(data.game, playerId, move);
       if (!res.ok) { rejected = res.error; return; }
       const patch = { game: res.game };
       if (res.game.phase === 'over') patch.state = 'over';
+      // The engine says the allowance restarts; Firestore says when. Stamping it
+      // server-side is what stops a device with a wrong clock poisoning the deadline
+      // for everyone — no client's idea of "now" ever reaches the shared state.
+      if (res.game.turn.clockRestart) {
+        res.game.turn.clockRestart = false;
+        patch.turnStartedAt = serverTimestamp();
+      }
       tx.update(roomRef, patch);
     });
   } catch (e) {
@@ -803,9 +825,10 @@ const isBot = (pid) => !!room?.players?.[pid]?.bot;
 function sendLocal(move) {
   const g = room?.game;
   if (!g) return false;
-  const res = R.applyMove(g, playerId, move, Math.random, serverNow());
+  const res = R.applyMove(g, playerId, move);
   if (!res.ok) { toast(res.error); sfx.error(); return false; }
   room.game = res.game;
+  if (res.game.turn.clockRestart) { res.game.turn.clockRestart = false; room.turnStartedAt = Date.now(); }
   saveSolo();
   render();
   scheduleBots();
@@ -911,16 +934,17 @@ function runBot(pid) {
   if (!move) move = fallbackMove(g, pid);
   if (!move) return;
 
-  let res = R.applyMove(g, pid, move, Math.random, serverNow());
+  let res = R.applyMove(g, pid, move);
   if (!res.ok) {
     // A bot must never be able to wedge the game, and in solo there is nobody else to
     // unstick it. Fall back to the always-legal move for this phase before giving up.
     console.warn('bot move rejected:', move.type, res.error);
     const safe = fallbackMove(g, pid);
-    res = safe ? R.applyMove(g, pid, safe, Math.random, serverNow()) : res;
+    res = safe ? R.applyMove(g, pid, safe) : res;
   }
   if (!res.ok) { console.error('bot could not act at all in phase', g.phase); return; }
   room.game = res.game;
+  if (res.game.turn.clockRestart) { res.game.turn.clockRestart = false; room.turnStartedAt = Date.now(); }
   saveSolo();
   render();
   scheduleBots(paceFor(move));
@@ -951,6 +975,10 @@ function enterSolo(saved) {
     settings: saved.settings, level: saved.level, bots: saved.bots,
   };
   boardSeed = null;
+  // A resumed game has no start stamp — it was never saved, and holding someone to a
+  // deadline that expired while the app was shut would be absurd. The current step
+  // simply gets its allowance afresh.
+  room.turnStartedAt = Date.now();
   showScreen('screen-game');
   view.resetView();
   render();
@@ -1341,16 +1369,36 @@ requestAnimationFrame(loop);
 let autoFiredFor = null;
 let timerInterval = null;
 
+/** Firestore hands back a Timestamp; solo stores a plain number. */
+function stampMs(v) {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return v;
+  if (typeof v.toMillis === 'function') return v.toMillis();
+  return null;
+}
+
 function secondsLeft(g) {
-  if (!g || !g.turnSeconds || g.turn.deadline === null || g.turn.deadline === undefined) return null;
+  if (!g || !g.turnSeconds || !g.turn.allowMs) return null;
   if (g.phase !== 'roll' && g.phase !== 'build') return null;   // only timed steps
-  return (g.turn.deadline - serverNow()) / 1000;
+  const started = stampMs(room?.turnStartedAt);
+  if (started === null) return null;          // the server has not stamped it yet
+  if (!clockTrusted()) return null;           // this device cannot be trusted to judge
+  return (started + g.turn.allowMs - serverNow()) / 1000;
 }
 
 function drawTimer() {
   const g = game();
-  const left = secondsLeft(g);
   const el = $('turn-timer');
+  // Timed game, but this device has not measured the server clock yet — say so rather
+  // than counting down from a number that might be minutes wrong.
+  if (g && g.turnSeconds && g.turn.allowMs && (g.phase === 'roll' || g.phase === 'build')
+      && !clockTrusted()) {
+    el.hidden = false;
+    el.classList.remove('mine', 'urgent');
+    $('timer-secs').textContent = '⋯';
+    return;
+  }
+  const left = secondsLeft(g);
   if (left === null) { el.hidden = true; return; }
   const mine = R.isTurn(g, playerId);
   const secs = Math.max(0, Math.ceil(left));
