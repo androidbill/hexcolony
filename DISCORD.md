@@ -52,8 +52,9 @@ player's network being down.
 | `/gstatic` | `www.gstatic.com` |
 | `/firestore` | `firestore.googleapis.com` |
 
-The last two must stay identical to `URL_MAPPINGS` in `public/discord.js`. If you add a
-service later, add it in both places.
+The last two must stay identical to `URL_MAPPINGS` in `public/discord.js` — the app
+feeds that same table to Discord's `patchUrlMappings`, so a mismatch means blocked
+requests. If you add a service later, add it in both places.
 
 ### 4. Test it
 
@@ -71,11 +72,12 @@ takes over:
   loading the app with Discord's query parameters.
 - The `ready()` handshake and the URL mappings are **untested**. They are the most
   likely thing to need a tweak on first run.
-- **Firestore through the proxy is the least certain part.** The SDK builds its own
-  request URLs, so it is pointed at `<origin>/.proxy/firestore` via the `host` setting
-  in `fb.js`. If live rooms fail inside Discord but solo works, that setting is the
-  first thing to look at — and long-polling (`experimentalForceLongPolling`) is the
-  usual fix when a proxy interferes with the streaming transport.
+- Firestore through the proxy is handled by Discord's own `patchUrlMappings`, which
+  replaces `fetch`, `WebSocket` and `XMLHttpRequest` — Firestore builds its request
+  URLs internally, so patching the transport is the only thing that can reach them.
+  Long-polling is forced inside Discord, since a proxy is exactly the situation where
+  the streaming transport fails. If live rooms fail inside Discord but solo works, this
+  is still the first place to look.
 
 ## Discord usernames and avatars
 

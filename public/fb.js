@@ -11,7 +11,7 @@
 //    calling code already treats as "that did not go through".
 
 import { firebaseConfig } from './firebase-config.js';
-import { proxyUrl, firestoreHost, IN_DISCORD } from './discord.js';
+import { applyUrlMappings, remap, IN_DISCORD } from './discord.js';
 
 const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 
@@ -20,24 +20,27 @@ let online = false;
 let fs = null;
 
 try {
-  const [appMod, fsMod] = await Promise.all([
-    import(proxyUrl(`${SDK}/firebase-app.js`)),
-    import(proxyUrl(`${SDK}/firebase-firestore.js`)),
+  // Install the proxy patches first: once Firestore opens a connection it is too late,
+  // and inside Discord an unmapped request is simply blocked.
+  await applyUrlMappings();
+
+  const [appUrl, fsUrl] = await Promise.all([
+    remap(`${SDK}/firebase-app.js`),
+    remap(`${SDK}/firebase-firestore.js`),
   ]);
+  const [appMod, fsMod] = await Promise.all([import(appUrl), import(fsUrl)]);
   fs = fsMod;
 
   const app = appMod.initializeApp(firebaseConfig);
-  const settings = {
+  const settings = IN_DISCORD
+    // Through a proxy the streaming transport is the first thing to break, and
+    // auto-detection cannot always tell a proxy from a dead connection. Inside Discord
+    // long-polling is simply forced, which is slower to notice a change but reliable.
+    ? { experimentalForceLongPolling: true }
     // Some phones (iOS Safari behind content blockers, certain captive wifi) silently
     // break the streaming transport; auto-detection falls back to long-polling.
-    experimentalAutoDetectLongPolling: true,
-  };
-  const host = firestoreHost();
-  if (host) {
-    // Inside Discord, Firestore's own traffic has to go through the mapped proxy too.
-    settings.host = host;
-    settings.ssl = true;
-  }
+    : { experimentalAutoDetectLongPolling: true };
+
   db = fsMod.initializeFirestore(app, settings);
   online = true;
 } catch (e) {

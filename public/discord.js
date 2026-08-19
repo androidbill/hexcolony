@@ -6,7 +6,8 @@
 // has not been declared as a URL Mapping in the developer portal. So two things change
 // inside Discord and nothing else does:
 //
-//   1. Every external URL has to be rewritten to a same-origin `/.proxy/...` path.
+//   1. Every external URL has to be rewritten to a same-origin proxy path, which
+//      Discord's own SDK helper does — the exact path convention is theirs to define.
 //   2. The room is not typed in — everyone in the voice channel shares one
 //      `instance_id`, which is a far better room key than a four-letter word.
 //
@@ -30,35 +31,52 @@ export const GUILD_ID = params.get('guild_id') || null;
 
 // Hosts this app talks to, and the prefix each must be mapped to in the developer
 // portal. Keep this table and the portal's URL Mappings identical — a host that is
-// missing here is a request Discord will block, and the failure looks like the network
-// being down rather than a configuration mistake.
+// missing here is a request Discord will block, and the failure looks like the player's
+// network being down rather than a configuration mistake.
 export const URL_MAPPINGS = [
-  { prefix: '/gstatic', host: 'www.gstatic.com', why: 'the Firebase SDK modules' },
-  { prefix: '/firestore', host: 'firestore.googleapis.com', why: 'the Firestore backend' },
+  { prefix: '/gstatic', target: 'www.gstatic.com' },      // the Firebase SDK modules
+  { prefix: '/firestore', target: 'firestore.googleapis.com' }, // the Firestore backend
 ];
 
-/**
- * Rewrite an absolute URL to the proxied path Discord will allow. Outside Discord the
- * URL is returned untouched.
- */
-export function proxyUrl(absolute) {
-  if (!IN_DISCORD) return absolute;
+// Rewriting is done by Discord's own helper rather than by hand. It is shipped in the
+// SDK precisely because getting the proxy path convention right from the outside is
+// guesswork, and it patches fetch, WebSocket AND XMLHttpRequest — which is what makes
+// Firestore work, since its long-polling transport builds request URLs internally where
+// no amount of care at the call site could reach them.
+let patchMod = null;
+async function proxyModule() {
+  if (!patchMod) patchMod = await import('./vendor/discord-sdk/utils/patchUrlMappings.mjs');
+  return patchMod;
+}
+
+let patched = false;
+
+/** Redirect all runtime traffic through Discord's proxy. Must run before Firestore connects. */
+export async function applyUrlMappings() {
+  if (!IN_DISCORD || patched) return;
   try {
-    const u = new URL(absolute);
-    const map = URL_MAPPINGS.find((m) => m.host === u.hostname);
-    if (!map) {
-      console.warn(`HexColony: ${u.hostname} has no Discord URL mapping — it will be blocked.`);
-      return absolute;
-    }
-    return `/.proxy${map.prefix}${u.pathname}${u.search}`;
-  } catch {
-    return absolute;
+    const { patchUrlMappings } = await proxyModule();
+    patchUrlMappings(URL_MAPPINGS);
+    patched = true;
+  } catch (e) {
+    console.error('HexColony: could not install Discord URL mappings', e);
   }
 }
 
-/** The host Firestore should be told to talk to (it builds its own URLs internally). */
-export function firestoreHost() {
-  return IN_DISCORD ? `${location.host}/.proxy/firestore` : null;
+/**
+ * Rewrite one absolute URL. Needed separately from the patch above because an ES module
+ * `import()` is not a fetch and so is never intercepted — the specifier itself has to
+ * already be correct.
+ */
+export async function remap(absolute) {
+  if (!IN_DISCORD) return absolute;
+  try {
+    const { attemptRemap } = await proxyModule();
+    return attemptRemap({ url: new URL(absolute), mappings: URL_MAPPINGS }).toString();
+  } catch (e) {
+    console.error('HexColony: could not remap', absolute, e);
+    return absolute;
+  }
 }
 
 let sdk = null;
