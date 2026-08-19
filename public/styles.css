@@ -448,6 +448,37 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .act { position: relative; }
 
+/* ------------------------------------------------------------ map picker */
+.map-bar { display: flex; gap: 7px; align-items: stretch; }
+.map-step {
+  flex: 0 0 auto;
+  min-width: 58px;
+  border-radius: 13px;
+  padding: 11px 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  font-size: 11px; font-weight: 700;
+}
+.map-step:disabled { opacity: 0.35; pointer-events: none; }
+.map-step svg { width: 20px; height: 20px; }
+.map-accept {
+  flex: 1;
+  border-radius: 13px;
+  background: linear-gradient(180deg, var(--gold), var(--gold-2));
+  color: #2a1e08;
+  border: 0;
+  box-shadow: 0 4px 0 #926b23;
+  font-weight: 800; font-size: 15px;
+}
+.map-accept:active { box-shadow: 0 1px 0 #926b23; transform: scale(0.98); }
+.map-count {
+  text-align: center;
+  font-size: 12px;
+  color: var(--dim);
+  padding-bottom: 2px;
+}
+
 /* ------------------------------------------------------------ sheets */
 .veil {
   position: fixed; inset: 0;

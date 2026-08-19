@@ -657,6 +657,137 @@ async function send(move) {
   return true;
 }
 
+// ---------------------------------------------------------------- map choice
+// Between the lobby and the first roll the host flips through boards while everyone
+// watches. The offered maps live in the room as a list of seeds rather than a single
+// one, so "previous" really returns to the board people just saw instead of rolling a
+// different one, and every screen renders the same island from the same seed.
+const mapSeedNow = () => room?.mapSeeds?.[room?.mapIndex ?? 0] ?? null;
+const newSeed = () => Math.floor(Math.random() * 2 ** 31);
+
+async function beginMapChoice() {
+  if (!isHost()) return toast('Only the host can start.');
+  if (!solo && Object.keys(room.players || {}).length < 2) {
+    return toast('You need at least two players.');
+  }
+  const patch = { state: 'map', mapSeeds: [newSeed()], mapIndex: 0 };
+  if (solo) { Object.assign(room, patch); render(); return; }
+  try { await updateDoc(roomRef, patch); }
+  catch { toast('Could not open the map picker.'); }
+}
+
+async function stepMap(dir) {
+  if (!isHost()) return;
+  const seeds = (room.mapSeeds || []).slice();
+  let idx = room.mapIndex ?? 0;
+  if (dir > 0) {
+    idx += 1;
+    // Only roll a new board when going past the end of what has been shown.
+    if (idx >= seeds.length) seeds.push(newSeed());
+  } else {
+    if (idx === 0) return;
+    idx -= 1;
+  }
+  sfx.tap();
+  const patch = { mapSeeds: seeds, mapIndex: idx };
+  if (solo) { Object.assign(room, patch); render(); return; }
+  try { await updateDoc(roomRef, patch); } catch { /* the next tap will retry */ }
+}
+
+async function backToLobby() {
+  if (!isHost()) return;
+  sfx.tap();
+  if (solo) { room.state = 'lobby'; render(); return; }
+  try { await updateDoc(roomRef, { state: 'lobby' }); } catch { /* fine */ }
+}
+
+async function acceptMap() {
+  if (!isHost()) return;
+  const seed = mapSeedNow();
+  if (seed === null) return;
+  sfx.yourTurn();
+
+  if (solo) {
+    const game = R.newGame(room.order, { ...room.settings, seed });
+    room.state = 'playing';
+    room.game = game;
+    delete room.mapSeeds;
+    delete room.mapIndex;
+    saveSolo();
+    lastSeq = 0;
+    render();
+    scheduleBots(900);
+    return;
+  }
+
+  const ids = Object.keys(room.players || {});
+  if (ids.length < 2) return toast('You need at least two players.');
+  // Seat order is shuffled here, which is this game's version of rolling for first player.
+  const order = ids.slice().sort(() => Math.random() - 0.5);
+  const game = R.newGame(order, { ...room.settings, seed });
+  try {
+    await updateDoc(roomRef, { state: 'playing', order, game });
+  } catch (e) {
+    console.error(e);
+    toast('Could not start — check your connection.');
+  }
+}
+
+/** The board preview, shown to everyone while the host flips through maps. */
+function renderMapPreview() {
+  if (!$('screen-game').classList.contains('is-active')) {
+    showScreen('screen-game');
+    view.resetView();
+  }
+  ensureBoard();
+  view.setGame(null);
+  view.setHighlights({ verts: [], edges: [], hexes: [] });
+
+  const host = isHost();
+  const badge = $('turn-badge');
+  badge.textContent = host ? 'Choose a map' : `${nameFor(room.hostId)} is choosing a map`;
+  badge.classList.toggle('mine', host);
+
+  $('score-strip').innerHTML = '';
+  $('dice-float').hidden = true;
+  $('hand').innerHTML = `<span class="map-count">Map ${(room.mapIndex ?? 0) + 1}`
+    + `${LAYOUT_INFO[room.settings?.layout || 'classic']?.tiles ? ` · ${LAYOUT_INFO[room.settings.layout || 'classic'].tiles} tiles` : ''}</span>`;
+
+  if (!host) {
+    $('actions').innerHTML =
+      `<div class="act-prompt"><span class="act-ico">🗺️</span>${esc(nameFor(room.hostId))} is choosing a map</div>`;
+    return;
+  }
+
+  const atStart = (room.mapIndex ?? 0) === 0;
+  $('actions').innerHTML = `
+    <div class="map-bar">
+      <button class="map-step" data-map="back" title="Back to the lobby">
+        <svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Lobby
+      </button>
+      <button class="map-step" data-map="prev"${atStart ? ' disabled' : ''}>
+        <svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Previous
+      </button>
+      <button class="map-accept" data-map="accept">Accept this map</button>
+      <button class="map-step" data-map="next">
+        <svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Next
+      </button>
+    </div>`;
+
+  for (const b of document.querySelectorAll('[data-map]')) {
+    b.addEventListener('click', () => {
+      const what = b.dataset.map;
+      if (what === 'next') stepMap(1);
+      else if (what === 'prev') stepMap(-1);
+      else if (what === 'back') backToLobby();
+      else acceptMap();
+    }, { once: true });
+  }
+}
+
 // ---------------------------------------------------------------- solo play
 const isBot = (pid) => !!room?.players?.[pid]?.bot;
 
@@ -789,7 +920,7 @@ function runBot(pid) {
 
 // ---- persistence: a solo game survives closing the app
 function saveSolo() {
-  if (!solo || !room) return;
+  if (!solo || !room || !room.game) return;
   try {
     localStorage.setItem(SOLO_KEY, JSON.stringify({
       players: room.players, order: room.order, game: room.game,
@@ -835,10 +966,18 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   // Seat order is shuffled, so you don't always open the board.
   const order = [playerId, ...bots.map((b) => b.id)].sort(() => Math.random() - 0.5);
   const settings = { targetVP, discardLimit: 7, boardMode: 'random', layout, useRobber };
-  const game = R.newGame(order, settings);
-  enterSolo({ players, order, game, settings, level, bots: botCount });
-  saveSolo();
-  sfx.yourTurn();
+
+  // Straight to the map picker: solo has a host too, and it is you.
+  solo = true;
+  roomCode = null; roomRef = null; pulseRef = null;
+  lastSeq = 0; lastPhaseKey = ''; dismissedTrade = null;
+  boardSeed = null;
+  room = {
+    code: 'SOLO', hostId: playerId, state: 'map', solo: true,
+    players, order, game: null, settings, level, bots: botCount,
+    mapSeeds: [newSeed()], mapIndex: 0,
+  };
+  render();
 }
 
 function exitSolo() {
@@ -1014,20 +1153,7 @@ for (const b of document.querySelectorAll('[data-layout]')) {
   });
 }
 
-$('btn-start').addEventListener('click', startGame);
-
-async function startGame() {
-  if (!isHost()) return toast('Only the host can start.');
-  const ids = Object.keys(room.players || {});
-  if (ids.length < 2) return toast('You need at least two players.');
-  // Seat order is shuffled, which is this game's version of rolling for first player.
-  const order = ids.slice().sort(() => Math.random() - 0.5);
-  const g = R.newGame(order, room.settings || {});
-  try {
-    await updateDoc(roomRef, { state: 'playing', order, game: g });
-    sfx.yourTurn();
-  } catch (e) { console.error(e); toast('Could not start — check your connection.'); }
-}
+$('btn-start').addEventListener('click', beginMapChoice);
 
 function renderLobby() {
   $('lobby-code').textContent = roomCode || '----';
@@ -1086,7 +1212,7 @@ function renderLobby() {
   $('btn-start').disabled = !enough || !isHost();
   $('start-hint').textContent = !enough
     ? 'Needs at least 2 players.'
-    : isHost() ? 'Everyone in? Deal the island.' : `Waiting for ${esc(nameFor(room.hostId))} to start.`;
+    : isHost() ? 'Everyone in? Pick a map next.' : `Waiting for ${esc(nameFor(room.hostId))} to start.`;
   $('lobby-hint').textContent = isHost()
     ? 'Share the code — players can join until you start.'
     : 'You can change your name and avatar on the home screen.';
@@ -1095,13 +1221,17 @@ function renderLobby() {
 // ---------------------------------------------------------------- board plumbing
 function ensureBoard() {
   const g = game();
-  if (!g) return null;
-  const layout = g.layout || 'classic';
+  // During map selection there is no game yet, so the preview is built from the room's
+  // currently-offered seed instead.
+  const seed = g ? g.seed : mapSeedNow();
+  if (seed === null || seed === undefined) return null;
+  const mode = g ? g.mode : (room?.settings?.boardMode || 'random');
+  const layout = (g ? g.layout : room?.settings?.layout) || 'classic';
   // Rebuilding also re-points the shared topology at this game's island, so this has
   // to run before anything asks the rules where a road may go.
-  if (boardSeed !== g.seed || board?.mode !== g.mode || board?.layout !== layout) {
-    board = makeBoard(g.seed, g.mode, layout);
-    boardSeed = g.seed;
+  if (boardSeed !== seed || board?.mode !== mode || board?.layout !== layout) {
+    board = makeBoard(seed, mode, layout);
+    boardSeed = seed;
     view.setBoard(board);
   }
   return board;
@@ -1174,6 +1304,8 @@ function render() {
     renderLobby();
     return;
   }
+
+  if (room.state === 'map') { renderMapPreview(); return; }
 
   const g = game();
   if (!g) return;

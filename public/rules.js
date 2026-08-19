@@ -84,7 +84,8 @@ function shuffle(list, rng) {
  * device rebuilds an identical board from it.
  */
 export function newGame(seats, settings, rng = Math.random) {
-  const seed = Math.floor(rng() * 2 ** 31);
+  // An accepted map hands its seed in; without one the board is rolled fresh.
+  const seed = Number.isFinite(settings.seed) ? settings.seed : Math.floor(rng() * 2 ** 31);
   const layout = LAYOUT_INFO[settings.layout] ? settings.layout : 'classic';
   const info = LAYOUT_INFO[layout];
   const players = {};
