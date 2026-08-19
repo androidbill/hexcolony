@@ -391,21 +391,9 @@ button { background: none; border: 0; cursor: pointer; }
 }
 
 /* ------------------------------------------------------------ trading */
-/* The port rates, sitting under the "you give" row because that is the side they price. */
-.rate-strip {
-  display: flex; flex-wrap: wrap; gap: 6px;
-  margin: 2px 0 12px;
-}
-.rate-chip {
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
-  color: var(--dim);
-  font-size: 11.5px; font-weight: 700;
-}
-/* A port you own is the only reason this number is ever below 4:1 — worth pointing at. */
-.rate-chip.good { color: var(--gold); border-color: rgba(227, 186, 87, 0.5); }
+/* The rate under each card it prices. Gold whenever a port has beaten the standard 4:1,
+   which is the only reason this number is ever anything else. */
+.pick-have b { color: var(--gold); font-weight: 800; }
 
 .trade-go { display: flex; gap: 8px; margin-top: 14px; }
 .trade-go .btn { flex: 1; flex-direction: column; gap: 2px; padding: 11px 8px; }

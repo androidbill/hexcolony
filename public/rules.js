@@ -415,6 +415,25 @@ export function tradeRate(g, board, pid, res) {
   }
   return rate;
 }
+/**
+ * How many cards to select when a resource's card is tapped, given what is already
+ * selected, what is in hand, and the bank's rate for it.
+ *
+ * Cycles through whole trades — one lot, two lots, and so on — then back to nothing, so a
+ * tap can always undo itself. A hand that cannot cover even one lot selects all of it
+ * instead: those cards are only good for offering to another player, and picking them all
+ * up is the next thing you would do.
+ *
+ * Lives here rather than in the interface because it is the same "what makes a whole
+ * trade" question the bank itself asks, and the two must not drift apart.
+ */
+export function lotAfterTap(cur, have, rate) {
+  const lots = Math.floor(have / rate);
+  if (!lots) return cur ? 0 : have;
+  const wanted = (Math.floor(cur / rate) + 1) * rate;
+  return wanted > lots * rate ? 0 : wanted;
+}
+
 /** Every port this player is standing on, for the HUD. */
 export function portsOwned(g, board, pid) {
   const out = new Set();

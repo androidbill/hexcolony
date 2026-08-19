@@ -2203,6 +2203,23 @@ const kindsIn = (o) => Object.keys(o).filter((r) => o[r] > 0);
  * cards are actually worth, so "buys 3 — asked for 2" tells you to add one rather than
  * leaving a dead button and no explanation.
  */
+/**
+ * What the give side is worth in cards back, or 0 if it is not a clean bank basket.
+ *
+ * Shared by the Bank button and by the tap-to-ask wrap, so the two can never disagree
+ * about how many cards are owed.
+ */
+function bankCredits(g) {
+  let credits = 0;
+  for (const r of kindsIn(giveSel)) {
+    const rate = R.tradeRate(g, board, playerId, r);
+    if (giveSel[r] % rate !== 0) return 0;
+    if ((g.players[playerId].res[r] || 0) < giveSel[r]) return 0;
+    credits += giveSel[r] / rate;
+  }
+  return credits;
+}
+
 function bankPlan(g) {
   const gk = kindsIn(giveSel), wk = kindsIn(wantSel);
   if (!gk.length || !wk.length) return { ok: false, note: 'Pick both sides' };
@@ -2262,19 +2279,67 @@ function drawTrade(g) {
   const p = g.players[playerId];
   if (!p) return;
 
-  const build = (elId, sel, capped) => {
-    $(elId).innerHTML = RESOURCES.map((r) => `
-      <div class="pick-col">
-        ${resCard(r, { size: 'sm', count: sel[r] || null, selected: !!sel[r], dim: !sel[r] })}
+  const build = (elId, sel, side) => {
+    $(elId).innerHTML = RESOURCES.map((r) => {
+      const rate = R.tradeRate(g, board, playerId, r);
+      // The rate belongs on the card, not in a legend somewhere else: it is the number
+      // that decides what tapping this card does.
+      const sub = side === 'give'
+        ? `have ${p.res[r] || 0} · <b>${rate}:1</b>`
+        : `bank ${g.bank[r] || 0}`;
+      const label = side === 'give'
+        ? `Take ${rate} ${RES_NAME[r]} for trade`
+        : `Ask for ${RES_NAME[r]}`;
+      return `<div class="pick-col">
+        <button class="pick-plain" data-lot="${elId}:${r}" aria-label="${label}">
+          ${resCard(r, { size: 'sm', count: sel[r] || null, selected: !!sel[r], dim: !sel[r] })}
+        </button>
         <div class="pick-pm">
           <button data-tsel="${elId}:-:${r}" aria-label="One fewer ${RES_NAME[r]}">−</button>
           <button data-tsel="${elId}:+:${r}" aria-label="One more ${RES_NAME[r]}">+</button>
         </div>
-        ${capped ? `<span class="pick-have">have ${p.res[r] || 0}</span>` : ''}
-      </div>`).join('');
+        <span class="pick-have">${sub}</span>
+      </div>`;
+    }).join('');
   };
-  build('give-picker', giveSel, true);
-  build('want-picker', wantSel, false);
+  build('give-picker', giveSel, 'give');
+  build('want-picker', wantSel, 'want');
+
+  /**
+   * Tapping the card itself takes a whole lot.
+   *
+   * Five sheep and a 3:1 port should not be four taps to set up. One tap on the sheep
+   * takes three — the exact number the bank deals in — and each tap after that takes
+   * another lot, until there is not enough left for one, at which point it wraps back to
+   * nothing. So a tap can always undo itself, and the plus and minus are still there for
+   * the odd counts a player-to-player offer might want.
+   *
+   * Where the hand cannot cover even one lot the tap selects the lot anyway, because at
+   * that point the cards are only good for offering to another player, and picking them
+   * all up is what you would want to do next.
+   */
+  for (const b of document.querySelectorAll('[data-lot]')) {
+    b.addEventListener('click', () => {
+      const [elId, r] = b.dataset.lot.split(':');
+      if (elId === 'give-picker') {
+        const next = R.lotAfterTap(
+          giveSel[r] || 0, p.res[r] || 0, R.tradeRate(g, board, playerId, r),
+        );
+        if (next) giveSel[r] = next; else delete giveSel[r];
+      } else {
+        // Asking is one at a time, but it wraps once the basket is already paid for, so
+        // an over-tap costs a tap rather than a trip to the minus button.
+        const cur = wantSel[r] || 0;
+        const credits = bankCredits(g);
+        const others = bundleTotal(wantSel) - cur;
+        const room = credits ? Math.max(0, credits - others) : 0;
+        const next = room ? (cur >= room ? 0 : cur + 1) : cur + 1;
+        if (next) wantSel[r] = next; else delete wantSel[r];
+      }
+      sfx.tap();
+      drawTrade(g);
+    });
+  }
 
   for (const b of document.querySelectorAll('[data-tsel]')) {
     b.addEventListener('click', () => {
@@ -2293,13 +2358,6 @@ function drawTrade(g) {
       drawTrade(g);
     });
   }
-
-  // The port rates, which is the part of the old bank tab worth keeping — without it
-  // there is nowhere to discover that a port has improved your price.
-  $('rate-strip').innerHTML = RESOURCES.map((r) => {
-    const rate = R.tradeRate(g, board, playerId, r);
-    return `<span class="rate-chip${rate < 4 ? ' good' : ''}">${RES_ICON[r]} ${rate}:1</span>`;
-  }).join('');
 
   const bank = bankPlan(g);
   const offer = offerPlan(g);

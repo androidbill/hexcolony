@@ -296,6 +296,56 @@ check('a robber landing on nobody says so too', () => {
   eq(done.game.phase, 'build', 'phase after robbing an empty tile');
 });
 
+// ---------------------------------------------------------------- tapping a card
+
+check('tapping a card takes a whole trade at a time', () => {
+  // Five sheep and a 3:1 port: one tap takes three, the next wraps back to nothing.
+  eq(R.lotAfterTap(0, 5, 3), 3, 'first tap');
+  eq(R.lotAfterTap(3, 5, 3), 0, 'second tap, with no second lot affordable');
+
+  // Seven sheep is two lots, so it steps through both before clearing.
+  eq(R.lotAfterTap(0, 7, 3), 3, 'first of two lots');
+  eq(R.lotAfterTap(3, 7, 3), 6, 'second of two lots');
+  eq(R.lotAfterTap(6, 7, 3), 0, 'wraps after the last lot');
+
+  // Standard 4:1.
+  eq(R.lotAfterTap(0, 9, 4), 4, 'first lot at 4:1');
+  eq(R.lotAfterTap(4, 9, 4), 8, 'second lot at 4:1');
+  eq(R.lotAfterTap(8, 9, 4), 0, 'wraps at 4:1');
+});
+
+check('an odd count snaps up to the next whole trade', () => {
+  // The plus button can leave a count the bank would refuse; a tap tidies it.
+  eq(R.lotAfterTap(1, 7, 3), 3, 'from one');
+  eq(R.lotAfterTap(2, 7, 3), 3, 'from two');
+  eq(R.lotAfterTap(4, 7, 3), 6, 'from four');
+  eq(R.lotAfterTap(5, 9, 4), 8, 'from five at 4:1');
+});
+
+check('a hand too small for one trade selects all of it', () => {
+  // Two sheep at 3:1 buys nothing, but they are still worth offering to a player.
+  eq(R.lotAfterTap(0, 2, 3), 2, 'takes what there is');
+  eq(R.lotAfterTap(2, 2, 3), 0, 'and clears on the next tap');
+  eq(R.lotAfterTap(0, 0, 3), 0, 'nothing to take');
+});
+
+check('a tap always gets back to nothing', () => {
+  // Whatever the rate and the hand, tapping repeatedly must return to zero rather than
+  // sticking — otherwise a mis-tap can only be undone with the minus button.
+  for (let rate = 2; rate <= 4; rate++) {
+    for (let have = 0; have <= 12; have++) {
+      let cur = 0;
+      let reachedZero = false;
+      for (let i = 0; i < 12; i++) {
+        cur = R.lotAfterTap(cur, have, rate);
+        assert(cur >= 0 && cur <= have, `rate ${rate}, have ${have}: selected ${cur}`);
+        if (i > 0 && cur === 0) { reachedZero = true; break; }
+      }
+      assert(reachedZero || have === 0, `rate ${rate}, have ${have}: never cycled back to zero`);
+    }
+  }
+});
+
 // ---------------------------------------------------------------- the bank as a basket
 
 /**
