@@ -2215,7 +2215,15 @@ async function fullRefresh() {
       await Promise.all(regs.map((r) => r.unregister()));
     }
   } catch { /* best effort — reload anyway */ }
-  location.reload();
+
+  // Emptying the service worker's caches is not enough: the browser's own HTTP cache
+  // can still answer a plain reload, and GitHub Pages serves these files with a ten
+  // minute max-age. That brought back the very build we were trying to escape, the
+  // version check fired again, and the banner reappeared — which looks exactly like
+  // the button doing nothing. A URL it has never seen cannot be answered from cache.
+  const url = new URL(location.href);
+  url.searchParams.set('fresh', Date.now().toString(36));
+  location.replace(url.toString());
 }
 
 /** Hand the app to the phone's own share sheet. */
@@ -2242,7 +2250,12 @@ $('kebab-share').addEventListener('click', () => { closeKebab(); shareApp(); });
 $('kebab-about').addEventListener('click', () => { closeKebab(); openAbout(); });
 $('menu-share').addEventListener('click', () => { closeSheet(); shareApp(); });
 $('menu-about').addEventListener('click', () => { closeSheet(); openAbout(); });
-$('banner-refresh').addEventListener('click', fullRefresh);
+// The whole bar refreshes. A 60px button is a poor target on a phone, and the useful
+// thing to do with this banner is always "yes, update".
+$('update-banner').addEventListener('click', (e) => {
+  if (e.target.closest('.banner-x')) return;   // the dismiss cross still dismisses
+  fullRefresh();
+});
 
 // ---------------------------------------------------------------- update check
 /**
@@ -2258,7 +2271,10 @@ async function checkForUpdate() {
     const res = await fetch(`version.js?nocache=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return;
     const m = (await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/);
-    if (m && m[1] !== APP_VERSION) $('update-banner').classList.add('show');
+    if (m && m[1] !== APP_VERSION) {
+      $('update-banner').classList.add('show');
+      updateInstallBanner();          // stand the install offer down while this is up
+    }
   } catch { /* offline — nothing to compare against */ }
 }
 checkForUpdate();
@@ -2291,7 +2307,10 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 function updateInstallBanner() {
   const onHome = $('screen-home').classList.contains('is-active');
-  $('install-banner').classList.toggle('show', !!installPrompt && onHome);
+  // One bar at a time, and an available update outranks an install offer — they share
+  // the same corner of the screen and would otherwise cover each other.
+  const updating = $('update-banner').classList.contains('show');
+  $('install-banner').classList.toggle('show', !!installPrompt && onHome && !updating);
 }
 $('btn-install').addEventListener('click', async () => {
   if (!installPrompt) return;
@@ -2332,6 +2351,14 @@ window.addEventListener('beforeunload', () => {
 });
 
 (async function boot() {
+  // Drop the cache-busting marker fullRefresh added, so it is not carried into shares
+  // or bookmarks.
+  if (new URLSearchParams(location.search).has('fresh')) {
+    const url = new URL(location.href);
+    url.searchParams.delete('fresh');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }
+
   showScreen('screen-home');
   refreshResume();
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);

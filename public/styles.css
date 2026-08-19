@@ -799,6 +799,10 @@ button { background: none; border: 0; cursor: pointer; }
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 }
 .banner.show { display: flex; }
+/* Both banners are pinned to the same spot, so without this the install banner — which
+   comes later in the DOM — paints on top of the update banner and swallows its taps. */
+#update-banner { z-index: 94; cursor: pointer; }
+#update-banner span { text-decoration: underline; text-underline-offset: 3px; }
 .banner span { flex: 1; font-size: 13.5px; font-weight: 600; }
 .banner button {
   background: var(--gold); color: #2a1e08;
