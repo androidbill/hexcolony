@@ -15,6 +15,17 @@ Or tap **Play Solo** for a game against one to five bots at Easy, Medium or Hard
 Solo needs no network at all — it runs entirely on the device and works offline — and
 the game is saved as you play, so closing the app offers to resume it.
 
+Two boards to choose from, in the lobby or the solo sheet:
+
+| board | tiles | tokens | ports | bank | dev deck |
+|---|---|---|---|---|---|
+| Classic | 19 (1 desert) | one 2 and 12, two of everything else | 9 | 19 each | 25 |
+| Expansion | 30 (2 deserts) | two 2s and 12s, **three** of everything else | 11 | 24 each | 34 |
+
+The expansion is the 5-6 player island: three 6s and three 8s rather than two, laid out
+in rows of 3-4-5-6-5-4-3. The bank and development deck scale with it, because six
+players on a 30-tile board would drain the classic supply long before anyone won.
+
 The rules are the ones you already know: place two settlements and two roads in snake
 order, roll for production, build with wood/brick/sheep/wheat/ore, upgrade settlements
 to cities, buy development cards, take Longest Road at five and Largest Army at three
@@ -40,7 +51,7 @@ Everything ships from `public/`:
 
 | file | what it is |
 |------|------------|
-| `board.js` | Hex geometry. The 19 tiles, 54 vertices, 72 edges, coastline and ports are all *computed* from 19 hex centres, not hand-typed. Boards are generated from a seed, so only the seed travels over the wire. |
+| `board.js` | Hex geometry. Vertices, edges, coastline and ports are all *computed* from a list of hex centres, not hand-typed — which is why a second board size costs only a new row plan. Boards are generated from a seed, so only the seed travels over the wire. |
 | `rules.js` | The whole game as pure functions. `applyMove(game, playerId, move)` validates and returns the next state. No DOM, no network. |
 | `render.js` | Canvas board: tiles, tokens, ports, roads, houses, robber, plus pan/zoom and hit testing. |
 | `bot.js` | The opponents. One brain with the knobs turned for each difficulty; returns the next move and never touches the state. |

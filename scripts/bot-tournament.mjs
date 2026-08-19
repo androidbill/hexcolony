@@ -25,11 +25,13 @@ function whoActs(g){
   return R.currentPid(g);
 }
 
+const LAYOUT = process.env.LAYOUT || 'classic';
+
 function playGame(levels, seed){
   const rng=rngFrom(seed);
   const seats=levels.map((_,i)=>'p'+i);
-  let g=R.newGame(seats,{targetVP:10},rng);
-  const board=makeBoard(g.seed,g.mode);
+  let g=R.newGame(seats,{targetVP:10, layout:LAYOUT},rng);
+  const board=makeBoard(g.seed,g.mode,g.layout);
   let moves=0;
   while(g.phase!=='over'&&moves<12000){
     const actor=whoActs(g);

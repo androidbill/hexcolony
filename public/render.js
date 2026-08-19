@@ -138,8 +138,11 @@ export class BoardView {
     const sy = this.h / (ext.h + pad * 2);
     this.fitScale = Math.min(sx, sy);
     this.scale = this.fitScale * this.userScale;
-    this.cx = this.w / 2;
-    this.cy = this.h / 2;
+    // Centre on the island's own middle rather than on the world origin. The classic
+    // board happens to straddle the origin; the expansion does not, and assuming it
+    // does would hang it off the bottom of the screen.
+    this.cx = this.w / 2 - ((ext.minX + ext.maxX) / 2) * this.scale;
+    this.cy = this.h / 2 - ((ext.minY + ext.maxY) / 2) * this.scale;
   }
 
   toScreen(x, y) {

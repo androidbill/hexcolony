@@ -19,7 +19,7 @@ import {
 import { firebaseConfig } from './firebase-config.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
-import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES } from './board.js';
+import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO } from './board.js';
 import { BoardView, RES_COLOR, RES_ICON, loadTerrainArt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import * as R from './rules.js';
@@ -219,7 +219,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random' },
+      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic' },
       players: { [playerId]: freshPlayer(name, 0) },
       order: [],
       game: null,
@@ -731,7 +731,7 @@ function enterSolo(saved) {
   scheduleBots(900);
 }
 
-function startSolo(level, botCount, targetVP) {
+function startSolo(level, botCount, targetVP, layout = 'classic') {
   const bots = makeBots(botCount, level);
   const me = myName() || 'You';
   const players = {
@@ -745,7 +745,7 @@ function startSolo(level, botCount, targetVP) {
   }
   // Seat order is shuffled, so you don't always open the board.
   const order = [playerId, ...bots.map((b) => b.id)].sort(() => Math.random() - 0.5);
-  const settings = { targetVP, discardLimit: 7, boardMode: 'random' };
+  const settings = { targetVP, discardLimit: 7, boardMode: 'random', layout };
   const game = R.newGame(order, settings);
   enterSolo({ players, order, game, settings, level, bots: botCount });
   saveSolo();
@@ -781,14 +781,28 @@ function refreshResume() {
 let soloLevel = localStorage.getItem('hexcolony_solo_level') || 'medium';
 let soloBots = Number(localStorage.getItem('hexcolony_solo_bots') || 3);
 let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
+let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'classic';
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
     b.classList.toggle('on', b.dataset.level === soloLevel);
   }
   $('solo-blurb').textContent = BOT_LEVELS[soloLevel]?.blurb || '';
+  for (const b of document.querySelectorAll('[data-solo-layout]')) {
+    b.classList.toggle('on', b.dataset.soloLayout === soloLayout);
+  }
+  $('solo-layout-blurb').textContent = LAYOUT_INFO[soloLayout]?.blurb || '';
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
+}
+
+for (const b of document.querySelectorAll('[data-solo-layout]')) {
+  b.addEventListener('click', () => {
+    soloLayout = b.dataset.soloLayout;
+    localStorage.setItem('hexcolony_solo_layout', soloLayout);
+    sfx.tap();
+    drawSoloSheet();
+  });
 }
 
 $('btn-solo').addEventListener('click', () => { unlock(); sfx.tap(); drawSoloSheet(); sheet('sheet-solo'); });
@@ -826,7 +840,7 @@ for (const b of document.querySelectorAll('[data-solo]')) {
 }
 $('btn-solo-start').addEventListener('click', () => {
   closeSheet();
-  startSolo(soloLevel, soloBots, soloTarget);
+  startSolo(soloLevel, soloBots, soloTarget, soloLayout);
 });
 
 // ---------------------------------------------------------------- lobby
@@ -875,6 +889,19 @@ for (const b of document.querySelectorAll('[data-board]')) {
   });
 }
 
+for (const b of document.querySelectorAll('[data-layout]')) {
+  b.addEventListener('click', () => {
+    if (!isHost()) return toast('Only the host can change the setup.');
+    const layout = b.dataset.layout;
+    const patch = { 'settings.layout': layout };
+    // The fixed "Standard" arrangement only exists for the 19-tile island, so choosing
+    // the expansion also drops back to a shuffled board rather than silently ignoring it.
+    if (layout === 'expansion') patch['settings.boardMode'] = 'random';
+    updateDoc(roomRef, patch).catch(() => {});
+    sfx.tap();
+  });
+}
+
 $('btn-start').addEventListener('click', startGame);
 
 async function startGame() {
@@ -911,8 +938,16 @@ function renderLobby() {
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 10);
   $('set-discard').textContent = String(s.discardLimit || 7);
+  const layout = s.layout || 'classic';
+  for (const b of document.querySelectorAll('[data-layout]')) {
+    b.classList.toggle('on', b.dataset.layout === layout);
+  }
+  $('layout-blurb').textContent = LAYOUT_INFO[layout]?.blurb || '';
   for (const b of document.querySelectorAll('[data-board]')) {
     b.classList.toggle('on', b.dataset.board === (s.boardMode || 'random'));
+    // A fixed arrangement is only defined for the classic island.
+    b.disabled = layout !== 'classic' && b.dataset.board === 'classic';
+    b.style.opacity = b.disabled ? '0.4' : '';
   }
 
   const enough = ids.length >= 2;
@@ -929,8 +964,11 @@ function renderLobby() {
 function ensureBoard() {
   const g = game();
   if (!g) return null;
-  if (boardSeed !== g.seed || board?.mode !== g.mode) {
-    board = makeBoard(g.seed, g.mode);
+  const layout = g.layout || 'classic';
+  // Rebuilding also re-points the shared topology at this game's island, so this has
+  // to run before anything asks the rules where a road may go.
+  if (boardSeed !== g.seed || board?.mode !== g.mode || board?.layout !== layout) {
+    board = makeBoard(g.seed, g.mode, layout);
     boardSeed = g.seed;
     view.setBoard(board);
   }
@@ -1754,7 +1792,7 @@ function renderOver(g) {
 $('btn-again').addEventListener('click', async () => {
   if (solo) {
     closeSheet();
-    startSolo(room.level, room.bots, room.settings.targetVP);
+    startSolo(room.level, room.bots, room.settings.targetVP, room.settings.layout);
     return;
   }
   if (!isHost()) return toast('Only the host can start a new game.');

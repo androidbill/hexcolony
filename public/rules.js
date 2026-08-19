@@ -9,7 +9,7 @@
 // The engine is deliberately strict — it re-validates everything, because the client
 // that sends a move is the same untrusted device that drew the buttons.
 
-import { HEXES, VERTS, EDGES, RESOURCES, makeBoard, hexNeighbours } from './board.js';
+import { HEXES, VERTS, EDGES, RESOURCES, makeBoard, hexNeighbours, LAYOUT_INFO } from './board.js';
 
 export const COSTS = {
   road:       { wood: 1, brick: 1 },
@@ -19,16 +19,12 @@ export const COSTS = {
 };
 
 export const PIECES = { road: 15, settlement: 5, city: 4 };
-export const BANK_PER_RESOURCE = 19;
+export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expansion
 
-// 25 development cards, in the printed proportions.
-const DEV_BAG = [
-  ...Array(14).fill('knight'),
-  ...Array(5).fill('vp'),
-  ...Array(2).fill('road'),
-  ...Array(2).fill('plenty'),
-  ...Array(2).fill('mono'),
-];
+// The development deck and the bank both scale with the board — a 30-tile island with
+// six players would drain a 19-card bank and a 25-card deck long before anyone won.
+// The per-layout numbers live in LAYOUT_INFO.
+const devBag = (info) => Object.entries(info.dev).flatMap(([kind, n]) => Array(n).fill(kind));
 
 export const DEV_INFO = {
   knight: { name: 'Knight', blurb: 'Move the robber and steal a card. Three knights takes Largest Army.' },
@@ -40,7 +36,8 @@ export const DEV_INFO = {
 
 // The five victory-point cards are distinct buildings on a real board; naming them
 // makes the end-of-game reveal read like a story instead of "+3 hidden".
-const VP_NAMES = ['Great Hall', 'Library', 'Market', 'Chapel', 'University'];
+// Six, because the expansion deck holds six point cards to the classic deck's five.
+const VP_NAMES = ['Great Hall', 'Library', 'Market', 'Chapel', 'University', 'Cathedral'];
 
 export const PLAYER_COLORS = [
   { key: 'red',    hex: '#e5484d', name: 'Red' },
@@ -88,6 +85,8 @@ function shuffle(list, rng) {
  */
 export function newGame(seats, settings, rng = Math.random) {
   const seed = Math.floor(rng() * 2 ** 31);
+  const layout = LAYOUT_INFO[settings.layout] ? settings.layout : 'classic';
+  const info = LAYOUT_INFO[layout];
   const players = {};
   for (const pid of seats) {
     players[pid] = {
@@ -109,15 +108,16 @@ export function newGame(seats, settings, rng = Math.random) {
   return {
     seed,
     mode: settings.boardMode || 'random',
+    layout,
     target: settings.targetVP || 10,
     discardLimit: settings.discardLimit || 7,
     seats: seats.slice(),
     players,
     bldg: {},
     roads: {},
-    robber: makeBoard(seed, settings.boardMode || 'random').robber,
-    bank: Object.fromEntries(RESOURCES.map((r) => [r, BANK_PER_RESOURCE])),
-    deck: shuffle(DEV_BAG, rng),
+    robber: makeBoard(seed, settings.boardMode || 'random', layout).robber,
+    bank: Object.fromEntries(RESOURCES.map((r) => [r, info.bank])),
+    deck: shuffle(devBag(info), rng),
     vpNames: shuffle(VP_NAMES, rng),
     phase: 'setup',
     setup: { order, at: 0, need: 's', lastV: null },
@@ -442,7 +442,9 @@ const fail = (msg) => ({ ok: false, error: msg });
 export function applyMove(state, pid, move, rng = Math.random) {
   const g = clone(state);
   const events = [];
-  const board = makeBoard(g.seed, g.mode);
+  // Rebuilding the board here is also what switches the shared topology to this
+  // game's layout, so every rules helper below reads the right island.
+  const board = makeBoard(g.seed, g.mode, g.layout);
   const me = g.players[pid];
   if (!me) return fail('You are not in this game.');
   if (g.phase === 'over') return fail('The game is over.');
