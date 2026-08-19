@@ -30,13 +30,21 @@ jobs:
       - uses: actions/deploy-pages@v5
         id: deployment
 
-      # Tell every open device straight away. The app watches this document, so a build
-      # reaches phones the moment it lands instead of whenever they next poll. The web
-      # API key is public by design and the rules only allow this one document to be
-      # written, so no secret is needed here.
+      # Tell every open device straight away. The app watches this one document, so a
+      # build reaches phones the moment it lands instead of whenever they next poll.
+      #
+      # The web API key is public by design — it identifies the project, it does not
+      # authorise anything — and the rules allow nothing to be written here but this
+      # single document, so no repository secret is involved.
+      #
+      # The JSON goes through printf into a file rather than inline: quoting a JSON
+      # body through YAML and then through the shell is how the first attempt at this
+      # step broke, and it broke silently at parse time.
       - name: Publish the version for live clients
         run: |
-          VERSION=$(grep -o "APP_VERSION = '[^']*'" public/version.js | grep -o "[0-9][0-9.]*")
-          echo "publishing $VERSION"
-          curl -sS -X PATCH             "https://firestore.googleapis.com/v1/projects/catanx-6644/databases/(default)/documents/meta/version?key=AIzaSyBTc0uLxBGerekxPHdFhDsyFeCmjXynhec"             -H "Content-Type: application/json"             -d "{\"fields\":{\"version\":{\"stringValue\":\"$VERSION\"},\"at\":{\"timestampValue\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}}"             -o /dev/null -w "firestore: %{http_code}
-"
+          VERSION=$(grep -oE "APP_VERSION = '[^']+'" public/version.js | grep -oE "[0-9][0-9.]+")
+          NOW=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "publishing $VERSION at $NOW"
+          printf '{"fields":{"version":{"stringValue":"%s"},"at":{"timestampValue":"%s"}}}' "$VERSION" "$NOW" > version.json
+          curl -sS -X PATCH -H "Content-Type: application/json" --data @version.json -o response.json -w 'firestore: %{http_code}\n' "https://firestore.googleapis.com/v1/projects/catanx-6644/databases/(default)/documents/meta/version?key=AIzaSyBTc0uLxBGerekxPHdFhDsyFeCmjXynhec"
+          cat response.json
