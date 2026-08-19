@@ -40,6 +40,17 @@ service cloud.firestore {
       allow delete: if true;
     }
 
+    // The version the deploy last published. Every device watches this one document,
+    // so a new build reaches open phones the moment it lands rather than whenever they
+    // next happen to look. Written by the Pages workflow, never by the app.
+    match /meta/{doc} {
+      allow read: if true;
+      allow write: if doc == 'version'
+                   && request.resource.data.keys().hasOnly(['version', 'at'])
+                   && request.resource.data.version is string
+                   && request.resource.data.version.size() <= 32;
+    }
+
     // Everything else is closed.
     match /{document=**} {
       allow read, write: if false;

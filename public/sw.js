@@ -47,6 +47,10 @@ self.addEventListener('activate', (e) => {
     caches.keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
+      // Tell the pages we just took over. A worker knows a new build has landed before
+      // any polling would, so this is the earliest anything can say so.
+      .then(() => self.clients.matchAll({ type: 'window' }))
+      .then((clients) => clients.forEach((c) => c.postMessage({ type: 'NEW_VERSION', version: VERSION })))
   );
 });
 

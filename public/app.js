@@ -2411,7 +2411,16 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeKebab
  * caches and the registration both have to go first, which is the whole point of a
  * Refresh the player can reach.
  */
+let refreshing = false;
 async function fullRefresh() {
+  // Say so immediately. Clearing caches and reloading takes a moment, and with no
+  // acknowledgement the button reads as dead — which is exactly how this has felt.
+  if (refreshing) return;
+  refreshing = true;
+  const banner = $('update-banner');
+  if (banner) banner.querySelector('span').textContent = 'Updating…';
+  toast('Updating…');
+
   try {
     if ('caches' in window) {
       const keys = await caches.keys();
@@ -2431,6 +2440,11 @@ async function fullRefresh() {
   const url = new URL(location.href);
   url.searchParams.set('fresh', Date.now().toString(36));
   location.replace(url.toString());
+
+  // An installed PWA can ignore replace() in some states. If we are still here a moment
+  // later, go the other way rather than leaving the player looking at a dead button.
+  setTimeout(() => { location.href = url.toString(); }, 1200);
+  setTimeout(() => { location.reload(); }, 2600);
 }
 
 /** Hand the app to the phone's own share sheet. */
@@ -2473,18 +2487,47 @@ $('update-banner').addEventListener('click', (e) => {
  * reloaded, so this also runs whenever the app comes back to the foreground — otherwise
  * a phone can sit on a stale build for days without ever asking.
  */
+function announceUpdate(why) {
+  const banner = $('update-banner');
+  if (banner.classList.contains('show')) return;
+  console.info('HexColony: update available via', why);
+  banner.classList.add('show');
+  updateInstallBanner();          // stand the install offer down while this is up
+  buzz([40, 60, 40]);
+}
+
 async function checkForUpdate() {
   try {
     const res = await fetch(`version.js?nocache=${Date.now()}`, { cache: 'no-store' });
     if (!res.ok) return;
     const m = (await res.text()).match(/APP_VERSION\s*=\s*'([^']+)'/);
-    if (m && m[1] !== APP_VERSION) {
-      $('update-banner').classList.add('show');
-      updateInstallBanner();          // stand the install offer down while this is up
-    }
+    if (m && m[1] !== APP_VERSION) announceUpdate('version.js');
   } catch { /* offline — nothing to compare against */ }
 }
 checkForUpdate();
+
+/**
+ * The instant route: one document holding whatever the deploy last published, watched
+ * by every device from the moment the app opens.
+ *
+ * Polling can only ever be as quick as its interval, and an installed app that is
+ * resumed rather than reloaded may not poll at all. A listener costs one document and
+ * fires the moment a build lands, whether the phone is sitting on the home screen or
+ * halfway through a game.
+ *
+ * The app never writes here — only the deploy does — so a device running an old build
+ * cannot announce itself as the newest.
+ */
+function watchPublishedVersion() {
+  if (!NET_READY) return;
+  try {
+    onSnapshot(doc(db, 'meta', 'version'), (snap) => {
+      const v = snap.exists() ? snap.data().version : null;
+      if (v && v !== APP_VERSION) announceUpdate('firestore');
+    }, () => { /* unreadable — the worker and the poll still cover it */ });
+  } catch { /* offline */ }
+}
+watchPublishedVersion();
 
 let lastUpdateCheck = Date.now();
 document.addEventListener('visibilitychange', () => {
@@ -2499,8 +2542,36 @@ $('ver-home').textContent = `v${APP_VERSION}`;
 $('ver-about').textContent = `HexColony v${APP_VERSION}`;
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`).catch(() => {});
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register(`sw.js?v=${APP_VERSION}`);
+
+      // A worker reaching "installed" while another is already in charge means a new
+      // build has arrived and is waiting for this page to go away.
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            announceUpdate('service worker');
+          }
+        });
+      });
+
+      // Ask, rather than wait to be told. This is a conditional request for one small
+      // file, so a minute is cheap and keeps an open phone close to current.
+      const poke = () => reg.update().catch(() => {});
+      setInterval(poke, 60000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') poke();
+      });
+    } catch { /* no worker — the other two routes still apply */ }
+  });
+
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'NEW_VERSION' && e.data.version !== APP_VERSION) {
+      announceUpdate('worker message');
+    }
   });
 }
 
