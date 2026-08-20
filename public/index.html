@@ -43,11 +43,6 @@
       <input id="name-input" class="text-input" type="text" maxlength="14" autocomplete="off"
              autocapitalize="words" spellcheck="false" placeholder="Nickname">
 
-      <div class="field-label">Your colour <em>tap to choose</em></div>
-      <button class="colour-pick" id="btn-colour" aria-label="Choose your colour">
-        <span class="look-swatch" id="look-swatch"></span>
-        <span id="colour-name">Red</span>
-      </button>
     </div>
 
     <div class="card" id="discord-panel" hidden>
@@ -447,11 +442,10 @@
 
 <div class="sheet" id="sheet-colour">
   <h3 class="sheet-title">Your colour</h3>
-  <p class="sheet-sub">How everyone finds your roads and towns on the board. One each —
-    a colour somebody has already taken shows their initials instead.</p>
+  <p class="sheet-sub" id="colour-sub"></p>
   <div class="colour-grid" id="colour-grid"></div>
   <div class="sheet-actions">
-    <button class="btn btn-ghost" data-close>Close</button>
+    <button class="btn btn-ghost" id="colour-close" data-close>Close</button>
   </div>
 </div>
 

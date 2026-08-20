@@ -136,20 +136,6 @@ button { background: none; border: 0; cursor: pointer; }
   text-indent: 0.36em;
 }
 
-.colour-pick {
-  width: 100%;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(4, 16, 28, 0.7);
-  border: 1.5px solid var(--line);
-  border-radius: var(--r);
-  padding: 13px 10px;
-  /* Was 40px, for an emoji. It holds the colour's name now. */
-  font-size: 17px; font-weight: 700;
-  line-height: 1.1;
-  transition: transform .12s, border-color .15s;
-}
-.colour-pick:active { transform: scale(0.97); border-color: var(--gold); }
-
 .or-split {
   display: flex; align-items: center; gap: 12px;
   margin: 14px 0;
@@ -255,6 +241,18 @@ button { background: none; border: 0; cursor: pointer; }
   border-radius: var(--r-sm);
   padding: 10px 12px;
 }
+.seat-kick {
+  margin-left: auto;
+  width: 28px; height: 28px; flex: 0 0 auto;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--dim);
+  font-size: 13px; font-weight: 800;
+  display: grid; place-items: center;
+}
+.seat-kick:active { background: rgba(229, 72, 77, 0.25); color: #ffb4b6; }
+
 .seat-swatch {
   width: 16px; height: 16px; border-radius: 5px;
   background: var(--c, #888);
@@ -272,6 +270,7 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .seat-tag.host { background: rgba(227, 186, 87, 0.2); color: var(--gold); }
 .seat-tag.you { background: rgba(34, 197, 94, 0.18); color: #7ee2a8; }
+.seat-tag.choosing { background: rgba(227, 186, 87, 0.14); color: var(--gold); }
 
 .pill {
   font-size: 12px; font-weight: 700;
@@ -332,6 +331,11 @@ button { background: none; border: 0; cursor: pointer; }
   display: flex; align-items: center; gap: 8px;
   max-width: calc(100% - 16px);
   pointer-events: none;
+  /* Above the veil (40) and above the sheets (50). A sheet the game is waiting on is
+     exactly when the clock matters most — you are being held to a deadline by the very
+     thing that was covering it. Nothing here takes a tap, so sitting on top of the veil
+     costs the veil nothing. */
+  z-index: 60;
 }
 
 .board-badge {
@@ -826,6 +830,14 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   max-width: 560px;
   margin: 0 auto;
 }
+/* The sheets the game waits on stop below the board's status row rather than running
+   the full 86vh. Discarding without being able to see the clock you are discarding
+   against was the complaint; robbing is the same bargain. The reserved strip is the
+   topbar, the status row and a little air: safe area + 56 + 10 + 34 + 8. */
+#sheet-discard, #sheet-steal {
+  max-height: calc(var(--app-height) - var(--safe-t) - 108px);
+}
+
 .sheet.show {
   transform: translateY(0);
   visibility: visible;
@@ -1246,18 +1258,20 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .colour-cell.on { box-shadow: 0 0 0 3px var(--gold); }
 /* Taken is not a style choice — two players in the same colour makes the board
    unreadable, so these are genuinely unavailable rather than merely discouraged. */
-.colour-cell:disabled { opacity: 0.28; }
+.colour-cell:disabled { opacity: 0.42; }
 .colour-cell .taken-by { font-size: 11px; font-weight: 800; letter-spacing: .02em; }
-
-.look-swatch {
-  width: 22px; height: 22px;
-  border-radius: 7px;
-  background: var(--c, #888);
-  border: 2px solid rgba(0, 0, 0, .4);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, .25);
-  margin-right: 12px;
-  flex: 0 0 auto;
+/* Struck through as well as dimmed. Dimming alone reads as "not yet", and on a grid of
+   eleven bright squares it did not read as anything at all — the line is what says the
+   colour is gone. */
+.colour-cell.taken { position: relative; }
+.colour-cell.taken::after {
+  content: '';
+  position: absolute; inset: 4px;
+  background: linear-gradient(to top right,
+    transparent calc(50% - 2px), rgba(10, 16, 24, .85) calc(50% - 2px),
+    rgba(10, 16, 24, .85) calc(50% + 2px), transparent calc(50% + 2px));
 }
+.colour-cell.mine { box-shadow: 0 0 0 3px var(--gold); }
 
 /* ------------------------------------------------------------ about */
 .about-hero { text-align: center; padding: 6px 0 10px; }

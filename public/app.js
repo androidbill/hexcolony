@@ -59,6 +59,9 @@ function shuffle(list) {
 let playerId = localStorage.getItem('hexcolony_pid');
 if (!playerId) { playerId = rid(); localStorage.setItem('hexcolony_pid', playerId); }
 
+// The last colour this device chose. A preference, not a claim: online it only decides
+// which square starts ticked in the picker, and the room decides the rest. Solo, where
+// there is nobody to clash with, it is simply used.
 let myColorIdx = Number(localStorage.getItem('hexcolony_color') ?? 0);
 if (!Number.isInteger(myColorIdx) || myColorIdx < 0 || myColorIdx >= R.PLAYER_COLORS.length) myColorIdx = 0;
 
@@ -144,12 +147,16 @@ function closeSheet() {
 // because nothing re-renders while it is still your turn there was then no way to get
 // them back — the game simply looked frozen. They now stay put until they are answered.
 const MANDATORY_SHEETS = new Set(['sheet-discard', 'sheet-steal']);
+// Colour joins them only while you have not got one: it is a sheet you can visit later
+// to swap, and a sheet you cannot leave when you have just walked in without one.
+const sheetIsMandatory = (id) => MANDATORY_SHEETS.has(id)
+  || (id === 'sheet-colour' && needsColour());
 $('veil').addEventListener('click', () => {
-  if (MANDATORY_SHEETS.has(openSheet)) return;
+  if (sheetIsMandatory(openSheet)) return;
   closeSheet();
 });
 document.addEventListener('click', (e) => {
-  if (e.target.closest('[data-close]')) closeSheet();
+  if (e.target.closest('[data-close]') && !sheetIsMandatory(openSheet)) closeSheet();
 });
 
 // ---------------------------------------------------------------- state
@@ -213,78 +220,133 @@ const isHost = () => room && room.hostId === playerId;
 const game = () => room && room.game;
 const seatOrder = () => (room?.order || Object.keys(room?.players || {}));
 
+// ---------------------------------------------------------------- colours
+// Colour is chosen inside the room, never before it.
+//
+// It used to be picked on the home screen, which meant it was picked with no idea who
+// else was at the table — so two people who both liked red both arrived as red, and the
+// board became unreadable. There is no reading of "your colour" on the home screen that
+// can avoid that, because the information needed to avoid it is in the room.
+//
+// So you join first with no colour at all, and the picker comes up. Everyone is looking
+// at the same grid, taken colours are struck through with the initials of whoever has
+// them, and claiming one runs through a transaction — two people can tap the same
+// square in the same instant, and one of them has to be told.
+
+/** Grey, for a player who has joined but not yet chosen. */
+const NO_COLOUR = { key: 'none', hex: '#6b7a8c', ink: '#ffffff', name: 'Choosing' };
+
 function paletteFor(pid) {
   const p = room?.players?.[pid];
-  const idx = p?.colorIdx ?? 0;
+  const idx = p?.colorIdx;
+  if (!Number.isInteger(idx)) return NO_COLOUR;
   return R.PLAYER_COLORS[idx % R.PLAYER_COLORS.length];
 }
 const colorFor = (pid) => paletteFor(pid).hex;
 const inkFor = (pid) => paletteFor(pid).ink;
+const hasColour = (pid) => Number.isInteger(room?.players?.[pid]?.colorIdx);
 
-/** Colours already spoken for by somebody else in this room. */
+/** Colours already spoken for by somebody else in this room, by index. */
 function takenColours() {
   const out = new Map();
   for (const [id, p] of Object.entries(room?.players || {})) {
-    if (id === playerId) continue;
-    out.set(p.colorIdx ?? 0, p);
+    if (id === playerId || !Number.isInteger(p.colorIdx)) continue;
+    out.set(p.colorIdx, p);
   }
   return out;
 }
 
-/** The colour you want if it is free, otherwise the first that is. */
-function freeColourIdx(players) {
-  const used = new Set(Object.values(players || {}).map((p) => p.colorIdx ?? 0));
-  if (!used.has(myColorIdx)) return myColorIdx;
-  for (let i = 0; i < R.PLAYER_COLORS.length; i++) if (!used.has(i)) return i;
-  return myColorIdx;
-}
+/** Everyone still to choose. The game cannot start while this has anyone in it. */
+const stillChoosing = () => Object.keys(room?.players || {}).filter((id) => !hasColour(id));
+
+/** Whether this device is being held in the picker rather than merely visiting it. */
+const needsColour = () => !solo && !!roomRef && room?.state === 'lobby' && !hasColour(playerId);
+
 function nameFor(pid) { return room?.players?.[pid]?.name || 'Someone'; }
 view.colorOf = colorFor;
 
-// ---------------------------------------------------------------- landing screen
-$('name-input').value = localStorage.getItem('hexcolony_name') || '';
-$('btn-colour').addEventListener('click', () => { unlock(); sfx.tap(); openColourPicker(); });
-
 function drawColourGrid() {
   const taken = takenColours();
-  const mine = room?.players?.[playerId]?.colorIdx ?? myColorIdx;
+  const mine = room?.players?.[playerId]?.colorIdx;
   $('colour-grid').innerHTML = R.PLAYER_COLORS.map((c, i) => {
     const by = taken.get(i);
-    return `<button class="colour-cell${i === mine ? ' on' : ''}" data-colour="${i}"
+    const cls = ['colour-cell'];
+    if (by) cls.push('taken');
+    if (i === mine) cls.push('mine');
+    return `<button class="${cls.join(' ')}" data-colour="${i}"
       style="--c:${c.hex};--ink:${c.ink}"${by ? ' disabled' : ''}
       aria-label="${esc(c.name)}${by ? ` — taken by ${esc(by.name)}` : ''}">
       ${by ? `<span class="taken-by">${esc((by.name || '?').slice(0, 2))}</span>` : (i === mine ? '✓' : '')}
     </button>`;
   }).join('');
-  for (const b of document.querySelectorAll('[data-colour]')) {
+  // Scoped to the grid, not the document: the old selector was global, and the sea
+  // picker is a grid of swatches too.
+  for (const b of $('colour-grid').querySelectorAll('[data-colour]')) {
     b.addEventListener('click', () => pickColour(Number(b.dataset.colour)));
+  }
+
+  const waiting = stillChoosing().filter((id) => id !== playerId).map(nameFor);
+  $('colour-sub').textContent = needsColour()
+    ? 'Pick one to sit down. A colour with initials on it is already gone.'
+    : waiting.length
+      ? `Still choosing: ${waiting.join(', ')}.`
+      : 'Everyone has a colour. Tap another to swap, while the game has not started.';
+  // While you have no colour there is nothing to go back to, so there is no way out.
+  $('colour-close').hidden = needsColour();
+}
+
+async function pickColour(idx) {
+  if (!R.PLAYER_COLORS[idx]) return;
+  if (room && room.state !== 'lobby') return toast('Colours are locked once the game starts.');
+  if (takenColours().has(idx)) return toast('Somebody already has that colour.');
+  sfx.tap();
+
+  // Solo, or a room this device is not actually posting to: nothing to race against.
+  if (!roomRef) {
+    myColorIdx = idx;
+    localStorage.setItem('hexcolony_color', String(idx));
+    if (solo && room?.players?.[playerId]) { room.players[playerId].colorIdx = idx; saveSolo(); render(); }
+    drawColourGrid();
+    return;
+  }
+
+  try {
+    await withTimeout(runTransaction(db, async (tx) => {
+      const snap = await tx.get(roomRef);
+      if (!snap.exists()) throw new Error('gone');
+      const players = snap.data().players || {};
+      // The whole reason this is a transaction: two phones can tap the same square in
+      // the same instant, and a plain write would let both of them have it.
+      for (const [id, p] of Object.entries(players)) {
+        if (id !== playerId && p.colorIdx === idx) throw new Error('taken');
+      }
+      tx.update(roomRef, { [`players.${playerId}.colorIdx`]: idx });
+    }), 8000);
+    myColorIdx = idx;
+    localStorage.setItem('hexcolony_color', String(idx));
+    // Claiming one is the whole job of this sheet, so it gets out of the way.
+    if (openSheet === 'sheet-colour') closeSheet();
+  } catch (e) {
+    if (e?.message === 'taken') { toast('Somebody just took that one.'); sfx.error(); }
+    else if (e?.message === 'gone') toast('The room is gone.');
+    else toast('Could not claim that colour — check your connection.');
+    drawColourGrid();
   }
 }
 
-function pickColour(idx) {
-  if (!R.PLAYER_COLORS[idx]) return;
-  if (takenColours().has(idx)) return toast('Somebody already has that colour.');
-  if (room && room.state !== 'lobby') return toast('Colours are locked once the game starts.');
-  myColorIdx = idx;
-  localStorage.setItem('hexcolony_color', String(idx));
-  sfx.tap();
-  paintLookButton();
-  if (roomRef) updateDoc(roomRef, { [`players.${playerId}.colorIdx`]: idx }).catch(() => {});
-  else if (solo && room?.players?.[playerId]) { room.players[playerId].colorIdx = idx; saveSolo(); render(); }
-  drawColourGrid();
-}
-
-/** The swatch on the home screen button, so your colour is visible before you sit down. */
-function paintLookButton() {
-  const c = R.PLAYER_COLORS[myColorIdx] || R.PLAYER_COLORS[0];
-  $('look-swatch').style.setProperty('--c', c.hex);
-  $('colour-name').textContent = c.name;
-}
-
-/** Colour is the only thing left to choose, so this is the whole of it. */
 function openColourPicker() {
   drawColourGrid();
   sheet('sheet-colour');
+}
+
+/**
+ * Bring the picker up for somebody who has just walked in without a colour, and keep the
+ * grid honest while it is open — the crossings-out are only useful if they appear as
+ * other people claim theirs.
+ */
+function syncColourPicker() {
+  if (needsColour() && openSheet !== 'sheet-colour') { openColourPicker(); return; }
+  if (openSheet === 'sheet-colour') drawColourGrid();
 }
 
 $('code-input').addEventListener('input', (e) => {
@@ -301,8 +363,15 @@ function roomIsStale(data) {
   return Date.now() > expires;
 }
 
-function freshPlayer(name, colorIdx) {
-  return { name, colorIdx, joinedAt: Date.now() };
+/**
+ * A player as they walk in: no colour.
+ *
+ * Deliberately null rather than a guess. A guess is what the home-screen picker was, and
+ * two people guessing red is what this is here to stop — the room decides, once you can
+ * see who else is in it.
+ */
+function freshPlayer(name) {
+  return { name, colorIdx: null, joinedAt: Date.now() };
 }
 
 $('btn-create').addEventListener('click', createRoom);
@@ -339,7 +408,7 @@ async function createRoom() {
       hostId: playerId,
       state: 'lobby',
       settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: SEA_DEFAULT },
-      players: { [playerId]: freshPlayer(name, myColorIdx) },
+      players: { [playerId]: freshPlayer(name) },
       order: [],
       game: null,
     }).catch((e) => { console.error(e); toast('Could not create the room — check your connection.'); });
@@ -377,7 +446,7 @@ async function joinRoom() {
       if (Object.keys(data.players || {}).length >= 6) return toast('That room is full.');
     }
     if (!data || !data.players?.[playerId]) {
-      updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name, freeColourIdx(data?.players)) }).catch(() => {});
+      updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name) }).catch(() => {});
     }
     sfx.join();
     enterRoom(code);
@@ -418,13 +487,13 @@ async function joinDiscordRoom() {
         hostId: playerId,
         state: 'lobby',
         settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: SEA_DEFAULT },
-        players: { [playerId]: freshPlayer(name, myColorIdx) },
+        players: { [playerId]: freshPlayer(name) },
         order: [],
         game: null,
       }), 8000);
     } else if (!data.players?.[playerId]) {
       if (data.state !== 'lobby') return toast('That game has already started.');
-      await withTimeout(updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name, freeColourIdx(data.players)) }), 8000);
+      await withTimeout(updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name) }), 8000);
     }
     sfx.join();
     enterRoom(code);
@@ -494,6 +563,13 @@ function setConnBadge(bad) { $('conn-badge').hidden = !bad; }
 
 function applyRoom(data, fresh) {
   if (fresh) markFresh();
+  // Removed from the lobby by the host. Nothing used to be able to take a player out of
+  // a room, so nothing ever had to notice it happening.
+  if (fresh && data.state === 'lobby' && room && !data.players?.[playerId]) {
+    toast('The host removed you from the room.');
+    leaveRoom(false);
+    return;
+  }
   serverRoom = data;
   if (data.pulseAt) applyPulse({ at: data.pulseAt, by: data.pulseBy }, fresh);
   // A guess is on screen and this snapshot predates it. Drawing it would take the road
@@ -862,6 +938,9 @@ async function beginMapChoice() {
   if (!solo && Object.keys(room.players || {}).length < 2) {
     return toast('You need at least two players.');
   }
+  if (!solo && stillChoosing().length) {
+    return toast(`Still waiting on a colour from ${stillChoosing().map(nameFor).join(', ')}.`);
+  }
   const patch = { state: 'map', mapSeeds: [newSeed()], mapIndex: 0 };
   if (solo) { Object.assign(room, patch); render(); return; }
   try { await updateDoc(roomRef, patch); }
@@ -1214,7 +1293,6 @@ function exitSolo() {
   closeSheet();
   keepAwake(false);
   showScreen('screen-home');
-  paintLookButton();
   refreshResume();
 }
 
@@ -1442,16 +1520,35 @@ function renderLobby() {
     // Your own row opens the colour picker — the only place it is reachable once you
     // have left the home screen, and the only place the "already taken" marks mean
     // anything, since that is when you can see who else is at the table.
+    if (!hasColour(pid)) tags.push('<span class="seat-tag choosing">Choosing a colour</span>');
     const tag = pid === playerId ? 'button' : 'div';
     const extra = pid === playerId ? ' data-my-seat title="Tap to change your colour"' : '';
+    // Somebody who joins and then walks away used to cost nothing; now they hold the
+    // start button down, because the game will not begin while a seat is still grey. So
+    // the host gets a way to clear one. There was no way to remove anybody before this.
+    const kick = (isHost() && !solo && pid !== playerId)
+      ? `<button class="seat-kick" data-kick="${esc(pid)}" aria-label="Remove ${esc(p.name)}">✕</button>`
+      : '';
     return `<${tag} class="seat${pid === playerId ? ' seat-me' : ''}" style="border-left-color:${esc(c)};--c:${esc(c)}"${extra}>
       <span class="seat-swatch"></span>
-      <span class="seat-name">${esc(p.name)}</span>${tags.join('')}
+      <span class="seat-name">${esc(p.name)}</span>${tags.join('')}${kick}
     </${tag}>`;
   }).join('');
 
+  for (const b of $('seat-list').querySelectorAll('[data-kick]')) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const who = b.dataset.kick;
+      sfx.tap();
+      updateDoc(roomRef, { [`players.${who}`]: deleteField() })
+        .then(() => toast(`${nameFor(who)} removed.`))
+        .catch(() => toast('Could not remove them — check your connection.'));
+    });
+  }
+
   const mySeat = document.querySelector('[data-my-seat]');
   if (mySeat) mySeat.addEventListener('click', () => { unlock(); sfx.tap(); openColourPicker(); });
+  syncColourPicker();
 
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 10);
@@ -1494,10 +1591,16 @@ function renderLobby() {
   }
 
   const enough = ids.length >= 2;
-  $('btn-start').disabled = !enough || !isHost();
+  // Starting with somebody still grey would seat them in a colour they never chose, and
+  // the whole point of moving the choice into the room was that nobody gets one handed
+  // to them.
+  const choosing = stillChoosing().map(nameFor);
+  $('btn-start').disabled = !enough || !isHost() || choosing.length > 0;
   $('start-hint').textContent = !enough
     ? 'Needs at least 2 players.'
-    : isHost() ? 'Everyone in? Pick a map next.' : `Waiting for ${esc(nameFor(room.hostId))} to start.`;
+    : choosing.length
+      ? `Waiting on a colour from ${esc(choosing.join(', '))}.`
+      : isHost() ? 'Everyone in? Pick a map next.' : `Waiting for ${esc(nameFor(room.hostId))} to start.`;
   $('lobby-hint').textContent = isHost()
     ? 'Share the code — players can join until you start.'
     : 'You can change your name and colour on the home screen.';
@@ -3242,7 +3345,6 @@ window.HEXCOLONY = {
   }
 
   showScreen('screen-home');
-  paintLookButton();
   refreshResume();
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
 

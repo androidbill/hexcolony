@@ -32,6 +32,20 @@ order, roll for production, build with wood/brick/sheep/wheat/ore, upgrade settl
 to cities, buy development cards, take Longest Road at five and Largest Army at three
 knights, and win at ten points (configurable, 5-15).
 
+## Colours
+
+Chosen in the room, never before it. Picking on the home screen meant picking with no
+idea who else was at the table, so two people who both liked red both arrived as red —
+and no reading of "your colour" on the home screen can avoid that, because the
+information needed to avoid it is in the room.
+
+So you join with no colour, the picker comes up, and everybody is looking at the same
+grid: taken colours are struck through and carry the initials of whoever holds them. A
+claim runs through a transaction, because two phones can tap the same square in the same
+instant and one of them has to be told. The game will not start while a seat is still
+grey, and the host can remove somebody who joined and wandered off — there was no way to
+remove anybody before, and now there has to be.
+
 ## Running it locally
 
 No build step. It is plain ES modules served as static files:
