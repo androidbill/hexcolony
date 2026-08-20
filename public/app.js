@@ -717,7 +717,7 @@ function enterRoom(code) {
   clockSamples = []; clockOffset = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
   announcedUp = null;
-  resetGuess();
+  resetGuess(); resetTrade();
   subscribeRoom();
   subscribePulse();
   // One immediate beat so this phone has a clock reading straight away.
@@ -777,7 +777,7 @@ async function leaveRoom(removeSelf = true) {
   setConnBadge(false);
   roomCode = null; roomRef = null; pulseRef = null; room = null;
   board = null; boardSeed = null;
-  resetGuess();
+  resetGuess(); resetTrade();
   localStorage.removeItem('hexcolony_room');
   keepAwake(false);
   closeSheet();
@@ -1161,7 +1161,7 @@ function enterSolo(saved) {
   roomCode = null; roomRef = null; pulseRef = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
   announcedUp = null;
-  resetGuess();
+  resetGuess(); resetTrade();
   room = {
     code: 'SOLO', hostId: playerId, state: 'playing', solo: true,
     players: saved.players, order: saved.order, game: saved.game,
@@ -1204,7 +1204,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   roomCode = null; roomRef = null; pulseRef = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
   announcedUp = null;
-  resetGuess();
+  resetGuess(); resetTrade();
   boardSeed = null;
   room = {
     code: 'SOLO', hostId: playerId, state: 'map', solo: true,
@@ -1743,6 +1743,7 @@ function render() {
   renderDice(g);
   renderHand(g);
   renderActions(g);
+  renderTrade(g);
   syncSheets(g);
 
   if (g.phase === 'over') renderOver(g);
@@ -1955,11 +1956,37 @@ function renderHand(g) {
   const devs = R.devCount(p);
   $('hand').innerHTML = RESOURCES.map((r) => {
     const n = p.res[r] || 0;
+    // While trading, the hand is the give side — there is no second copy of it in a
+    // sheet any more, and no row of "have 3" labels standing in for cards you could not
+    // see. The badge still counts what you hold; the label under it says how many of
+    // them are going, or what the bank charges for them when none are.
+    const take = trading ? (giveSel[r] || 0) : 0;
+    return resCard(r, {
+      count: n || null, dim: !n, size: 'sm', selected: !!take,
+      dataset: ` data-res="${r}"`,
+      label: trading ? (take ? `give ${take}` : `${R.tradeRate(g, board, playerId, r)}:1`) : '',
+    });
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
-    return resCard(r, { count: n || null, dim: !n, size: 'sm', dataset: ` data-res="${r}"` });
   }).join('') + devCard({ count: devs || null, dim: !devs, size: 'sm' });
 }
+
+// Tapping your own card is how you overrule the payment the app worked out. One more
+// each tap, round to nothing at the top, so a tap is always undoable by tapping again.
+$('hand').addEventListener('click', (e) => {
+  if (!trading) return;
+  const el = e.target.closest('[data-res]');
+  const g = game();
+  if (!el || !g) return;
+  const r = el.dataset.res;
+  const have = g.players[playerId]?.res[r] || 0;
+  if (!have) return;
+  payTouched = true;
+  giveSel[r] = ((giveSel[r] || 0) + 1) % (have + 1);
+  if (!giveSel[r]) delete giveSel[r];
+  sfx.tap();
+  render();
+});
 
 function actBtn(id, ico, label, opts = {}) {
   const cls = ['act'];
@@ -2064,7 +2091,7 @@ function onAction(id) {
   switch (id) {
     case 'roll': send({ type: 'roll' }); break;
     case 'end': send({ type: 'endTurn' }); break;
-    case 'trade': openTrade(g); break;
+    case 'trade': startTrade(); break;
     case 'dev': openDev(g); break;
     case 'discard': openDiscard(g); break;
     case 'steal': openSteal(g); break;
@@ -2273,43 +2300,104 @@ function openPickRes(kind) {
 // independent, and the same card may be promised in two of them — you want whoever bites
 // first, not both — because the engine re-checks the hand at the moment a deal closes.
 
+// ---------------------------------------------------------------- trading
+// Trading happens in the tray, not in a sheet over it.
+//
+// It used to be a sheet, and the sheet covered the two things you need in order to trade
+// at all: your own cards, and the turn clock. It duplicated the hand as a row of "have 3"
+// labels — a worse copy of the cards sitting underneath it — and left you doing
+// arithmetic against a deadline you could not see. Four people played a game with it and
+// all four found it confusing, which is a clear enough verdict.
+//
+// So the board stays up, the timer stays up, and the cards you tap are your actual hand.
+// You ask for what you need first, because that is the half a player already knows, and
+// the payment works itself out at your own port rates.
+const WANT_MAX = 4;
+
+let trading = false;
 let giveSel = {}, wantSel = {};
+// Once you have picked your own payment the app stops picking one for you. Choosing
+// cards by hand says plainly that the automatic answer was not the one you wanted, and
+// having it overwritten on your next tap would be maddening.
+let payTouched = false;
+// Acceptances already announced, as `offerId:playerId`. An acceptance is not written to
+// the game log — see the note in syncSheets — so nothing else would ever say it happened.
+const notedAccepts = new Set();
 
 const bundleTotal = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 const kindsIn = (o) => Object.keys(o).filter((r) => o[r] > 0);
+const bundleText = (o) => kindsIn(o)
+  .map((r) => `${o[r]} ${RES_NAME[r].toLowerCase()}`).join(' + ') || 'nothing';
+
+function startTrade() {
+  trading = true;
+  giveSel = {}; wantSel = {}; payTouched = false;
+  render();
+}
+
+function stopTrade(quiet = false) {
+  trading = false;
+  giveSel = {}; wantSel = {}; payTouched = false;
+  if (!quiet) render();
+}
+
+/** A different game entirely: forget the basket and every offer already announced. */
+function resetTrade() {
+  trading = false;
+  giveSel = {}; wantSel = {}; payTouched = false;
+  notedAccepts.clear();
+  // The tray is only redrawn once there is a game to draw it for, and the rows would
+  // otherwise still be showing the last one's offers while the lobby loads.
+  for (const id of ['trade-want', 'trade-bar', 'trade-offers']) $(id).hidden = true;
+  $('actions').hidden = false;
+}
 
 /**
- * What this selection is worth at the bank, and whether it balances.
+ * The cheapest way to pay for what has been asked for, out of the hand, at this player's
+ * own rates.
  *
- * Any basket, either way. Each given resource is priced at its own rate, so six wood
- * through a 2:1 port is three cards and they can be three different cards — the engine
- * settles the whole thing as one move rather than as three trades in a row.
+ * Lowest rate first — owning a 2:1 port ought to be the reason it gets used — and among
+ * equal rates the deepest pile, so a trade spends the wheat you are drowning in rather
+ * than the last of your ore. Nothing being asked for is ever spent: the bank will not
+ * take a card in exchange for itself.
  *
- * The note is the useful half of this: when the sides do not balance it says what the
- * cards are actually worth, so "buys 3 — asked for 2" tells you to add one rather than
- * leaving a dead button and no explanation.
+ * Null means the hand cannot cover the ask at any rate, which is the signal that this
+ * one has to go to the table instead of the bank.
  */
-/**
- * What the give side is worth in cards back, or 0 if it is not a clean bank basket.
- *
- * Shared by the Bank button and by the tap-to-ask wrap, so the two can never disagree
- * about how many cards are owed.
- */
-function bankCredits(g) {
-  let credits = 0;
-  for (const r of kindsIn(giveSel)) {
-    const rate = R.tradeRate(g, board, playerId, r);
-    if (giveSel[r] % rate !== 0) return 0;
-    if ((g.players[playerId].res[r] || 0) < giveSel[r]) return 0;
-    credits += giveSel[r] / rate;
+function autoPay(g) {
+  let left = bundleTotal(wantSel);
+  const p = g.players[playerId];
+  if (!left || !p) return {};
+  const asking = new Set(kindsIn(wantSel));
+  const piles = RESOURCES
+    .filter((r) => !asking.has(r) && (p.res[r] || 0) > 0)
+    .map((r) => ({ r, have: p.res[r], rate: R.tradeRate(g, board, playerId, r) }))
+    .sort((a, b) => a.rate - b.rate || b.have - a.have);
+
+  const pay = {};
+  for (const pile of piles) {
+    while (left > 0 && pile.have - (pay[pile.r] || 0) >= pile.rate) {
+      pay[pile.r] = (pay[pile.r] || 0) + pile.rate;
+      left -= 1;
+    }
+    if (!left) break;
   }
-  return credits;
+  return left ? null : pay;
+}
+
+/** Work the payment out again, unless the player has taken it over. */
+function refillPay(g) {
+  if (payTouched) return;
+  giveSel = autoPay(g) || {};
 }
 
 function bankPlan(g) {
+  if (!g.players[playerId]) return { ok: false, note: 'You are watching this game' };
   const gk = kindsIn(giveSel), wk = kindsIn(wantSel);
   if (!gk.length || !wk.length) return { ok: false, note: 'Pick both sides' };
-  for (const r of wk) if (giveSel[r]) return { ok: false, note: 'Same card both ways' };
+  for (const r of wk) {
+    if (giveSel[r]) return { ok: false, note: 'The bank will not swap a card for itself' };
+  }
 
   const held = g.players[playerId].res;
   let credits = 0;
@@ -2317,23 +2405,29 @@ function bankPlan(g) {
   for (const r of gk) {
     const rate = R.tradeRate(g, board, playerId, r);
     if ((held[r] || 0) < giveSel[r]) return { ok: false, note: 'More than you hold' };
-    if (giveSel[r] % rate !== 0) odd.push(`${RES_NAME[r].toLowerCase()} goes in ${rate}s`);
+    if (giveSel[r] % rate !== 0) {
+      odd.push(`The bank takes ${RES_NAME[r].toLowerCase()} ${rate} at a time`);
+    }
     credits += Math.floor(giveSel[r] / rate);
   }
   if (odd.length) return { ok: false, note: odd[0] };
 
   const asked = bundleTotal(wantSel);
   if (!credits) return { ok: false, note: 'Not enough to trade' };
-  if (credits !== asked) return { ok: false, note: `Buys ${credits} — asked for ${asked}` };
-  for (const r of wk) {
-    if ((g.bank[r] || 0) < wantSel[r]) return { ok: false, note: `Bank is short of ${RES_NAME[r].toLowerCase()}` };
+  if (credits !== asked) {
+    return { ok: false, note: `That buys ${credits} card${credits > 1 ? 's' : ''} — you asked for ${asked}` };
   }
-  const rates = [...new Set(gk.map((r) => R.tradeRate(g, board, playerId, r)))].sort();
-  return { ok: true, note: `${rates.join('/')}:1 — ${credits} card${credits > 1 ? 's' : ''}` };
+  for (const r of wk) {
+    if ((g.bank[r] || 0) < wantSel[r]) {
+      return { ok: false, note: `The bank is out of ${RES_NAME[r].toLowerCase()}` };
+    }
+  }
+  return { ok: true, note: `${bundleText(giveSel)} → ${bundleText(wantSel)}` };
 }
 
 /** Can this selection be put to the table? */
 function offerPlan(g) {
+  if (!g.players[playerId]) return { ok: false, note: 'You are watching this game' };
   if (!bundleTotal(giveSel) || !bundleTotal(wantSel)) return { ok: false, note: 'Pick both sides' };
   const held = g.players[playerId].res;
   for (const r of kindsIn(giveSel)) {
@@ -2341,128 +2435,76 @@ function offerPlan(g) {
   }
   const mine = (g.trades || []).filter((t) => t.from === playerId).length;
   if (mine >= R.MAX_OFFERS) return { ok: false, note: `${R.MAX_OFFERS} offers is the limit` };
-  return { ok: true, note: mine ? `${mine} already out` : 'Offer to the table' };
-}
-
-function openTrade(g) {
-  giveSel = {}; wantSel = {};
-  drawTrade(g);
-  sheet('sheet-trade');
+  return { ok: true, note: 'Offer to the table' };
 }
 
 /**
- * The same sheet, opened because somebody accepted rather than because it was asked for.
+ * One line saying what the basket does, in the order a player thinks about it.
  *
- * Keeps whatever was half-built in the pickers: being interrupted by good news should not
- * cost you the offer you were in the middle of putting together.
+ * The old sheet answered with diagnostics — "Buys 3 — asked for 2", "Pick both sides" —
+ * which say what is wrong without saying what to do about it. Every line here either
+ * states the deal or gives the next instruction.
  */
-function openTradeKeepingSelection(g) {
-  drawTrade(g);
-  sheet('sheet-trade');
+function tradeReadout(g, bank, offer) {
+  const wantN = bundleTotal(wantSel);
+  const giveN = bundleTotal(giveSel);
+  if (!wantN) {
+    return giveN ? 'Now tap what you want for them.'
+      : 'Tap what you need. The payment fills itself in.';
+  }
+  if (bank.ok) return `Bank: ${bank.note}`;
+  if (!giveN) return 'Your hand will not cover that at the bank — tap cards to offer a swap.';
+  if (offer.ok) return `Offer: ${bundleText(giveSel)} → ${bundleText(wantSel)}`;
+  return bank.note;
 }
 
-function drawTrade(g) {
-  const p = g.players[playerId];
-  if (!p) return;
-
-  const build = (elId, sel, side) => {
-    $(elId).innerHTML = RESOURCES.map((r) => {
-      const rate = R.tradeRate(g, board, playerId, r);
-      // The rate belongs on the card, not in a legend somewhere else: it is the number
-      // that decides what tapping this card does.
-      const sub = side === 'give'
-        ? `have ${p.res[r] || 0} · <b>${rate}:1</b>`
-        : `bank ${g.bank[r] || 0}`;
-      const label = side === 'give'
-        ? `Take ${rate} ${RES_NAME[r]} for trade`
-        : `Ask for ${RES_NAME[r]}`;
-      return `<div class="pick-col">
-        <button class="pick-plain" data-lot="${elId}:${r}" aria-label="${label}">
-          ${resCard(r, { size: 'sm', count: sel[r] || null, selected: !!sel[r], dim: !sel[r] })}
-        </button>
-        <div class="pick-pm">
-          <button data-tsel="${elId}:-:${r}" aria-label="One fewer ${RES_NAME[r]}">−</button>
-          <button data-tsel="${elId}:+:${r}" aria-label="One more ${RES_NAME[r]}">+</button>
-        </div>
-        <span class="pick-have">${sub}</span>
-      </div>`;
-    }).join('');
-  };
-  build('give-picker', giveSel, 'give');
-  build('want-picker', wantSel, 'want');
-
-  /**
-   * Tapping the card itself takes a whole lot.
-   *
-   * Five sheep and a 3:1 port should not be four taps to set up. One tap on the sheep
-   * takes three — the exact number the bank deals in — and each tap after that takes
-   * another lot, until there is not enough left for one, at which point it wraps back to
-   * nothing. So a tap can always undo itself, and the plus and minus are still there for
-   * the odd counts a player-to-player offer might want.
-   *
-   * Where the hand cannot cover even one lot the tap selects the lot anyway, because at
-   * that point the cards are only good for offering to another player, and picking them
-   * all up is what you would want to do next.
-   */
-  for (const b of document.querySelectorAll('[data-lot]')) {
-    b.addEventListener('click', () => {
-      const [elId, r] = b.dataset.lot.split(':');
-      if (elId === 'give-picker') {
-        const next = R.lotAfterTap(
-          giveSel[r] || 0, p.res[r] || 0, R.tradeRate(g, board, playerId, r),
-        );
-        if (next) giveSel[r] = next; else delete giveSel[r];
-      } else {
-        // Asking is one at a time, but it wraps once the basket is already paid for, so
-        // an over-tap costs a tap rather than a trip to the minus button.
-        const cur = wantSel[r] || 0;
-        const credits = bankCredits(g);
-        const others = bundleTotal(wantSel) - cur;
-        const room = credits ? Math.max(0, credits - others) : 0;
-        const next = room ? (cur >= room ? 0 : cur + 1) : cur + 1;
-        if (next) wantSel[r] = next; else delete wantSel[r];
-      }
-      sfx.tap();
-      drawTrade(g);
+/** The "what do you need" row: five cards, tap for one more. */
+function renderWantRow(g) {
+  $('trade-want').innerHTML = '<span class="trade-lead">I need</span>' + RESOURCES.map((r) => {
+    const n = wantSel[r] || 0;
+    return resCard(r, {
+      size: 'sm', count: n || null, selected: !!n, dim: !n,
+      dataset: ` data-want="${r}"`,
+      label: `${g.bank[r] || 0} left`,
     });
-  }
+  }).join('');
+}
 
-  for (const b of document.querySelectorAll('[data-tsel]')) {
-    b.addEventListener('click', () => {
-      const [elId, op, r] = b.dataset.tsel.split(':');
-      const sel = elId === 'give-picker' ? giveSel : wantSel;
-      if (op === '+') {
-        // You can only offer what is in your hand; there is no cap on what you may ask for.
-        if (elId === 'give-picker' && (sel[r] || 0) >= (p.res[r] || 0)) return;
-        sel[r] = (sel[r] || 0) + 1;
-      } else {
-        if (!sel[r]) return;
-        sel[r] -= 1;
-        if (!sel[r]) delete sel[r];
-      }
-      sfx.tap();
-      drawTrade(g);
-    });
-  }
-
+/**
+ * The trade bar: what the basket does, and the ways to close it.
+ *
+ * Bank and table are both offered when both are genuinely open, rather than as two
+ * permanently half-dead buttons with a note each. Which one is highlighted depends on
+ * which one can actually happen.
+ */
+function renderTradeBar(g) {
   const bank = bankPlan(g);
   const offer = offerPlan(g);
-  $('btn-trade-bank').disabled = !bank.ok;
-  $('btn-trade-players').disabled = !offer.ok;
-  $('bank-note').textContent = bank.note;
-  $('players-note').textContent = offer.note;
+  const btn = (act, label, cls, off) =>
+    `<button class="btn ${cls}" data-trade="${act}"${off ? ' disabled' : ''}>${esc(label)}</button>`;
 
-  drawMyOffers(g);
+  $('trade-bar').innerHTML =
+    `<div class="trade-note">${esc(tradeReadout(g, bank, offer))}</div>
+     <div class="trade-go">
+       ${btn('cancel', 'Cancel', 'btn-ghost', false)}
+       ${btn('table', 'Ask table', 'btn-key', !offer.ok)}
+       ${btn('bank', 'Bank', bank.ok ? 'btn-key primary' : 'btn-key', !bank.ok)}
+     </div>`;
 }
 
-/** Your own offers, and what people have said about them. */
-function drawMyOffers(g) {
+/**
+ * Your own offers and what people have said about them, in the tray.
+ *
+ * Outside trade mode as well as in it. An acceptance is worth seeing without going
+ * looking for it, and it used to live behind a sheet you had to reopen.
+ */
+function renderMyOffers(g) {
+  const box = $('trade-offers');
   const mine = (g.trades || []).filter((t) => t.from === playerId);
-  const box = $('my-offers');
   if (!mine.length) { box.innerHTML = ''; box.hidden = true; return; }
   box.hidden = false;
 
-  box.innerHTML = `<div class="field-label">On the table</div>` + mine.map((t) => {
+  box.innerHTML = mine.map((t) => {
     const rows = g.seats.filter((s) => s !== playerId).map((pid) => {
       const r = t.replies[pid];
       const tag = r === 'yes' ? 'Accepts — tap to trade' : r === 'no' ? 'Declined' : 'Thinking…';
@@ -2483,39 +2525,85 @@ function drawMyOffers(g) {
     </div>`;
   }).join('');
 
-  for (const b of box.querySelectorAll('[data-close-deal]')) {
-    b.addEventListener('click', () => {
-      const [id, who] = b.dataset.closeDeal.split(':');
-      send({ type: 'acceptTrade', id: Number(id), with: who });
-    });
-  }
-  for (const b of box.querySelectorAll('[data-drop-offer]')) {
-    b.addEventListener('click', () => {
-      sfx.tap();
-      send({ type: 'cancelTrade', id: Number(b.dataset.dropOffer) });
-    });
+  // Somebody saying yes is news, and a reply is not written to the game log, so this is
+  // the only place it can be announced.
+  for (const t of mine) {
+    for (const [pid, r] of Object.entries(t.replies)) {
+      const key = `${t.id}:${pid}`;
+      if (r !== 'yes' || notedAccepts.has(key)) continue;
+      notedAccepts.add(key);
+      toast(`${nameFor(pid)} accepts — tap to close the deal.`);
+      sfx.trade();
+    }
   }
 }
 
-$('btn-trade-bank').addEventListener('click', () => {
+/** The tray, in whichever mode it is in. */
+function renderTrade(g) {
+  const canTrade = R.isTurn(g, playerId) && g.phase === 'build' && !!g.players[playerId];
+  // The clock can run out under an open trade. Leaving the pickers up over somebody
+  // else's turn would be offering a move that no longer exists.
+  if (trading && !canTrade) stopTrade(true);
+  const on = trading && canTrade;
+
+  $('trade-want').hidden = !on;
+  $('trade-bar').hidden = !on;
+  $('actions').hidden = on;
+
+  renderMyOffers(g);
+  if (!on) return;
+  refillPay(g);
+  renderWantRow(g);
+  renderTradeBar(g);
+}
+
+// Delegated once, as the action bar is: every row here is rebuilt with innerHTML on each
+// render, so a listener bound to the element itself would die with it.
+$('trade-want').addEventListener('click', (e) => {
+  const el = e.target.closest('[data-want]');
   const g = game();
-  if (!g || !bankPlan(g).ok) return;
-  // One move for the whole basket. Sending it as several trades in a row meant a failure
-  // partway through left the player halfway into something they asked for as one thing.
-  send({ type: 'bankTrade', give: giveSel, want: wantSel });
-  giveSel = {}; wantSel = {};
-  const now = game();
-  if (now) drawTrade(now);
+  if (!el || !g) return;
+  // Straight up, and round to nothing at the top. Every tap can undo itself by carrying
+  // on tapping, which is the whole of the interaction — there are no plus and minus
+  // buttons to find any more.
+  const r = el.dataset.want;
+  wantSel[r] = ((wantSel[r] || 0) + 1) % (WANT_MAX + 1);
+  if (!wantSel[r]) delete wantSel[r];
+  sfx.tap();
+  render();
 });
 
-$('btn-trade-players').addEventListener('click', () => {
+$('trade-bar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-trade]');
   const g = game();
-  if (!g || !offerPlan(g).ok) return;
+  if (!b || b.disabled || !g) return;
+  const what = b.dataset.trade;
+  if (what === 'cancel') { sfx.tap(); stopTrade(); return; }
+  if (what === 'bank') {
+    if (!bankPlan(g).ok) return;
+    // One move for the whole basket. Sending it as several trades in a row meant a
+    // failure partway through left the player halfway into something they had asked for
+    // as one thing.
+    send({ type: 'bankTrade', give: giveSel, want: wantSel });
+    giveSel = {}; wantSel = {}; payTouched = false;
+    render();
+    return;
+  }
+  if (!offerPlan(g).ok) return;
   send({ type: 'offerTrade', give: giveSel, want: wantSel });
-  // Cleared for the next one — the whole point of the sheet staying open.
-  giveSel = {}; wantSel = {};
-  const now = game();
-  if (now) drawTrade(now);
+  giveSel = {}; wantSel = {}; payTouched = false;
+  render();
+});
+
+$('trade-offers').addEventListener('click', (e) => {
+  const deal = e.target.closest('[data-close-deal]');
+  if (deal) {
+    const [id, who] = deal.dataset.closeDeal.split(':');
+    send({ type: 'acceptTrade', id: Number(id), with: who });
+    return;
+  }
+  const drop = e.target.closest('[data-drop-offer]');
+  if (drop) { sfx.tap(); send({ type: 'cancelTrade', id: Number(drop.dataset.dropOffer) }); }
 });
 
 const cardBits = (obj) => cardRow(obj, { size: 'sm' });
@@ -2693,19 +2781,13 @@ function syncSheets(g) {
   // Anything still waiting on an answer from me, minus what I have already waved away.
   const asked = trades.filter((t) => t.from !== playerId
     && !t.replies[playerId] && !dismissedOffers.has(t.id));
-  // Any of my own offers somebody has said yes to — I have to be shown that, or the deal
-  // sits there unclosed with nothing on screen to say so.
-  const accepted = trades.some((t) => t.from === playerId
-    && Object.values(t.replies).includes('yes'));
 
+  // Your own offers no longer need a sheet reopening at you when somebody says yes:
+  // they live in the tray, under the board, whether or not you are still trading.
   if (asked.length) {
     if (openSheet !== 'sheet-offer' || changed) openOffer(g);
   } else if (openSheet === 'sheet-offer') {
     closeSheet();
-  } else if (accepted && openSheet !== 'sheet-trade') {
-    openTradeKeepingSelection(g);
-  } else if (openSheet === 'sheet-trade' && changed) {
-    drawTrade(g);            // replies landing while the sheet is open
   }
 
   // Now that Cards can be opened on somebody else's turn, it can still be open when
@@ -2754,7 +2836,7 @@ $('btn-again').addEventListener('click', async () => {
     await updateDoc(roomRef, { state: 'lobby', game: null, order: [] });
     lastSeq = 0;
     announcedUp = null;
-    resetGuess();
+    resetGuess(); resetTrade();
   } catch { toast('Could not reset the room.'); }
 });
 $('btn-home').addEventListener('click', () => leaveRoom(true));

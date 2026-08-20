@@ -65,6 +65,22 @@ One Firestore document per room holds the entire game. Every move runs inside a
 transaction: the engine re-validates against the state actually on the server, so two
 people acting at once cannot both win the race.
 
+### Trading
+
+Trading happens in the tray, not in a sheet over it. The board, the turn clock and your
+own cards all stay on screen, because those are the three things you need in order to
+decide a trade and the sheet used to cover two of them.
+
+You ask first: tap what you need, and the payment fills itself in — cheapest rate first,
+so a 2:1 port is used because you own it, and out of the deepest pile, so a trade spends
+the wheat you are drowning in rather than the last of your ore. Tapping your own cards
+takes the payment over, and the app stops choosing one for you until the trade is done.
+Everything is a plain tap that wraps back to nothing, so any tap undoes itself and there
+are no plus and minus buttons to find.
+
+One line under the cards says what the basket does — the deal in words, or the next
+instruction. Bank and table are offered as buttons only where each is genuinely open.
+
 ### Taps draw before the server answers
 
 A move goes up inside a transaction, and a transaction is a server read followed by a

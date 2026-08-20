@@ -223,7 +223,10 @@
   </div>
 
   <div class="tray">
+    <div class="trade-offers" id="trade-offers" hidden></div>
+    <div class="trade-want" id="trade-want" hidden></div>
     <div class="hand" id="hand"></div>
+    <div class="trade-bar" id="trade-bar" hidden></div>
     <div class="actions" id="actions"></div>
   </div>
 </section>
@@ -235,34 +238,6 @@
   <h3 class="sheet-title">Development cards</h3>
   <div id="dev-buy"></div>
   <div class="dev-list" id="dev-list"></div>
-  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
-</div>
-
-<div class="sheet" id="sheet-trade">
-  <h3 class="sheet-title">Trade</h3>
-  <p class="sheet-sub">Tap a card to take a whole trade's worth of it, or use &minus; and
-    + for odd amounts. Then choose who with — offers to players stay up until somebody
-    takes them, so you can put out more than one.</p>
-
-  <div class="field-label">You give</div>
-  <div class="res-picker" id="give-picker"></div>
-
-  <div class="field-label">You want</div>
-  <div class="res-picker" id="want-picker"></div>
-
-  <div class="trade-go">
-    <button class="btn btn-key" id="btn-trade-bank">
-      <span class="btn-label">Bank</span>
-      <span class="btn-note" id="bank-note"></span>
-    </button>
-    <button class="btn btn-key" id="btn-trade-players">
-      <span class="btn-label">Players</span>
-      <span class="btn-note" id="players-note"></span>
-    </button>
-  </div>
-
-  <div class="offer-mine" id="my-offers" hidden></div>
-
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
 

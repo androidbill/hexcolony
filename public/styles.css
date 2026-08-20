@@ -406,14 +406,52 @@ button { background: none; border: 0; cursor: pointer; }
    which is the only reason this number is ever anything else. */
 .pick-have b { color: var(--gold); font-weight: 800; }
 
-.trade-go { display: flex; gap: 8px; margin-top: 14px; }
-.trade-go .btn { flex: 1; flex-direction: column; gap: 2px; padding: 11px 8px; }
-.trade-go .btn-note {
-  font-size: 10.5px; font-weight: 600;
-  opacity: 0.75;
-  text-align: center; line-height: 1.25;
+/* ---------------------------------------------------------------- trading, in the tray
+   The whole point of moving trading out of a sheet is that the board, the turn clock and
+   your own cards stay on screen while you do it. So everything here has to be short: two
+   rows of cards and one row of buttons, sized to leave the island the room it had. */
+
+.trade-want {
+  display: flex; gap: 10px; justify-content: center; align-items: flex-end;
+  padding: 10px 4px 4px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 2px;
+  flex-wrap: wrap;
 }
-.trade-go .btn:disabled { opacity: 0.45; }
+.trade-lead {
+  align-self: center;
+  font-size: 10px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--gold);
+  width: 100%; text-align: center;
+  margin-bottom: -4px;
+}
+
+.trade-bar { display: flex; flex-direction: column; gap: 7px; }
+/* The readout is the part that teaches, so it gets the width and a reserved line — a
+   note that appeared and vanished would shuffle the whole tray up and down. */
+.trade-note {
+  min-height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  text-align: center;
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  font-size: 12.5px; font-weight: 600; line-height: 1.3;
+  color: var(--text);
+}
+.trade-go { display: flex; gap: 7px; }
+.trade-go .btn { flex: 1; padding: 11px 8px; font-size: 13.5px; }
+.trade-go .btn:disabled { opacity: 0.4; }
+
+/* Your own offers ride above the pickers, and stay in the tray after you leave trade
+   mode — an acceptance should not need a sheet reopened at you to be seen. */
+.trade-offers {
+  max-height: 30vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 4px;
+}
 
 .offer-mine { margin-top: 16px; }
 .my-offer {
