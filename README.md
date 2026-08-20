@@ -229,5 +229,17 @@ change. It busts the service worker cache and drives the in-app update banner.
 
 ## Icons
 
-Generated, not drawn: `node scripts/build-icons.mjs` computes the pixels and writes
-the PNG container by hand.
+The icon is one of the board's own tiles — the wheat hex, ringed in bright blue and cut
+to the shape of the hexagon rather than sat inside a square. `node scripts/build-icons.mjs`
+draws it as SVG and renders it with sharp.
+
+It reads `public/art/wheat.jpg`, the same file the board draws that tile from, so the icon
+and the game cannot drift apart. Those tiles are cropped to a pointy-top hexagon's exact
+bounding box, √3:2, which is why the artwork lines up with the hexagon path without any
+measuring — the two are the same shape by construction.
+
+There is no maskable icon. Android crops one to whatever shape the launcher likes and only
+promises the middle 80% survives, so a maskable hexagon loses its points, and the only way
+to keep them is to pad it out on a square ground — which is the hex-in-a-box this icon
+exists not to be. The iOS icon does get a ground, because iOS ignores transparency and
+composites onto black; it is given the game's own deep sea instead.
