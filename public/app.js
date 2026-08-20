@@ -2059,11 +2059,12 @@ function renderHand(g) {
     // see. The badge still counts what you hold; the label under it says how many of
     // them are going, or what the bank charges for them when none are.
     const take = trading ? (giveSel[r] || 0) : 0;
-    return resCard(r, {
+    const card = resCard(r, {
       count: n || null, dim: !n, size: 'sm', selected: !!take,
       dataset: ` data-res="${r}"`,
       label: trading ? (take ? `give ${take}` : `${R.tradeRate(g, board, playerId, r)}:1`) : '',
     });
+    return trading ? pickCell(r, take, card) : card;
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
   }).join('') + devCard({ count: devs || null, dim: !devs, size: 'sm' });
@@ -2073,15 +2074,18 @@ function renderHand(g) {
 // each tap, round to nothing at the top, so a tap is always undoable by tapping again.
 $('hand').addEventListener('click', (e) => {
   if (!trading) return;
-  const el = e.target.closest('[data-res]');
   const g = game();
-  if (!el || !g) return;
+  if (!g) return;
+  const clear = e.target.closest('[data-clear]');
+  if (clear) { payTouched = true; delete giveSel[clear.dataset.clear]; sfx.tap(); render(); return; }
+  const el = e.target.closest('[data-res]');
+  if (!el) return;
+  // The one real limit in the whole of trading: you cannot offer a card you do not hold.
   const r = el.dataset.res;
   const have = g.players[playerId]?.res[r] || 0;
-  if (!have) return;
+  if (!have || (giveSel[r] || 0) >= have) return;
   payTouched = true;
-  giveSel[r] = ((giveSel[r] || 0) + 1) % (have + 1);
-  if (!giveSel[r]) delete giveSel[r];
+  giveSel[r] = (giveSel[r] || 0) + 1;
   sfx.tap();
   render();
 });
@@ -2410,8 +2414,6 @@ function openPickRes(kind) {
 // So the board stays up, the timer stays up, and the cards you tap are your actual hand.
 // You ask for what you need first, because that is the half a player already knows, and
 // the payment works itself out at your own port rates.
-const WANT_MAX = 4;
-
 let trading = false;
 let giveSel = {}, wantSel = {};
 // Once you have picked your own payment the app stops picking one for you. Choosing
@@ -2426,6 +2428,18 @@ const bundleTotal = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 const kindsIn = (o) => Object.keys(o).filter((r) => o[r] > 0);
 const bundleText = (o) => kindsIn(o)
   .map((r) => `${o[r]} ${RES_NAME[r].toLowerCase()}`).join(' + ') || 'nothing';
+
+/**
+ * Every card of this resource somebody could actually hand you: the bank's pile plus
+ * every other player's, but not your own — you cannot be given what you are holding.
+ *
+ * This is the only ceiling on what you may ask for. There used to be a flat limit of
+ * four, which was a number I picked rather than one the game has, and it stopped a
+ * perfectly ordinary "I need five wheat" before it started. The engine has never cared:
+ * it accepts any count up to 999.
+ */
+const gettableOf = (g, r) => (g.bank[r] || 0) + Object.entries(g.players || {})
+  .reduce((n, [id, p]) => n + (id === playerId ? 0 : (p.res[r] || 0)), 0);
 
 function startTrade() {
   trading = true;
@@ -2560,13 +2574,26 @@ function tradeReadout(g, bank, offer) {
 function renderWantRow(g) {
   $('trade-want').innerHTML = '<span class="trade-lead">I need</span>' + RESOURCES.map((r) => {
     const n = wantSel[r] || 0;
-    return resCard(r, {
+    return pickCell(r, n, resCard(r, {
       size: 'sm', count: n || null, selected: !!n, dim: !n,
       dataset: ` data-want="${r}"`,
-      label: `${g.bank[r] || 0} left`,
-    });
+      label: `bank ${g.bank[r] || 0}`,
+    }));
   }).join('');
 }
+
+/**
+ * A card with a way back off it.
+ *
+ * Counting up one tap at a time is fine going up and hopeless coming down, and it was
+ * the auto-filled payment that made that bite: ask for an ore and four wheat are
+ * selected for you, so offering somebody two wheat instead meant tapping past five,
+ * round to nothing, and up again. One tap on the cross clears the card whatever it is
+ * holding.
+ */
+const pickCell = (r, n, card) => `<span class="pick">${card}${n
+  ? `<button class="pick-clear" data-clear="${r}" aria-label="Clear ${RES_NAME[r]}">×</button>`
+  : ''}</span>`;
 
 /**
  * The trade bar: what the basket does, and the ways to close it.
@@ -2665,15 +2692,18 @@ function renderTrade(g) {
 // Delegated once, as the action bar is: every row here is rebuilt with innerHTML on each
 // render, so a listener bound to the element itself would die with it.
 $('trade-want').addEventListener('click', (e) => {
-  const el = e.target.closest('[data-want]');
   const g = game();
-  if (!el || !g) return;
-  // Straight up, and round to nothing at the top. Every tap can undo itself by carrying
-  // on tapping, which is the whole of the interaction — there are no plus and minus
-  // buttons to find any more.
+  if (!g) return;
+  const clear = e.target.closest('[data-clear]');
+  if (clear) { delete wantSel[clear.dataset.clear]; sfx.tap(); render(); return; }
+  const el = e.target.closest('[data-want]');
+  if (!el) return;
+  // One more each tap, as far as there are cards in the game to be given. Ask for eleven
+  // wheat if you like — whether anybody says yes is between you and the table.
   const r = el.dataset.want;
-  wantSel[r] = ((wantSel[r] || 0) + 1) % (WANT_MAX + 1);
-  if (!wantSel[r]) delete wantSel[r];
+  const room = gettableOf(g, r);
+  if ((wantSel[r] || 0) >= room) return;
+  wantSel[r] = (wantSel[r] || 0) + 1;
   sfx.tap();
   render();
 });

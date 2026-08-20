@@ -431,6 +431,24 @@ button { background: none; border: 0; cursor: pointer; }
   margin-bottom: -4px;
 }
 
+/* A card with its clear button. The cross sits on the opposite corner from the count,
+   so a selected card carries "how many" on one shoulder and "not any more" on the
+   other, and neither has to move to make room for the other. */
+.pick { position: relative; display: inline-flex; flex: 0 0 auto; }
+.pick-clear {
+  position: absolute; top: -7px; left: -7px;
+  width: 22px; height: 22px;
+  border-radius: 999px;
+  background: rgba(10, 20, 32, 0.95);
+  border: 1.5px solid var(--line);
+  color: var(--text);
+  font-size: 13px; font-weight: 800; line-height: 1;
+  display: grid; place-items: center;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, .45);
+  z-index: 2;
+}
+.pick-clear:active { background: rgba(229, 72, 77, 0.5); }
+
 .trade-bar { display: flex; flex-direction: column; gap: 7px; }
 /* The readout is the part that teaches, so it gets the width and a reserved line — a
    note that appeared and vanished would shuffle the whole tray up and down. */

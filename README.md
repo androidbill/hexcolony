@@ -89,8 +89,11 @@ You ask first: tap what you need, and the payment fills itself in — cheapest r
 so a 2:1 port is used because you own it, and out of the deepest pile, so a trade spends
 the wheat you are drowning in rather than the last of your ore. Tapping your own cards
 takes the payment over, and the app stops choosing one for you until the trade is done.
-Everything is a plain tap that wraps back to nothing, so any tap undoes itself and there
-are no plus and minus buttons to find.
+Ask for as much as you like. The only ceiling is what exists to be given — the bank's
+pile plus everyone else's hand, not counting your own, since nobody can hand you a card
+you are already holding — and the only limit on the other side is that you cannot offer
+a card you have not got. A tap adds one; the cross on a selected card clears it outright,
+which is what makes a big auto-filled payment easy to argue with.
 
 One line under the cards says what the basket does — the deal in words, or the next
 instruction. Exactly one button is ever the loud one, and it is whichever can actually
