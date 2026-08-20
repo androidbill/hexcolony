@@ -120,9 +120,25 @@ function shoutout(msg, accent) {
   shoutTimer = setTimeout(() => { card.classList.remove('show'); box.hidden = true; }, 3000);
 }
 
+/**
+ * How tall the tray is, published to CSS.
+ *
+ * The sheets the game waits on sit ABOVE the tray rather than over it, so your own cards
+ * stay on screen while you answer them — and only this side knows how tall the tray
+ * currently is, because it changes: trade mode adds two rows to it.
+ */
+function trayHeight() {
+  const t = $('tray');
+  if (t) document.documentElement.style.setProperty('--tray-h', `${t.offsetHeight}px`);
+}
+if (typeof ResizeObserver === 'function' && $('tray')) {
+  new ResizeObserver(trayHeight).observe($('tray'));
+}
+
 // The one measurement that matters on a phone: 100vh lies when the URL bar is showing,
 // and an installed PWA reports a different height again.
 function appHeight() {
+  trayHeight();
   const h = window.innerHeight;
   if (h > 0) document.documentElement.style.setProperty('--app-height', `${h}px`);
 }

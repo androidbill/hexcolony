@@ -917,12 +917,23 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   max-width: 560px;
   margin: 0 auto;
 }
-/* The sheets the game waits on stop below the board's status row rather than running
-   the full 86vh. Discarding without being able to see the clock you are discarding
-   against was the complaint; robbing is the same bargain. The reserved strip is the
-   topbar, the status row and a little air: safe area + 56 + 10 + 34 + 8. */
-#sheet-discard, #sheet-steal {
-  max-height: calc(var(--app-height) - var(--safe-t) - 108px);
+/* The sheets the game actually waits on sit in the gap between the board's status row
+   and the tray, rather than over the top of both.
+   Below them your own cards stay on screen, which is the whole of the decision when you
+   are choosing what to discard or which two to take from the bank. Above them the turn
+   clock stays on screen, which matters because all three of these are timed.
+   The top reserve is the topbar, the status row and a little air — safe area + 56 + 10 +
+   34 + 8 — and the bottom is however tall the tray is right now, published from JS
+   because trade mode changes it. */
+#sheet-discard, #sheet-steal, #sheet-pickres {
+  bottom: var(--tray-h, 0px);
+  max-height: calc(var(--app-height) - var(--safe-t) - 108px - var(--tray-h, 0px));
+  /* No longer flush with the bottom of the screen, so it is a card rather than a drawer,
+     and it does not need to pad past a home indicator the tray is already clearing. */
+  border-radius: var(--r-lg);
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 16px;
+  box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.45), 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 
 .sheet.show {
