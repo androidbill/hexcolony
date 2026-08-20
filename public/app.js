@@ -1986,7 +1986,13 @@ function reactToLog(g) {
   for (const e of entries) {
     switch (e.t) {
       case 'roll': sfx.dice(); view.setRolled(e.roll); break;
-      case 'build': e.what === 'city' ? sfx.city() : e.what === 'road' ? sfx.road() : sfx.build(); break;
+      case 'build':
+        e.what === 'city' ? sfx.city() : e.what === 'road' ? sfx.road() : sfx.build();
+        // Houses and cities jump as they land. Roads have no `v` and get no jump: they
+        // are a thin bar between two corners, and scaling one up reads as a mistake
+        // rather than as a flourish.
+        if (e.v !== undefined) view.setBuilt(Number(e.v));
+        break;
       case 'robber': sfx.robber(); break;
       case 'steal':
         sfx.steal();

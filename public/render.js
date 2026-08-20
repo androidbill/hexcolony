@@ -169,6 +169,14 @@ const ROLL_SHRINK_MS = 380;
 // resize, not so much that it lands on the tiles next door.
 const ROLL_OVERSHOOT = 1.9;
 
+// A piece landing on the board. The same envelope as the roll flash but half its length
+// and without the long hold: the rolled number is a callout you have to be able to read,
+// and this is only ever "look here, something happened".
+const BUILD_POP_MS = 900;
+const BUILD_GROW_MS = 170;
+const BUILD_SHRINK_MS = 360;
+const BUILD_PEAK = 1.85;
+
 // ---------------------------------------------------------------- terrain art
 // Illustrated tiles, if they are present in art/. Each terrain is tried in extension
 // order and the first one that decodes wins. Nothing here is required: a missing or
@@ -257,6 +265,8 @@ export class BoardView {
     this.payout = null;                // what the last roll paid, and to whom
     this.rolled = null;                // the number the dice just showed, and when
     this.zoom = null;                  // this frame's reading of that, set in draw()
+    this.built = new Map();            // vertex -> when a piece landed on it
+    this.now = 0;                      // this frame's timestamp, for the pops
     this.sea = seaAt(SEA_DEFAULT);
     this.colorOf = () => '#888';       // pid -> css colour, injected by the app
     this.scale = 40;
@@ -280,7 +290,7 @@ export class BoardView {
     }
   }
 
-  setBoard(board) { this.board = board; this.fit(); }
+  setBoard(board) { this.board = board; this.built.clear(); this.fit(); }
   setGame(game) { this.game = game; }
   setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [], cities: [] }; }
   setSea(key) { this.sea = seaAt(key); }
@@ -299,6 +309,39 @@ export class BoardView {
    */
   setRolled(num) {
     this.rolled = (!num || num === 7) ? null : { num, at: performance.now() };
+  }
+
+  /**
+   * A piece just went up here: make it jump.
+   *
+   * Keyed by corner rather than kept as a single value, because two can land at once —
+   * a city replacing a settlement while somebody else's snake placement lands elsewhere,
+   * or simply two quick builds in one turn.
+   */
+  setBuilt(v) {
+    if (!Number.isInteger(v)) return;
+    this.built.set(v, performance.now());
+  }
+
+  /**
+   * How far through its jump a piece is: 0 at rest, 1 at full size.
+   *
+   * Expired entries are dropped as they are read, so the map never holds more than the
+   * pieces currently moving.
+   */
+  buildPop(v) {
+    const at = this.built.get(v);
+    if (at === undefined) return 0;
+    const ms = this.now - at;
+    if (ms < 0) return 0;
+    if (ms > BUILD_POP_MS) { this.built.delete(v); return 0; }
+    if (ms < BUILD_GROW_MS) {
+      const u = ms / BUILD_GROW_MS - 1;
+      return Math.max(0, u * u * ((ROLL_OVERSHOOT + 1) * u + ROLL_OVERSHOOT) + 1);
+    }
+    if (ms < BUILD_POP_MS - BUILD_SHRINK_MS) return 1;
+    const u = (BUILD_POP_MS - ms) / BUILD_SHRINK_MS;
+    return Math.max(0, u * u);
   }
 
   /**
@@ -510,6 +553,7 @@ export class BoardView {
   draw(t = 0) {
     if (!this.board || !this.w) return;
     this.pulse = (Math.sin(t / 340) + 1) / 2;
+    this.now = t;
     // Read once per frame: drawHex leaves the rolled tokens out so they can be drawn
     // again at the end, over everything, instead of being painted over by the next tile.
     this.zoom = this.rollZoom(t);
@@ -921,9 +965,21 @@ export class BoardView {
 
   drawBuildings() {
     if (!this.game) return;
+    // A piece mid-jump is drawn after the settled ones. Corners are close enough together
+    // that at nearly twice size a neighbour would otherwise paint over the very piece the
+    // jump is pointing at.
+    const jumping = [];
     for (const [vid, b] of Object.entries(this.game.bldg)) {
-      const [x, y] = this.toScreen(VERTS[vid].x, VERTS[vid].y);
+      const v = Number(vid);
+      const k = this.buildPop(v);
+      if (k > 0) { jumping.push([v, b, k]); continue; }
+      const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p)) : this.drawSettlement(x, y, this.colorOf(b.p));
+    }
+    for (const [v, b, k] of jumping) {
+      const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
+      const grow = 1 + k * (BUILD_PEAK - 1);
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow) : this.drawSettlement(x, y, this.colorOf(b.p), grow);
     }
   }
 
@@ -967,8 +1023,8 @@ export class BoardView {
     c.restore();
   }
 
-  drawSettlement(x, y, color) { this.drawPiece('settlement', x, y, color, this.scale * 0.52); }
-  drawCity(x, y, color) { this.drawPiece('city', x, y, color, this.scale * 0.58); }
+  drawSettlement(x, y, color, grow = 1) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow); }
+  drawCity(x, y, color, grow = 1) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow); }
 
   drawRobber() {
     if (!this.game) return;
