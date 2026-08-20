@@ -2101,12 +2101,18 @@ function renderScoreStrip(g) {
   $('score-strip').classList.toggle('tight', g.seats.length > 2);
   $('score-strip').innerHTML = g.seats.map((pid) => {
     const p = g.players[pid];
-    const crowns = (g.award.road === pid ? '🛣️' : '') + (g.award.army === pid ? '⚔️' : '');
+    // One badge each rather than two emoji run together, so each can say what it is.
+    const crowns = [
+      g.award.road === pid ? `<span class="chip-crown" title="Longest Road (${g.award.roadLen})"`
+        + ` aria-label="Longest Road">🛣️</span>` : '',
+      g.award.army === pid ? `<span class="chip-crown" title="Largest Army (${g.award.armySize})"`
+        + ` aria-label="Largest Army">⚔️</span>` : '',
+    ].join('');
     return `<button class="chip${pid === up ? ' up' : ''}" style="--c:${esc(colorFor(pid))};--ink:${esc(inkFor(pid))}" data-pcard>
       <span class="chip-name">${esc(nameFor(pid))}</span>
       <span class="chip-vp">${R.publicVP(g, pid)}</span>
       <span class="chip-cards">${R.handSize(p)}🂠</span>
-      ${crowns ? `<span class="chip-crown">${crowns}</span>` : ''}
+      ${crowns}
     </button>`;
   }).join('');
 }

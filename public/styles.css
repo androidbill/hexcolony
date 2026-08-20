@@ -687,7 +687,20 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .chip-vp { font-weight: 800; }
 .chip-cards { font-size: 11.5px; opacity: 0.8; }
-.chip-crown { font-size: 11px; }
+/* Who holds the two awards, on the chip that already carries their name and score.
+   It was a bare emoji at eleven pixels sitting on the player's own colour, which is
+   about as close to invisible as a two-point swing gets. A pale disc with a gold ring
+   reads as something awarded, and separates it from the numbers either side. */
+.chip-crown {
+  font-size: 10px; line-height: 1;
+  display: inline-grid; place-items: center;
+  width: 17px; height: 17px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1.5px var(--gold);
+  flex: 0 0 auto;
+}
+.chip-crown + .chip-crown { margin-left: 2px; }
 
 /* Three or more and the chips give up some padding. 72px is chosen, not guessed: it is
    the widest floor that still fits three across the narrowest phone worth supporting
@@ -700,7 +713,7 @@ button { background: none; border: 0; cursor: pointer; }
   min-width: 72px; max-width: 116px;
 }
 .score-strip.tight .chip-cards { font-size: 10.5px; }
-.score-strip.tight .chip-crown { font-size: 10px; }
+.score-strip.tight .chip-crown { font-size: 9px; width: 15px; height: 15px; }
 
 /* ------------------------------------------------------------ resource cards */
 /* The card faces are the board's own tile illustrations. Those files are cropped to the

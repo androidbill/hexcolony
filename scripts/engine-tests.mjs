@@ -807,6 +807,112 @@ check('caching a board does not leave the wrong island loaded', () => {
   eq(HEXES.length, LAYOUT_INFO.classic.tiles, 'active topology after a cached build');
 });
 
+// ---------------------------------------------------------------- the two awards
+//
+// Everything below goes through applyMove, which is the only door into the engine —
+// a human's tap and a bot's move both arrive here — so proving it once proves it for
+// both.
+
+/** A game parked in the build phase with everybody rich enough to act. */
+function armed(seats = ['p0', 'p1', 'p2']) {
+  const g = R.newGame(seats, { targetVP: 10, layout: 'classic', useRobber: true, turnSeconds: 0, seed: 42 });
+  g.phase = 'build'; g.turn.rolled = true; g.turn.seat = 0;
+  for (const s of seats) g.players[s].res = { wood: 20, brick: 20, sheep: 20, wheat: 20, ore: 20 };
+  return g;
+}
+function handTurnTo(g, pid) {
+  g.turn.seat = g.seats.indexOf(pid);
+  g.phase = 'build'; g.turn.rolled = true; g.turn.playedDev = false;
+}
+/** Play one knight for `pid`, and walk back out of the robber steps it opens. */
+function playKnight(g, pid) {
+  handTurnTo(g, pid);
+  g.players[pid].dev.knight = (g.players[pid].dev.knight || 0) + 1;
+  let r = R.applyMove(g, pid, { type: 'playDev', card: 'knight' });
+  assert(r.ok, `knight refused: ${r.error}`);
+  g = r.game;
+  if (g.phase === 'robber') {
+    const hex = HEXES.map((h) => h.i).find((h) => h !== g.robber);
+    r = R.applyMove(g, pid, { type: 'moveRobber', hex });
+    if (r.ok) g = r.game;
+    if (g.phase === 'steal') {
+      r = R.applyMove(g, pid, { type: 'steal', from: g.pending.stealFrom[0] });
+      if (r.ok) g = r.game;
+    }
+  }
+  return g;
+}
+
+check('largest army needs three knights, and not two', () => {
+  let g = armed();
+  g = playKnight(g, 'p0');
+  eq(g.players.p0.knights, 1, 'first knight counted');
+  assert(g.award.army === null, 'one knight must not take the award');
+  g = playKnight(g, 'p0');
+  assert(g.award.army === null, 'two knights must not take the award');
+  const before = R.publicVP(g, 'p0');
+  g = playKnight(g, 'p0');
+  eq(g.players.p0.knights, 3, 'third knight counted');
+  eq(g.award.army, 'p0', 'three knights takes Largest Army');
+  eq(g.award.armySize, 3, 'army size recorded');
+  eq(R.publicVP(g, 'p0'), before + 2, 'Largest Army is worth two points');
+  assert(g.log.some((e) => e.t === 'army' && e.p === 'p0'), 'taking it is announced');
+});
+
+check('largest army moves only on a strict win', () => {
+  let g = armed();
+  for (let i = 0; i < 3; i++) g = playKnight(g, 'p0');
+  const held = R.publicVP(g, 'p0');
+  for (let i = 0; i < 3; i++) g = playKnight(g, 'p1');
+  eq(g.award.army, 'p0', 'a tie at three leaves it where it is');
+  g = playKnight(g, 'p1');
+  eq(g.award.army, 'p1', 'four takes it from three');
+  eq(g.award.armySize, 4, 'new size recorded');
+  eq(R.publicVP(g, 'p0'), held - 2, 'the old holder loses the points');
+});
+
+check('longest road needs five, and pays two points', () => {
+  const g0 = armed();
+  makeBoard(g0.seed, g0.mode, g0.layout);
+  let g = g0;
+  // A settlement, then a chain of roads walking away from it.
+  const start = R.legalSettlements(g, 'p0', true)[0];
+  g.bldg[start] = { t: 's', p: 'p0' };
+  const chain = [];
+  const used = new Set();
+  let at = start;
+  while (chain.length < 5) {
+    const next = VERTS[at].edges.find((e) => !used.has(e) && !g.roads[e]);
+    if (next === undefined) break;
+    used.add(next); chain.push(next);
+    at = EDGES[next].a === at ? EDGES[next].b : EDGES[next].a;
+  }
+  eq(chain.length, 5, 'found five connected edges to build on');
+
+  // Lays up TO a total, carrying on from wherever it got to — laying "the first five"
+  // after "the first four" would try to build the first four a second time, on top of
+  // themselves.
+  let built = 0;
+  const layUpTo = (total) => {
+    while (built < total) {
+      handTurnTo(g, 'p0');
+      const r = R.applyMove(g, 'p0', { type: 'build', what: 'road', e: chain[built] });
+      assert(r.ok, `road ${built} refused: ${r.error}`);
+      g = r.game;
+      built += 1;
+    }
+  };
+  layUpTo(4);
+  eq(g.players.p0.roadLen, 4, 'four roads measure as four');
+  assert(g.award.road === null, 'four roads must not take the award');
+  const before = R.publicVP(g, 'p0');
+  layUpTo(5);
+  eq(g.players.p0.roadLen, 5, 'five roads measure as five');
+  eq(g.award.road, 'p0', 'five roads takes Longest Road');
+  eq(R.publicVP(g, 'p0'), before + 2, 'Longest Road is worth two points');
+  assert(g.log.some((e) => e.t === 'longest' && e.p === 'p0'), 'taking it is announced');
+});
+
 // ---------------------------------------------------------------- report
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
