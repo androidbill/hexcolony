@@ -2721,6 +2721,20 @@ $('trade-offers').addEventListener('click', (e) => {
  *
  * Read from your side of the table: what leaves your hand first, what arrives second.
  */
+/**
+ * The cards in an offer, drawn for a sentence rather than a column.
+ *
+ * The count badge is left off a single card: "offering you a wheat" with a little 1
+ * stamped on the corner is answering a question nobody asked.
+ */
+const askCards = (bundle) => Object.entries(bundle || {})
+  .filter(([, n]) => n > 0)
+  .map(([res, n]) => resCard(res, { size: 'xs', count: n > 1 ? n : null }))
+  .join('');
+
+/** "a" only where a single card follows it. Two wheat is not "a" anything. */
+const article = (bundle) => (bundleTotal(bundle) === 1 ? ' a' : '');
+
 function renderAsks(g) {
   const box = $('trade-asks');
   const me = g.players[playerId];
@@ -2735,17 +2749,12 @@ function renderAsks(g) {
     // before it will record a yes.
     const able = Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n);
     return `<div class="ask" style="--c:${esc(colorFor(t.from))}">
-      <div class="ask-top">
+      <div class="ask-line">
         <span class="ask-who">${esc(nameFor(t.from))}</span>
-        <span class="ask-side">
-          <span class="ask-tag">you give</span>
-          <span class="offer-cards">${cardRow(t.want, { size: 'xs' })}</span>
-        </span>
-        <span class="swap-arrow" aria-hidden="true">⇄</span>
-        <span class="ask-side">
-          <span class="ask-tag">you get</span>
-          <span class="offer-cards">${cardRow(t.give, { size: 'xs' })}</span>
-        </span>
+        <span>is offering you${article(t.give)}</span>
+        <span class="ask-cards">${askCards(t.give)}</span>
+        <span>in exchange for${article(t.want)}</span>
+        <span class="ask-cards">${askCards(t.want)}</span>
       </div>
       <div class="ask-go">
         ${able ? '' : '<span class="ask-cant">You have not got that</span>'}

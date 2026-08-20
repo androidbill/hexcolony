@@ -462,22 +462,22 @@ button { background: none; border: 0; cursor: pointer; }
   padding: 8px 10px;
   margin-bottom: 7px;
 }
-.ask-top {
-  display: flex; align-items: center; gap: 8px;
-  flex-wrap: wrap;
+/* One sentence with the cards set into it, so the offer reads as a thing somebody said
+   rather than a form with two labelled halves. A flex row rather than true inline flow:
+   40px cards in a line of 13px text make a mess of line-height, and this wraps cleanly
+   on a narrow phone without any of that. */
+.ask-line {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 5px;
+  font-size: 13px; font-weight: 600; line-height: 1.35;
+  color: var(--text);
 }
 .ask-who {
-  font-size: 12px; font-weight: 800;
+  font-size: 13px; font-weight: 800;
   color: var(--c, var(--gold));
-  max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.ask-side { display: flex; align-items: center; gap: 5px; }
-.ask-tag {
-  font-size: 9px; font-weight: 800;
-  text-transform: uppercase; letter-spacing: .05em;
-  color: var(--dim);
-}
-.ask-side .offer-cards { display: flex; gap: 3px; }
+.ask-cards { display: inline-flex; gap: 4px; padding-top: 5px; }
 .ask-go { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
 .ask-go .btn { flex: 1; padding: 9px 8px; font-size: 13px; }
 .ask-go .btn:disabled { opacity: 0.4; }
