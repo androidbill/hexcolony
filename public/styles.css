@@ -1238,9 +1238,14 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   }
 }
 
+/* Over the map, under the status row.
+   It used to sit just above the tray, at the bottom of the screen — which is where your
+   own cards and buttons are, and where your thumbs already are covering it. "Dag offered
+   you a trade" is news about the board, so it is said over the board, in the space the
+   island can spare and the eye is already crossing. */
 .toast {
-  position: fixed; left: 50%; bottom: calc(var(--safe-b) + 96px);
-  transform: translateX(-50%) translateY(14px);
+  position: fixed; left: 50%; top: calc(var(--safe-t) + 108px);
+  transform: translateX(-50%) translateY(-14px);
   background: rgba(8, 24, 40, 0.96);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -1253,6 +1258,9 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   text-align: center;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+/* Clear of the turn shoutout, which comes down from 22vh — a toast and a shoutout can
+   land together, and a trade offer raises both at once. */
+.shoutout { padding-top: calc(var(--safe-t) + 24vh); }
 
 .conn-badge {
   position: fixed; top: calc(var(--safe-t) + 8px); left: 50%;

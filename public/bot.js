@@ -47,11 +47,18 @@ export const LEVELS = {
     robberSmart: 1,
     bankTrade: 1,
     devPlay: 1,
-    offerTrade: 0.95,
-    // Two goes at the table in a turn, where the others get one. The first ask is often
-    // refused for a reason that has nothing to do with the price — nobody happened to
-    // hold it — and asking again for something else is exactly what a person does next.
-    asksPerTurn: 2,
+    offerTrade: 0.85,
+    // One, like the others. Two was tried, on the reasoning that a first ask is often
+    // refused for reasons nothing to do with the price, and measured WORSE: 130 games
+    // against the version of hard it replaced went from +160 Elo to +105, and hard's
+    // edge over medium from 58% to 55%. Both well outside the ±25 the same harness
+    // showed as noise on a level it had not touched.
+    //
+    // The reason is in the offer itself. Two cards for one is a card lost every time it
+    // is taken, and paying that twice a turn bleeds faster than the extra card is worth.
+    // Left as a knob rather than deleted so the next person to have the idea can see it
+    // was had, and what it cost.
+    asksPerTurn: 1,
     acceptBias: 0.25,
     denyLeader: true,
     roadPlan: true,

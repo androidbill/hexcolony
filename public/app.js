@@ -1129,6 +1129,23 @@ function renderMapPreview() {
 const isBot = (pid) => !!room?.players?.[pid]?.bot;
 
 /** The local twin of `send` — same engine, same validation, no server. */
+/**
+ * Keep the solo deadline book, the way the transaction keeps the online one.
+ *
+ * Every route that changes the game in solo has to call this, not just the one the
+ * player's own taps go down. A bot's offer went through runBot, which did its own
+ * bookkeeping and knew nothing about deadlines — so a bot could put an offer up that had
+ * no deadline at all, showed no countdown, and could never run out. It simply sat there.
+ */
+function markSoloDeadlines(before, after) {
+  const had = new Set((before.trades || []).map((t) => t.id));
+  const has = new Set((after.trades || []).map((t) => t.id));
+  const marks = { ...(room.tradeDeadlines || {}) };
+  for (const id of has) if (!had.has(id)) marks[id] = Date.now();
+  for (const id of Object.keys(marks)) if (!has.has(Number(id))) delete marks[id];
+  room.tradeDeadlines = marks;
+}
+
 function sendLocal(move, opts = {}) {
   const g = room?.game;
   if (!g) return false;
@@ -1137,15 +1154,10 @@ function sendLocal(move, opts = {}) {
     if (!opts.quiet) { toast(res.error); sfx.error(); }
     return false;
   }
-  const had = new Set((g.trades || []).map((t) => t.id));
   room.game = res.game;
-  // Solo keeps the same book, against the local clock — which is authoritative here
-  // because there is no other device to disagree with it. See clockTrusted().
-  const marks = { ...(room.tradeDeadlines || {}) };
-  const has = new Set((res.game.trades || []).map((t) => t.id));
-  for (const id of has) if (!had.has(id)) marks[id] = Date.now();
-  for (const id of Object.keys(marks)) if (!has.has(Number(id))) delete marks[id];
-  room.tradeDeadlines = marks;
+  // The local clock is authoritative in solo: there is no other device to disagree with
+  // it. See clockTrusted().
+  markSoloDeadlines(g, res.game);
   if (res.game.turn.clockRestart) { res.game.turn.clockRestart = false; room.turnStartedAt = Date.now(); }
   saveSolo();
   render();
@@ -1269,6 +1281,7 @@ function runBot(pid) {
   }
   if (!res.ok) { console.error('bot could not act at all in phase', g.phase); return; }
   room.game = res.game;
+  markSoloDeadlines(g, res.game);
   if (res.game.turn.clockRestart) { res.game.turn.clockRestart = false; room.turnStartedAt = Date.now(); }
   saveSolo();
   render();
@@ -1848,10 +1861,12 @@ function drawOfferClocks() {
     const secs = Math.max(0, Math.ceil(left));
     el.textContent = `${secs}s`;
     el.classList.toggle('urgent', secs <= 3);
-    // Only the player who made it may retire it, which is also the phone whose clock set
-    // the deadline in the first place. If they have gone quiet the offer lapses with the
-    // turn instead, since a turn ending clears the table.
-    if (left <= 0 && t.from === playerId && !expiredOffers.has(t.id)) {
+    // Its author gets first refusal, and after three more seconds anybody still watching
+    // clears it. The same ladder fireTimeout uses, and for the same reason: the device
+    // that ought to act is exactly the one that might have gone to sleep — or, in solo,
+    // is a bot with no device at all.
+    const mine = t.from === playerId;
+    if (left <= 0 && (mine || left <= -3) && !expiredOffers.has(t.id)) {
       expiredOffers.add(t.id);
       send({ type: 'expireTrade', id: t.id }, { quiet: true });
     }

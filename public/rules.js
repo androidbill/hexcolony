@@ -1198,7 +1198,13 @@ export function applyMove(state, pid, move, rng = Math.random) {
     case 'expireTrade': {
       const offer = g.trades.find((t) => t.id === move.id);
       if (!offer) return fail('That offer is already gone.');
-      if (offer.from !== pid) return fail('Not your offer.');
+      // Any player at the table, not just whoever made it. The deadline is public — it
+      // is stamped on the room where every device can read it — and the engine has no
+      // clock of its own to check it against, exactly as with `timeout`. Restricting it
+      // to the author meant an offer from somebody whose app had gone to sleep, or from
+      // a bot, could never be retired at all: it sat on everyone else's screen for the
+      // rest of the turn with its counter stopped at zero.
+      if (!g.seats.includes(pid)) return fail('Not seated.');
       g.trades = g.trades.filter((t) => t.id !== offer.id);
       note(g, events, { t: 'expired', p: pid, give: offer.give, want: offer.want });
       return ok();
