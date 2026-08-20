@@ -1780,6 +1780,10 @@ requestAnimationFrame(loop);
 // when it runs out.
 let autoFiredFor = null;
 let timerInterval = null;
+// The last whole second a heartbeat was played for, so one beat lands per second rather
+// than four — the loop runs at 250ms.
+let lastBeat = null;
+const COUNTDOWN_FROM = 10;
 
 /** Firestore hands back a Timestamp; solo stores a plain number. */
 function stampMs(v) {
@@ -1855,6 +1859,34 @@ function drawOfferClocks() {
 }
 
 /**
+ * A heartbeat through the last ten seconds, for the person actually on the clock.
+ *
+ * Only for them. The turn timer is on screen for everybody, but a heartbeat on five
+ * phones because one player is dithering is a room full of alarms — and the point of it
+ * is to reach somebody who has stopped watching the number, which is the same person the
+ * clock is about to run out on.
+ *
+ * "On the clock" is waitingOn rather than isTurn, so it also covers being one of the
+ * players who owes a discard after a seven, and being asked to answer a trade — both are
+ * timed, and neither is your turn.
+ */
+function pulseCountdown() {
+  const g = game();
+  const left = secondsLeft(g);
+  // Untimed game, unmeasured clock, or somebody else's problem. secondsLeft already
+  // returns null for the first two.
+  if (left === null || !g || !R.waitingOn(g, playerId)) { lastBeat = null; return; }
+  const secs = Math.ceil(left);
+  if (secs > COUNTDOWN_FROM || secs <= 0) { lastBeat = null; return; }
+  if (secs === lastBeat) return;
+  lastBeat = secs;
+  sfx.heartbeat();
+  // Lub-dub in the hand as well as the ear, and harder in the last three seconds. Both
+  // halves are already opt-out: sfx respects the sound setting, buzz the haptics one.
+  buzz(secs <= 3 ? [45, 85, 55] : [28, 95, 34]);
+}
+
+/**
  * Run out of time and the turn takes itself.
  *
  * The player whose turn it is fires first. Everyone else waits three more seconds and
@@ -1893,6 +1925,7 @@ function startTimerLoop() {
     if (!room || room.state !== 'playing') return;
     drawTimer();
     drawOfferClocks();
+    pulseCountdown();
     fireTimeout();
   }, 250);
 }

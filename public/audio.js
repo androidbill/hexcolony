@@ -286,6 +286,27 @@ const synth = {
     [G5, C6, E6].forEach((f, i) => fat(f, { delay: i * 0.09, dur: 0.26, vol: 0.17 }));
   },
 
+  /**
+   * The last ten seconds of a turn.
+   *
+   * A heart rather than a metronome: two thumps, the second softer and hard on the heels
+   * of the first. That shape is the whole of it — one beep a second is a countdown, and
+   * lub-dub is a pulse, and only one of the two makes a person hurry without having to be
+   * counted.
+   *
+   * Low sine for the body, with a short filtered burst on top of each thump. A phone
+   * speaker moves almost no air at 70Hz, so on its own the sine is felt on a good speaker
+   * and inaudible on a handset; the burst is what carries it there.
+   */
+  heartbeat: () => {
+    const thump = (delay, vol) => {
+      note(70, { delay, dur: 0.16, vol, type: 'sine', room: 0.05 });
+      burst({ delay, dur: 0.05, vol: vol * 0.4, freq: 170, q: 2, room: 0.04 });
+    };
+    thump(0, 0.30);
+    thump(0.17, 0.20);
+  },
+
   // Wrong, without being unpleasant — it fires on ordinary mistakes.
   error: () => {
     note(220, { dur: 0.09, vol: 0.14, type: 'square', cutoff: 1200 });
