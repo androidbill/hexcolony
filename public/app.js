@@ -75,8 +75,21 @@ const esc = (s) => String(s ?? '')
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-const SCREENS = ['screen-home', 'screen-lobby', 'screen-game'];
+/**
+ * Every screen in the document, read from the document.
+ *
+ * This was a hand-written list of three, and showScreen turns `is-active` OFF on
+ * everything in it and ON for the one asked for — so asking for a screen the list had
+ * never heard of turned all three off and nothing on, and the app went blank. Which is
+ * exactly what a fourth screen did on the day it was added.
+ *
+ * Reading the DOM means a screen cannot exist without being switchable. Module scripts
+ * are deferred, so the markup is parsed by the time this runs.
+ */
+const SCREENS = [...document.querySelectorAll('.screen')].map((s) => s.id);
 function showScreen(id) {
+  // Louder than a blank page, if a name is ever mistyped.
+  if (!SCREENS.includes(id)) { console.error('showScreen: no such screen', id); return; }
   for (const s of SCREENS) $(s).classList.toggle('is-active', s === id);
   // The game screen's top bar already occupies both corners, so the kebab steps aside
   // there; its three entries live in that screen's own menu instead.
