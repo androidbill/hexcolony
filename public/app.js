@@ -1997,11 +1997,19 @@ function renderActions(g) {
   if (g.phase === 'discard') {
     bar.innerHTML = g.pending.discard[playerId]
       ? actBtn('discard', '🗑️', `Discard ${g.pending.discard[playerId]}`, { primary: true, wide: true })
-      : `<div class="act-prompt"><span class="act-ico">⏳</span>Waiting for others to discard</div>`; return;
+      : `<div class="act-prompt"><span class="act-ico">⏳</span>Waiting for others to discard</div>`
+        + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }); return;
   }
 
+  // Cards stays in the bar while somebody else is playing. What is in your hand is
+  // yours to look at whenever you like — it was only ever reachable on your own turn,
+  // so the one time you actually want to check what you are holding, which is while you
+  // are sitting there waiting, was the one time there was no way in. The sheet knows it
+  // is not your turn and offers nothing to press.
   if (!mine || g.phase === 'setup') {
-    bar.innerHTML = actBtn('players', '👥', 'Players') + actBtn('log', '📜', 'Log', { badge: 0 }); return;
+    bar.innerHTML = actBtn('players', '👥', 'Players')
+      + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 })
+      + actBtn('log', '📜', 'Log', { badge: 0 }); return;
   }
 
   if (g.phase === 'robber') {
@@ -2083,6 +2091,11 @@ function openDev(g) {
   // unaffordable card explains itself instead of just being greyed out.
   const can = R.whatCanIBuild(g, playerId);
   const empty = !g.deck.length;
+  // A knight is the one card with no phase of its own — it can be played before the
+  // roll — so nothing in the per-card test below would have stopped one being tapped on
+  // somebody else's turn. The engine would have refused it a round trip later with "Not
+  // your turn"; the sheet says so up front instead, and greys what cannot be pressed.
+  const myTurn = R.isTurn(g, playerId);
   $('dev-buy').innerHTML = `
     <button class="dev-buy" id="btn-buy-dev"${can.dev ? '' : ' disabled'}>
       <span class="dev-buy-ico">🃏</span>
@@ -2090,7 +2103,7 @@ function openDev(g) {
         <span class="dev-buy-name">Buy a development card</span>
         <span class="build-cost">${COST_BITS(R.COSTS.dev, p.res)}</span>
       </span>
-      <span class="dev-buy-left">${empty ? 'deck empty' : `${g.deck.length} left`}</span>
+      <span class="dev-buy-left">${empty ? 'deck empty' : myTurn ? `${g.deck.length} left` : 'not your turn'}</span>
     </button>`;
   if (can.dev) {
     $('btn-buy-dev').addEventListener('click', () => {
@@ -2105,7 +2118,7 @@ function openDev(g) {
     const ready = p.dev[k] || 0;
     const fresh = p.devNew[k] || 0;
     if (!ready && !fresh) continue;
-    const blocked = g.turn.playedDev || !ready
+    const blocked = !myTurn || g.turn.playedDev || !ready
       || (k !== 'knight' && g.phase !== 'build');
     rows.push(`<button class="dev-card" data-dev="${k}"${blocked ? ' disabled' : ''}>
       <span class="dev-n">${ready + fresh}</span>
@@ -2113,7 +2126,8 @@ function openDev(g) {
         <span class="dev-name">${esc(info.name)}</span>
         <span class="dev-blurb">${esc(info.blurb)}</span>
         ${fresh ? `<span class="dev-lock">${fresh} bought this turn — playable next turn</span>` : ''}
-        ${g.turn.playedDev && ready ? '<span class="dev-lock">One card per turn, already used</span>' : ''}
+        ${!myTurn && ready ? '<span class="dev-lock">Not your turn — playable when it is</span>' : ''}
+        ${myTurn && g.turn.playedDev && ready ? '<span class="dev-lock">One card per turn, already used</span>' : ''}
       </span>
     </button>`);
   }
@@ -2693,6 +2707,11 @@ function syncSheets(g) {
   } else if (openSheet === 'sheet-trade' && changed) {
     drawTrade(g);            // replies landing while the sheet is open
   }
+
+  // Now that Cards can be opened on somebody else's turn, it can still be open when
+  // your own arrives — and it would have sat there insisting it was not your turn, with
+  // every card greyed, until it was closed and opened again.
+  if (openSheet === 'sheet-dev' && changed) openDev(g);
 
   // Ids are never reused, so this only ever forgets offers that are gone.
   if (!trades.length && dismissedOffers.size) dismissedOffers.clear();
