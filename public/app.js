@@ -1072,6 +1072,20 @@ let sendEra = 0;
  * acting at once cannot both win the race — the guess never gets a vote.
  */
 function send(move, opts = {}) {
+  // Frozen the moment it is handed over, because it is about to be held for a while and
+  // the caller may still own the objects inside it.
+  //
+  // The bank trade was passing the live selection object straight in. drawGuess applies
+  // the move at once and renders, render trims the selection to the hand, and by then the
+  // hand is the one AFTER the trade — so trimming rewrote the very object the queued move
+  // was pointing at. Four wheat became three on its way to the server, which then refused
+  // it as not a whole number of 4:1 trades, and the trade was snatched back half a second
+  // after it appeared to happen.
+  //
+  // Copying here rather than at each call site: a move is a fact about what somebody did,
+  // and it should not be possible for anything to edit one afterwards, whoever wrote the
+  // call.
+  move = clone(move);
   if (solo) return Promise.resolve(sendLocal(move, opts));
   if (!roomRef) return Promise.resolve(false);
   const drew = drawGuess(move);
@@ -1317,6 +1331,7 @@ function markSoloDeadlines(before, after) {
 function sendLocal(move, opts = {}) {
   const g = room?.game;
   if (!g) return false;
+  move = clone(move);
   const res = R.applyMove(g, playerId, move);
   if (!res.ok) {
     if (!opts.quiet) { toast(res.error); sfx.error(); }
@@ -2913,6 +2928,11 @@ let giveSel = {}, wantSel = {};
 // Acceptances already announced, as `offerId:playerId`. An acceptance is not written to
 // the game log — see the note in syncSheets — so nothing else would ever say it happened.
 const notedAccepts = new Set();
+
+/** A move is plain data, so this is enough — and it is what makes one immutable. */
+const clone = (o) => (typeof structuredClone === 'function'
+  ? structuredClone(o)
+  : JSON.parse(JSON.stringify(o)));
 
 const bundleTotal = (o) => Object.values(o).reduce((a, b) => a + b, 0);
 const kindsIn = (o) => Object.keys(o).filter((r) => o[r] > 0);
