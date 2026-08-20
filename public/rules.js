@@ -44,6 +44,26 @@ export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expan
 // here; it is a limit on how much other people have to read before they can act.
 export const MAX_OFFERS = 4;
 
+/**
+ * Seats at a table.
+ *
+ * Two because a trade needs somebody to trade with; six because that is what the boards
+ * are built for — the expansion island and its scaled bank exist precisely to carry five
+ * and six, and there is no seventh arrangement. The number lived as a bare 6 in one
+ * branch of one join path, which is to say it was enforced for players arriving by room
+ * code and for nobody else.
+ */
+export const MIN_PLAYERS = 2;
+export const MAX_PLAYERS = 6;
+
+/** Whether this set of seats can start a game. Null when it can. */
+export function seatingProblem(seats) {
+  const n = (seats || []).length;
+  if (n < MIN_PLAYERS) return `You need at least ${MIN_PLAYERS} players.`;
+  if (n > MAX_PLAYERS) return `${MAX_PLAYERS} players is the most this board seats.`;
+  return null;
+}
+
 // The development deck and the bank both scale with the board — a 30-tile island with
 // six players would drain a 19-card bank and a 25-card deck long before anyone won.
 // The per-layout numbers live in LAYOUT_INFO.

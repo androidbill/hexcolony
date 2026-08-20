@@ -27,6 +27,10 @@ The expansion is the 5-6 player island: three 6s and three 8s rather than two, l
 in rows of 3-4-5-6-5-4-3. The bank and development deck scale with it, because six
 players on a 30-tile board would drain the classic supply long before anyone won.
 
+Two to six is not a suggestion: `MIN_PLAYERS`/`MAX_PLAYERS` and `seatingProblem()` live
+in `rules.js`, every join path checks them, and so does the moment a game is dealt — so
+a route that talks its way past the door still cannot deal a seventh seat.
+
 The rules are the ones you already know: place two settlements and two roads in snake
 order, roll for production, build with wood/brick/sheep/wheat/ore, upgrade settlements
 to cities, buy development cards, take Longest Road at five and Largest Army at three

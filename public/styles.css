@@ -174,7 +174,6 @@ button { background: none; border: 0; cursor: pointer; }
   color: var(--text);
 }
 .btn-ghost:active { background: rgba(255, 255, 255, 0.12); }
-.btn-danger { color: #ffb4b6; border-color: rgba(229, 72, 77, 0.35); }
 
 .btn-go {
   background: linear-gradient(180deg, var(--gold) 0%, var(--gold-2) 100%);
@@ -435,6 +434,16 @@ button { background: none; border: 0; cursor: pointer; }
    so a selected card carries "how many" on one shoulder and "not any more" on the
    other, and neither has to move to make room for the other. */
 .pick { position: relative; display: inline-flex; flex: 0 0 auto; }
+/* The card you tap is a button again. It was a bare span carrying a data attribute,
+   which works for a finger and for nothing else — no keyboard, no screen reader, no
+   announcement of what tapping it would do. The old trade sheet had this right. */
+.pick-tap {
+  padding: 0; margin: 0;
+  background: none; border: 0;
+  display: inline-flex;
+  color: inherit;
+}
+.pick-tap:active .rcard { transform: scale(.94); }
 .pick-clear {
   position: absolute; top: -7px; left: -7px;
   width: 22px; height: 22px;
@@ -513,7 +522,11 @@ button { background: none; border: 0; cursor: pointer; }
 /* Your own offers ride above the pickers, and stay in the tray after you leave trade
    mode — an acceptance should not need a sheet reopened at you to be seen. */
 .trade-offers {
-  max-height: 30vh; overflow-y: auto;
+  /* Smaller than the incoming strip on purpose. Your own offers sit alongside the want
+     row, the hand and the bar, so they are the row competing hardest with the island —
+     at 30vh a full tray left the board 198px on a normal phone. Incoming offers hide
+     those rows (it is not your turn), so they can afford more. */
+  max-height: 22vh; overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   margin-bottom: 4px;
 }
@@ -929,7 +942,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 
 /* ------------------------------------------------------------ build sheet */
 .build-cost { display: flex; gap: 7px; margin-top: 8px; padding-top: 4px; }
-.build-left { font-size: 11px; color: var(--dim); }
 
 /* ------------------------------------------------------------ dev cards */
 .dev-list { display: flex; flex-direction: column; gap: 9px; }

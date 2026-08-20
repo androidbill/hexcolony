@@ -210,15 +210,17 @@ const PREDICTABLE = new Set([
 // a guess must never be able to wedge a device on a state the server has moved past.
 const GUESS_HOLD_MS = 20000;
 
+// Whether this device has ever been seen seated in the room it is watching. Guards the
+// removal check above against the gap between joining and the join being written.
+let wasSeated = false;
 let serverRoom = null;   // the last state the server actually sent
 let guessSeq = 0;        // g.seq the guess on screen has reached; 0 when not guessing
 let guessAt = 0;         // when it was drawn
-const resetGuess = () => { serverRoom = null; guessSeq = 0; guessAt = 0; };
+const resetGuess = () => { serverRoom = null; guessSeq = 0; guessAt = 0; wasSeated = false; };
 
 const myName = () => ($('name-input').value || '').trim().slice(0, 14);
 const isHost = () => room && room.hostId === playerId;
 const game = () => room && room.game;
-const seatOrder = () => (room?.order || Object.keys(room?.players || {}));
 
 // ---------------------------------------------------------------- colours
 // Colour is chosen inside the room, never before it.
@@ -443,7 +445,7 @@ async function joinRoom() {
       const taken = Object.values(data.players || {})
         .some((p) => (p.name || '').toLowerCase() === name.toLowerCase());
       if (taken) return toast('That name is taken in this room — pick another.');
-      if (Object.keys(data.players || {}).length >= 6) return toast('That room is full.');
+      if (Object.keys(data.players || {}).length >= R.MAX_PLAYERS) return toast('That room is full.');
     }
     if (!data || !data.players?.[playerId]) {
       updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name) }).catch(() => {});
@@ -493,6 +495,12 @@ async function joinDiscordRoom() {
       }), 8000);
     } else if (!data.players?.[playerId]) {
       if (data.state !== 'lobby') return toast('That game has already started.');
+      // The room-code join has always checked this; this path never did. Inside Discord
+      // the room is the voice channel, so a seventh person launching the activity was
+      // simply seated — on a board with no room for them and a bank not scaled for it.
+      if (Object.keys(data.players || {}).length >= R.MAX_PLAYERS) {
+        return toast(`This table is full — ${R.MAX_PLAYERS} is the most it seats.`);
+      }
       await withTimeout(updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name) }), 8000);
     }
     sfx.join();
@@ -563,9 +571,16 @@ function setConnBadge(bad) { $('conn-badge').hidden = !bad; }
 
 function applyRoom(data, fresh) {
   if (fresh) markFresh();
+  if (data.players?.[playerId]) wasSeated = true;
   // Removed from the lobby by the host. Nothing used to be able to take a player out of
   // a room, so nothing ever had to notice it happening.
-  if (fresh && data.state === 'lobby' && room && !data.players?.[playerId]) {
+  //
+  // Only once this device has actually been seen in the room, which is not a formality:
+  // joining fires its write WITHOUT waiting for it, so the first server snapshot after
+  // entering a room routinely arrives before the join has landed. Without the guard that
+  // snapshot looks exactly like an eviction, and the player is thrown out of the room
+  // they just joined.
+  if (fresh && wasSeated && data.state === 'lobby' && room && !data.players?.[playerId]) {
     toast('The host removed you from the room.');
     leaveRoom(false);
     return;
@@ -935,8 +950,9 @@ const newSeed = () => Math.floor(Math.random() * 2 ** 31);
 
 async function beginMapChoice() {
   if (!isHost()) return toast('Only the host can start.');
-  if (!solo && Object.keys(room.players || {}).length < 2) {
-    return toast('You need at least two players.');
+  if (!solo) {
+    const problem = R.seatingProblem(Object.keys(room.players || {}));
+    if (problem) return toast(problem);
   }
   if (!solo && stillChoosing().length) {
     return toast(`Still waiting on a colour from ${stillChoosing().map(nameFor).join(', ')}.`);
@@ -995,7 +1011,10 @@ async function acceptMap() {
   }
 
   const ids = Object.keys(room.players || {});
-  if (ids.length < 2) return toast('You need at least two players.');
+  // Checked here as well as at the door: this is the one line every route into a game
+  // passes through, whatever it talked its way past to get seated.
+  const problem = R.seatingProblem(ids);
+  if (problem) return toast(problem);
   // Seat order is shuffled here, which is this game's version of rolling for first player.
   const order = shuffle(ids);
   const game = R.newGame(order, { ...room.settings, seed });
@@ -1398,7 +1417,7 @@ for (const b of document.querySelectorAll('[data-solo]')) {
   b.addEventListener('click', () => {
     const step = Number(b.dataset.step);
     if (b.dataset.solo === 'bots') {
-      soloBots = Math.max(1, Math.min(5, soloBots + step));
+      soloBots = Math.max(1, Math.min(R.MAX_PLAYERS - 1, soloBots + step));
       localStorage.setItem('hexcolony_solo_bots', String(soloBots));
     } else {
       soloTarget = Math.max(5, Math.min(15, soloTarget + step));
@@ -1509,7 +1528,7 @@ function renderLobby() {
   $('lobby-code').textContent = roomCode || '----';
   const ids = Object.keys(room.players || {})
     .sort((a, b) => (room.players[a].joinedAt || 0) - (room.players[b].joinedAt || 0));
-  $('lobby-count').textContent = String(ids.length);
+  $('lobby-count').textContent = `${ids.length}/${R.MAX_PLAYERS}`;
 
   $('seat-list').innerHTML = ids.map((pid) => {
     const p = room.players[pid];
@@ -1912,6 +1931,11 @@ function announceTurn(g) {
   if (g.phase === 'over') return;
   const up = R.currentPid(g);
   if (!up) return;
+  // Bots do not get shouted about. The shoutout exists so a table of people looking at
+  // their own phones knows whose go it is; in solo there is no table, and five bots at a
+  // couple of seconds a turn would leave the card up more often than not — announcing
+  // something the score strip has already highlighted.
+  if (isBot(up)) { announcedUp = upKey(g); return; }
   const key = upKey(g);
   if (key === announcedUp) return;
   const first = announcedUp === null;
@@ -2065,7 +2089,9 @@ function renderHand(g) {
       dataset: ` data-res="${r}"`,
       label: trading ? (take ? `give ${take}` : `${R.tradeRate(g, board, playerId, r)}:1`) : '',
     });
-    return trading ? pickCell(r, take, card) : card;
+    return trading
+      ? pickCell(r, take, card, 'data-pay', `Offer ${RES_NAME[r]}${take ? ` — ${take} so far` : ''}`)
+      : card;
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
   }).join('') + devCard({ count: devs || null, dim: !devs, size: 'sm' });
@@ -2078,11 +2104,18 @@ $('hand').addEventListener('click', (e) => {
   const g = game();
   if (!g) return;
   const clear = e.target.closest('[data-clear]');
-  if (clear) { payTouched = true; delete giveSel[clear.dataset.clear]; sfx.tap(); render(); return; }
-  const el = e.target.closest('[data-res]');
+  if (clear) {
+    delete giveSel[clear.dataset.clear];
+    // Clearing the last of it is a request to start over, not a preference to keep. Left
+    // as "touched" there was no way back to the automatic payment short of cancelling
+    // the whole trade.
+    payTouched = bundleTotal(giveSel) > 0;
+    sfx.tap(); render(); return;
+  }
+  const el = e.target.closest('[data-pay]');
   if (!el) return;
   // The one real limit in the whole of trading: you cannot offer a card you do not hold.
-  const r = el.dataset.res;
+  const r = el.dataset.pay;
   const have = g.players[playerId]?.res[r] || 0;
   if (!have || (giveSel[r] || 0) >= have) return;
   payTouched = true;
@@ -2577,9 +2610,8 @@ function renderWantRow(g) {
     const n = wantSel[r] || 0;
     return pickCell(r, n, resCard(r, {
       size: 'sm', count: n || null, selected: !!n, dim: !n,
-      dataset: ` data-want="${r}"`,
       label: `bank ${g.bank[r] || 0}`,
-    }));
+    }), 'data-want', `Ask for ${RES_NAME[r]}${n ? ` — ${n} so far` : ''}`);
   }).join('');
 }
 
@@ -2592,9 +2624,10 @@ function renderWantRow(g) {
  * round to nothing, and up again. One tap on the cross clears the card whatever it is
  * holding.
  */
-const pickCell = (r, n, card) => `<span class="pick">${card}${n
-  ? `<button class="pick-clear" data-clear="${r}" aria-label="Clear ${RES_NAME[r]}">×</button>`
-  : ''}</span>`;
+const pickCell = (r, n, card, act, label) => `<span class="pick">`
+  + `<button class="pick-tap" ${act}="${r}" aria-label="${esc(label)}">${card}</button>`
+  + `${n ? `<button class="pick-clear" data-clear="${r}" aria-label="Clear ${RES_NAME[r]}">×</button>` : ''}`
+  + `</span>`;
 
 /**
  * The trade bar: what the basket does, and the ways to close it.
