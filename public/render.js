@@ -159,6 +159,16 @@ const WAVE_LAYERS = [
 const OUTLINE = 'rgba(255, 255, 255, 0.95)';
 const EDGE_INK = 'rgba(8, 16, 26, 0.85)';
 
+// The roll flash: how long the rolled number stands up at full size, and how long it
+// takes getting there and back. The hold is the part that matters — it has to survive a
+// glance away and back, which is why the whole thing is well over a second.
+const ROLL_ZOOM_MS = 1800;
+const ROLL_GROW_MS = 260;
+const ROLL_SHRINK_MS = 380;
+// About a tenth over the hex at the peak — enough to read as a pop rather than a
+// resize, not so much that it lands on the tiles next door.
+const ROLL_OVERSHOOT = 1.9;
+
 // ---------------------------------------------------------------- terrain art
 // Illustrated tiles, if they are present in art/. Each terrain is tried in extension
 // order and the first one that decodes wins. Nothing here is required: a missing or
@@ -245,6 +255,8 @@ export class BoardView {
     this.game = null;
     this.highlights = { verts: [], edges: [], hexes: [], cities: [] };
     this.payout = null;                // what the last roll paid, and to whom
+    this.rolled = null;                // the number the dice just showed, and when
+    this.zoom = null;                  // this frame's reading of that, set in draw()
     this.sea = seaAt(SEA_DEFAULT);
     this.colorOf = () => '#888';       // pid -> css colour, injected by the app
     this.scale = 40;
@@ -274,6 +286,45 @@ export class BoardView {
   setSea(key) { this.sea = seaAt(key); }
   /** `{ hexes, spots: [{ v, colour, city }], until }`, or null for nothing to show. */
   setPayout(p) { this.payout = p; }
+
+  /**
+   * Blow the rolled number up to fill every hex that carries it.
+   *
+   * A number token is small — deliberately, it has to sit on a tile without hiding it —
+   * and on a phone, at a glance, "was that an eight or a six, and where are the eights?"
+   * is a real question. For a second and a half after the dice land, it is answered
+   * without anyone having to look for it.
+   *
+   * Seven is not a token on any board, so it has nothing to show.
+   */
+  setRolled(num) {
+    this.rolled = (!num || num === 7) ? null : { num, at: performance.now() };
+  }
+
+  /**
+   * How far the rolled tokens have grown: 0 at rest, 1 filling the hex.
+   *
+   * Up with a little overshoot so it reads as a pop rather than a resize, a long hold
+   * so it can actually be read, then back down — a token that snapped back to normal
+   * looked like a rendering fault.
+   */
+  rollZoom(t) {
+    if (!this.rolled) return null;
+    const ms = t - this.rolled.at;
+    if (ms < 0 || ms > ROLL_ZOOM_MS) return null;
+    let k;
+    if (ms < ROLL_GROW_MS) {
+      // ease-out-back
+      const u = ms / ROLL_GROW_MS - 1;
+      k = u * u * ((ROLL_OVERSHOOT + 1) * u + ROLL_OVERSHOOT) + 1;
+    } else if (ms < ROLL_ZOOM_MS - ROLL_SHRINK_MS) {
+      k = 1;
+    } else {
+      const u = (ROLL_ZOOM_MS - ms) / ROLL_SHRINK_MS;
+      k = u * u;
+    }
+    return { num: this.rolled.num, k: Math.max(0, k) };
+  }
 
   /**
    * How strongly the payout flash is showing, 0 when it is over.
@@ -459,6 +510,9 @@ export class BoardView {
   draw(t = 0) {
     if (!this.board || !this.w) return;
     this.pulse = (Math.sin(t / 340) + 1) / 2;
+    // Read once per frame: drawHex leaves the rolled tokens out so they can be drawn
+    // again at the end, over everything, instead of being painted over by the next tile.
+    this.zoom = this.rollZoom(t);
     const c = this.ctx;
     c.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     c.clearRect(0, 0, this.w, this.h);
@@ -478,6 +532,7 @@ export class BoardView {
     this.drawRobber();
     this.drawVertexHighlights();
     this.drawCityHighlights();
+    if (this.zoom) this.drawRolledTokens(this.zoom.k);
   }
 
   drawWater(t = 0) {
@@ -580,7 +635,7 @@ export class BoardView {
     c.lineWidth = Math.max(1, R * 0.035);
     c.stroke();
 
-    if (tile.num) this.drawToken(tile, cx, cy, R);
+    if (tile.num && tile.num !== this.zoom?.num) this.drawToken(tile, cx, cy, R);
   }
 
   /**
@@ -683,9 +738,15 @@ export class BoardView {
     c.restore();
   }
 
-  drawToken(tile, cx, cy, R) {
+  /**
+   * The number token. `grow` of 1 is its resting size; the roll flash passes more, and
+   * every part of it — ring, shadow, digits, pips — is sized off the same number, so it
+   * scales as one piece rather than a circle with a fixed-size number inside it.
+   */
+  drawToken(tile, cx, cy, R, grow = 1) {
     const c = this.ctx;
-    const rad = R * 0.30;
+    const S = R * grow;
+    const rad = S * 0.30;
     const red = isRed(tile.num);
     const robbed = this.game && this.game.robber === tile.i;
 
@@ -693,14 +754,14 @@ export class BoardView {
     c.beginPath(); c.arc(cx, cy, rad, 0, Math.PI * 2);
     c.fillStyle = robbed ? '#9aa0ac' : '#f3e6cb';
     c.shadowColor = 'rgba(0,0,0,0.45)';
-    c.shadowBlur = R * 0.16;
-    c.shadowOffsetY = R * 0.045;
+    c.shadowBlur = S * 0.16;
+    c.shadowOffsetY = S * 0.045;
     c.fill();
     c.restore();
 
     c.beginPath(); c.arc(cx, cy, rad, 0, Math.PI * 2);
     c.strokeStyle = 'rgba(60,44,20,0.55)';
-    c.lineWidth = Math.max(1, R * 0.025);
+    c.lineWidth = Math.max(1, S * 0.025);
     c.stroke();
 
     c.fillStyle = red ? '#b3261e' : '#3b2f1c';
@@ -718,6 +779,24 @@ export class BoardView {
       c.beginPath(); c.arc(x, cy + rad * 0.52, dr, 0, Math.PI * 2);
       c.fillStyle = red ? '#b3261e' : '#3b2f1c';
       c.fill();
+    }
+  }
+
+  /**
+   * The rolled number, over the top of everything, on every hex that carries it.
+   *
+   * Full size is the hexagon's incircle — a circle at 0.866 of the circumradius grazes
+   * all six edges — so the token grows to exactly fill its tile and no further. It does
+   * cover a house or a road for the second it is up, which is the trade: a callout that
+   * ducked behind the pieces would be no callout at all.
+   */
+  drawRolledTokens(k) {
+    const full = 0.86 / 0.30;               // token radius at rest is 0.30 of the hex
+    const grow = 1 + k * (full - 1);
+    for (const tile of this.board.tiles) {
+      if (tile.num !== this.zoom.num) continue;
+      const [cx, cy] = this.toScreen(tile.x, tile.y);
+      this.drawToken(tile, cx, cy, this.scale, grow);
     }
   }
 

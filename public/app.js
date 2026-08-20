@@ -951,6 +951,7 @@ function renderMapPreview() {
   view.setGame(null);
   view.setHighlights({ verts: [], edges: [], hexes: [] });
   view.setPayout(null);       // whatever the last game's dice lit, this is a new island
+  view.setRolled(null);
 
   const host = isHost();
   const badge = $('turn-badge');
@@ -1759,7 +1760,7 @@ function reactToLog(g) {
   $('log-dot').classList.add('on');
   for (const e of entries) {
     switch (e.t) {
-      case 'roll': sfx.dice(); break;
+      case 'roll': sfx.dice(); view.setRolled(e.roll); break;
       case 'build': e.what === 'city' ? sfx.city() : e.what === 'road' ? sfx.road() : sfx.build(); break;
       case 'robber': sfx.robber(); break;
       case 'steal':
