@@ -993,15 +993,27 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 /* ------------------------------------------------------------ steal + players */
 .steal-list { display: flex; flex-direction: column; gap: 8px; }
 .steal-btn {
-  display: flex; align-items: center; gap: 11px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 11px;
   padding: 12px; border-radius: var(--r);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--line);
   border-left: 5px solid var(--c, #888);
   width: 100%;
 }
-.steal-name { flex: 1; font-weight: 700; text-align: left; }
-.steal-n { font-size: 12px; color: var(--dim); }
+.steal-name { flex: 1 1 auto; min-width: 0; font-weight: 700; text-align: left; overflow-wrap: anywhere; }
+.steal-stats { display: flex; gap: 6px; flex: 0 0 auto; }
+.steal-stat {
+  font-size: 11.5px; font-weight: 700;
+  padding: 3px 9px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--dim);
+  white-space: nowrap;
+}
+/* An empty hand has nothing in it to take — worth saying louder than "0". */
+.steal-stat.none { color: #ff9fa1; background: rgba(229, 72, 77, 0.14); }
+/* Whoever is furthest ahead of the people on this tile. The number alone makes you do
+   the comparing; this does it for you, which is the whole job of the sheet. */
+.steal-stat.lead { color: var(--gold); background: rgba(227, 186, 87, 0.18); }
 
 .player-cards { display: flex; flex-direction: column; gap: 9px; }
 .pcard {

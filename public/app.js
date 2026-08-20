@@ -2810,11 +2810,31 @@ function openSteal(g) {
   $('steal-sub').textContent = raid
     ? 'You rolled a 7. Take one card at random from any player.'
     : 'Take one card at random from a player on that tile.';
-  $('steal-list').innerHTML = g.pending.stealFrom.map((pid) => `
+  // Points as well as cards, because those are the two things the choice is actually
+  // between: the fattest hand is the best odds of taking something useful, and the
+  // player in front is the one worth slowing down. The button said only how many cards,
+  // so the second half of that had to be remembered off the score strip behind the sheet.
+  //
+  // Public points, the same count the score strip shows — a victory-point card face down
+  // in somebody's hand stays face down. Nothing here is anything the table cannot
+  // already see.
+  const vps = g.pending.stealFrom.map((pid) => R.publicVP(g, pid));
+  const best = vps.length ? Math.max(...vps) : 0;
+  // Only worth marking when it picks somebody out. Early on everybody on a tile has the
+  // same two points, and gilding all of them says nothing at all.
+  const lead = vps.filter((v) => v === best).length < vps.length ? best : null;
+  $('steal-list').innerHTML = g.pending.stealFrom.map((pid) => {
+    const cards = R.handSize(g.players[pid]);
+    const vp = R.publicVP(g, pid);
+    return `
     <button class="steal-btn" style="--c:${esc(colorFor(pid))}" data-steal="${esc(pid)}">
       <span class="steal-name">${esc(nameFor(pid))}</span>
-      <span class="steal-n">${R.handSize(g.players[pid])} cards</span>
-    </button>`).join('');
+      <span class="steal-stats">
+        <span class="steal-stat${cards ? '' : ' none'}">${cards} card${cards === 1 ? '' : 's'}</span>
+        <span class="steal-stat${lead !== null && vp === lead ? ' lead' : ''}">${vp} point${vp === 1 ? '' : 's'}</span>
+      </span>
+    </button>`;
+  }).join('');
   for (const b of document.querySelectorAll('[data-steal]')) {
     b.addEventListener('click', () => {
       closeSheet();
