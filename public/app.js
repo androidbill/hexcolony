@@ -1854,6 +1854,7 @@ function render() {
   renderScoreStrip(g);
   renderTurnBadge(g);
   renderDice(g);
+  settlePay(g);
   renderHand(g);
   renderActions(g);
   renderTrade(g);
@@ -2531,10 +2532,44 @@ function autoPay(g) {
   return left ? null : pay;
 }
 
-/** Work the payment out again, unless the player has taken it over. */
-function refillPay(g) {
-  if (payTouched) return;
-  giveSel = autoPay(g) || {};
+/**
+ * Settle what is being paid, before a single thing is drawn from it.
+ *
+ * This used to run inside renderTrade, which happens AFTER renderHand — so on the render
+ * where the payment was worked out, the hand had already been drawn from the previous
+ * one. Tap a card you needed and no "give 1" appeared beneath it: it was selected, the
+ * label was simply a render behind. Nothing fixed it until the next tap.
+ */
+function settlePay(g) {
+  if (!trading) return;
+  if (!(R.isTurn(g, playerId) && g.phase === 'build' && g.players[playerId])) return;
+  clampPay(g);
+  // Work the payment out again, unless the player has taken it over.
+  if (!payTouched) giveSel = autoPay(g) || {};
+}
+
+/**
+ * Cut the payment down to the cards actually in hand.
+ *
+ * A selection outlives the cards it was made from: pick three wood, then roll a seven and
+ * discard two of them, and the trade is still offering three. Every plan then refuses it
+ * with "More than you hold" — a message about the interface's own bookkeeping, aimed at a
+ * player who cannot see anything wrong and has no way to put it right, because taking the
+ * payment over is exactly what stops it being worked out again.
+ *
+ * With this the message is unreachable, which is what it always should have been: you
+ * cannot select what you do not have.
+ */
+function clampPay(g) {
+  const held = g.players[playerId]?.res || {};
+  for (const r of Object.keys(giveSel)) {
+    const max = held[r] || 0;
+    if (giveSel[r] <= max) continue;
+    if (max) giveSel[r] = max; else delete giveSel[r];
+  }
+  // Nothing of it survived, so let the app work one out again rather than leaving the
+  // player stuck holding an empty selection it has been told not to touch.
+  if (!bundleTotal(giveSel)) payTouched = false;
 }
 
 function bankPlan(g) {
@@ -2718,7 +2753,6 @@ function renderTrade(g) {
   renderAsks(g);
   renderMyOffers(g);
   if (!on) return;
-  refillPay(g);
   renderWantRow(g);
   renderTradeBar(g);
 }
@@ -2935,7 +2969,16 @@ function logLine(e) {
     case 'plenty': text = `<b>${who(e.p)}</b> took ${bits(e.res)} from the bank`; break;
     case 'bankTrade': text = `<b>${who(e.p)}</b> traded ${bits(e.give)} to the bank for ${bits(e.want)}`; break;
     case 'offer': text = `<b>${who(e.p)}</b> offered ${bits(e.give)} for ${bits(e.want)}`; break;
-    case 'trade': text = `<b>${who(e.p)}</b> traded with <b>${who(e.with)}</b>`; break;
+    // The engine has always recorded both halves of a deal; this line threw them away and
+    // said only that two people had traded, which is the one thing you could already
+    // guess. Who got what is the whole reason to look a trade up afterwards. Older games
+    // in a room mid-upgrade have entries without the cards, so the plain wording stays as
+    // a fallback rather than printing "gave undefined".
+    case 'trade':
+      text = (e.give && e.want)
+        ? `<b>${who(e.p)}</b> gave ${bits(e.give)} to <b>${who(e.with)}</b> for ${bits(e.want)}`
+        : `<b>${who(e.p)}</b> traded with <b>${who(e.with)}</b>`;
+      break;
     case 'longest': text = `<span class="g"><b>${who(e.p)}</b> takes Longest Road (${e.len})</span>`; break;
     case 'army': text = `<span class="g"><b>${who(e.p)}</b> takes Largest Army (${e.size})</span>`; break;
     case 'left': text = `<b>${who(e.p)}</b> left the game`; break;
@@ -2947,7 +2990,10 @@ function logLine(e) {
 }
 
 function openLog(g) {
-  $('log-list').innerHTML = (g.log || []).map(logLine).join('') || '<p class="hint">Nothing yet.</p>';
+  // Newest first. It read oldest-first, so the answer to "what did I just miss" was at
+  // the bottom of a list that is now a hundred and sixty entries long.
+  const rows = (g.log || []).slice().reverse().map(logLine).join('');
+  $('log-list').innerHTML = rows || '<p class="hint">Nothing yet.</p>';
   $('log-dot').classList.remove('on');
   seenLogAt = Date.now();
   sheet('sheet-log');

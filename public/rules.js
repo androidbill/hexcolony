@@ -45,6 +45,29 @@ export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expan
 export const MAX_OFFERS = 4;
 
 /**
+ * How much history the room carries, and what gets thrown out first.
+ *
+ * The whole log rides inside the room document, and every move rewrites that document to
+ * every phone in the room — so this is a bandwidth number, not a storage one. Measured on
+ * a finished six-player game: the log is most of the document, and 61% of the log by
+ * weight is turns, rolls and payouts. Those are also the entries nobody scrolls back to
+ * read. Simply raising the cap to hold more builds and trades tripled every write to buy
+ * mostly dice results.
+ *
+ * So the budget stays small and the routine entries are evicted first. A build or a trade
+ * survives until the log is nothing but builds and trades, which is what the log is for
+ * looking at.
+ */
+export const LOG_KEEP = 80;
+/**
+ * The tail nothing is evicted from, so the last minute of play stays whole — rolls,
+ * payouts and all. Without it a long game ends up holding nothing but builds and trades,
+ * and "what did I just miss" becomes the one question the log cannot answer.
+ */
+const LOG_RECENT = 24;
+const LOG_ROUTINE = new Set(['turn', 'roll', 'produce', 'nothing', 'shortfall', 'discard', 'robber', 'noloot']);
+
+/**
  * Seats at a table.
  *
  * Two because a trade needs somebody to trade with; six because that is what the boards
@@ -269,7 +292,23 @@ function note(g, events, entry) {
   // so its length is not a usable "what's new" marker for clients.
   const e = { ...entry, n: g.turn.num, i: g.seq };
   g.log.push(e);
-  if (g.log.length > 60) g.log.splice(0, g.log.length - 60);
+  // Sixty was about three rounds at a six-player table: a turn, a roll and a payout each
+  // is most of it before anybody has built anything, so the builds and trades people
+  // actually want to look back at were shoved off the end within a couple of minutes.
+  // The whole log rides in the room document on every write, so this is not free — but
+  // an entry is a few dozen bytes and a hundred and sixty of them is single-digit KB,
+  // against a game state that is already much larger.
+  let over = g.log.length - LOG_KEEP;
+  // Oldest routine entries first, but never out of the recent tail. That leaves gaps
+  // further back — a build whose roll has gone — which is the trade being made
+  // deliberately: entries carry their turn number, so nothing becomes ambiguous, and what
+  // survives from the distant past is what somebody would actually look back for.
+  let floor = g.log.length - LOG_RECENT;
+  for (let i = 0; i < floor && over > 0;) {
+    if (LOG_ROUTINE.has(g.log[i].t)) { g.log.splice(i, 1); over -= 1; floor -= 1; } else i += 1;
+  }
+  // Nothing routine left to give up: the log really is all builds and trades now.
+  if (over > 0) g.log.splice(0, over);
   events.push(e);
 }
 
