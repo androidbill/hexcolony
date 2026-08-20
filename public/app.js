@@ -2339,10 +2339,12 @@ function openDev(g) {
       <span class="dev-buy-left">${empty ? 'deck empty' : myTurn ? `${g.deck.length} left` : 'not your turn'}</span>
     </button>`;
   if (can.dev) {
-    $('btn-buy-dev').addEventListener('click', () => {
-      closeSheet();
-      send({ type: 'buyDev' });
-    });
+    // Stays open. Buying one card is not a reason to put the shop away — if you can
+    // afford three you should be able to buy three, and shutting the sheet after each
+    // one made that Cards, Buy, Cards, Buy. The sheet redraws itself on the move (see
+    // syncSheets), so the deck count comes down, the cost dims as the resources go, and
+    // the button disables itself the moment you cannot afford another.
+    $('btn-buy-dev').addEventListener('click', () => send({ type: 'buyDev' }));
   }
 
   const rows = [];
