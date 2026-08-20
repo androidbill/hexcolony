@@ -30,6 +30,33 @@ service cloud.firestore {
       allow delete: if true;
     }
 
+    // Chat, one document per message, in a subcollection under the room.
+    //
+    // Under the room and not inside its document on purpose: the room document is the
+    // entire game state and every move rewrites it to every phone in the room, so a chat
+    // message living in there would re-send the board to say "gg".
+    //
+    // A subcollection is NOT covered by the rule on the room above — that matches the
+    // document, not what is beneath it — so without this block the catch-all at the
+    // bottom denies every read and write and the chat silently does nothing.
+    //
+    // The shape is enforced here; the words are not. Rules cannot hold a word list worth
+    // having, and the list would be public anyway. The app filters what it sends and
+    // masks everything it draws, which is what actually keeps a message off a screen.
+    match /rooms/{code}/chat/{msg} {
+      allow read: if validRoomId(code);
+      allow create: if validRoomId(code)
+                    && request.resource.data.keys().hasOnly(['by', 'name', 'text', 'at'])
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() > 0
+                    && request.resource.data.text.size() <= 140
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 14;
+      // Said is said: a message cannot be edited into something else after the fact.
+      allow update: if false;
+      allow delete: if true;
+    }
+
     // Connection heartbeat, one tiny document per room, kept OUT of the room itself.
     // Firestore has no field-level deltas: a beat written inside the room would
     // rebroadcast the entire game state to every phone every few seconds.

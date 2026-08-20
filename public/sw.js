@@ -11,6 +11,7 @@ const CORE = [
   'rules.js',
   'bot.js',
   'cards.js',
+  'clean.js',
   'fb.js',
   'discord.js',
   'discord-config.js',

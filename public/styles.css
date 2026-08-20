@@ -624,6 +624,54 @@ button { background: none; border: 0; cursor: pointer; }
   flex: 0 0 auto;
 }
 
+/* ------------------------------------------------------------ chat */
+/* Opposite the recentre control, so the two float in the board's bottom corners and
+   neither is under the thumb that is trying to place a road. */
+.chat-fab {
+  position: absolute; left: 12px; bottom: 12px;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(5, 18, 32, 0.9);
+  border: 1px solid var(--line);
+  color: var(--text);
+  display: grid; place-items: center;
+  backdrop-filter: blur(8px);
+  z-index: 5;
+}
+.chat-fab svg { width: 22px; height: 22px; }
+.chat-fab:active { background: rgba(5, 18, 32, 1); }
+.chat-dot {
+  position: absolute; top: -3px; right: -3px;
+  min-width: 19px; height: 19px; padding: 0 5px;
+  border-radius: 999px;
+  background: var(--sky); color: var(--sky-ink);
+  font-size: 11px; font-weight: 800; font-style: normal;
+  line-height: 19px; text-align: center;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+}
+
+.chat-log {
+  max-height: 46vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 2px 0 6px;
+}
+.chat-row {
+  border-left: 3px solid var(--c, var(--dim));
+  padding: 5px 9px;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: rgba(255, 255, 255, 0.05);
+}
+.chat-row.mine { background: rgba(53, 196, 255, 0.12); }
+.chat-who {
+  display: block;
+  font-size: 11px; font-weight: 800;
+  color: var(--c, var(--dim));
+}
+.chat-text { font-size: 14px; overflow-wrap: anywhere; }
+
+.chat-send { display: flex; gap: 8px; margin-top: 10px; }
+.chat-send .text-input { flex: 1 1 auto; min-width: 0; }
+
 /* ------------------------------------------------------------ room browser */
 .room-list { display: flex; flex-direction: column; gap: 10px; }
 .room-card {

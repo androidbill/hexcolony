@@ -63,6 +63,8 @@ const noop = () => () => {};
 // demand a composite index that has to be created in the console before the query works
 // at all. The sorting is done on the client instead, on at most fifty rooms.
 export const collection = fs ? fs.collection : (() => null);
+export const addDoc = fs ? fs.addDoc : offline;
+export const orderBy = fs ? fs.orderBy : (() => null);
 export const query = fs ? fs.query : (() => null);
 export const where = fs ? fs.where : (() => null);
 export const limit = fs ? fs.limit : (() => null);

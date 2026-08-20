@@ -14,10 +14,11 @@
 import {
   db, NET_READY, doc, getDoc, getDocFromServer, setDoc, updateDoc, onSnapshot,
   deleteField, deleteDoc, serverTimestamp, runTransaction,
-  collection, query, where, limit,
+  collection, query, where, limit, orderBy, addDoc,
   disableNetwork, enableNetwork,
 } from './fb.js';
 import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
+import { findBadWord, maskText } from './clean.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
 import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO } from './board.js';
@@ -967,6 +968,7 @@ function enterRoom(code) {
   lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
   announcedUp = null;
   resetGuess(); resetTrade();
+  subscribeChat();
   subscribeRoom();
   subscribePulse();
   // One immediate beat so this phone has a clock reading straight away.
@@ -1024,6 +1026,7 @@ async function leaveRoom(removeSelf = true) {
   }
 
   setConnBadge(false);
+  stopChat();
   roomCode = null; roomRef = null; pulseRef = null; room = null;
   board = null; boardSeed = null;
   resetGuess(); resetTrade();
@@ -1938,6 +1941,132 @@ view.onPick = (hit) => {
 
 $('btn-recenter').addEventListener('click', () => { view.resetView(); sfx.tap(); });
 
+// ---------------------------------------------------------------- chat
+//
+// Messages live in a subcollection, rooms/{code}/chat, and not in the room document.
+// The room document is the whole game state and every move rewrites it to every phone in
+// the room — putting chat in there would mean a two-word message re-sending the board.
+// A subcollection means a message costs a message.
+//
+// Both ends are filtered. Sending is checked so nobody swears through the app by accident
+// or in temper, and everything that arrives is masked before it is drawn, because there
+// is no server here: a determined person with devtools can write into that collection
+// whatever the app would have refused. The check on the way out is manners; the mask on
+// the way in is the one that protects the table.
+const CHAT_KEEP = 60;        // how many messages a room shows
+const CHAT_MAX = 140;        // characters in one message
+
+let unsubChat = null;
+let chatLog = [];
+let chatSeenAt = Number(localStorage.getItem('hexcolony_chat_seen') || 0);
+let chatUnread = 0;
+
+function subscribeChat() {
+  if (unsubChat) { unsubChat(); unsubChat = null; }
+  if (!roomCode || solo || !NET_READY) return;
+  // One orderBy on one field, no filter: served by the automatic index, no composite
+  // needed. Newest first so the limit keeps the newest, then flipped for reading.
+  const q = query(
+    collection(db, 'rooms', roomCode, 'chat'),
+    orderBy('at', 'desc'),
+    limit(CHAT_KEEP),
+  );
+  unsubChat = onSnapshot(q, (snap) => {
+    chatLog = snap.docs.map((d) => ({ id: d.id, ...d.data() })).reverse();
+    countUnread();
+    if (openSheet === 'sheet-chat') drawChat();
+    renderChatButton();
+  }, (err) => console.error('chat', err));
+}
+
+function stopChat() {
+  if (unsubChat) { unsubChat(); unsubChat = null; }
+  chatLog = [];
+  chatUnread = 0;
+}
+
+/** Anything newer than the last time the sheet was open, and not from this player. */
+function countUnread() {
+  chatUnread = chatLog.filter((m) => m.by !== playerId && (stampMs(m.at) || 0) > chatSeenAt).length;
+}
+
+function renderChatButton() {
+  const btn = $('btn-chat');
+  if (!btn) return;
+  // Only in a room with other people in it. Solo has nobody to talk to.
+  btn.hidden = solo || !roomCode || room?.state !== 'playing';
+  $('chat-dot').hidden = chatUnread === 0;
+  $('chat-dot').textContent = chatUnread > 9 ? '9+' : String(chatUnread);
+}
+
+function drawChat() {
+  const box = $('chat-log');
+  if (!chatLog.length) {
+    box.innerHTML = '<p class="hint">Nothing said yet. Say hello.</p>';
+    return;
+  }
+  box.innerHTML = chatLog.map((m) => {
+    const mine = m.by === playerId;
+    const c = m.by && room?.players?.[m.by] ? colorFor(m.by) : '#6b7a8c';
+    // Masked here, on the way in, every time it is drawn.
+    return `<div class="chat-row${mine ? ' mine' : ''}" style="--c:${esc(c)}">
+      <span class="chat-who">${esc(m.name || 'Someone')}</span>
+      <span class="chat-text">${esc(maskText(m.text || ''))}</span>
+    </div>`;
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function openChat() {
+  chatSeenAt = Date.now();
+  localStorage.setItem('hexcolony_chat_seen', String(chatSeenAt));
+  chatUnread = 0;
+  renderChatButton();
+  drawChat();
+  sheet('sheet-chat');
+  $('chat-input').focus();
+}
+
+async function sendChat() {
+  const input = $('chat-input');
+  const text = (input.value || '').trim().slice(0, CHAT_MAX);
+  if (!text) return;
+  if (!roomCode || solo) return;
+
+  const bad = findBadWord(text);
+  if (bad) {
+    // Named, because "that is not allowed" with no idea which word is a puzzle rather
+    // than a rule — and because the filter is not perfect, so a player who has been
+    // stopped for saying "Scunthorpe" deserves to know that is what happened.
+    toast(`Let's keep it clean — "${bad}" will not send.`);
+    sfx.error();
+    return;
+  }
+
+  input.value = '';
+  try {
+    await withTimeout(addDoc(collection(db, 'rooms', roomCode, 'chat'), {
+      by: playerId,
+      name: myName() || room?.players?.[playerId]?.name || 'Someone',
+      text,
+      at: serverTimestamp(),
+    }), 8000);
+    // Anything this device sent is by definition already read.
+    chatSeenAt = Date.now();
+    localStorage.setItem('hexcolony_chat_seen', String(chatSeenAt));
+  } catch (e) {
+    console.error(e);
+    toast('That message did not send.');
+    input.value = text;
+  }
+}
+
+$('btn-chat').addEventListener('click', () => { unlock(); sfx.tap(); openChat(); });
+$('chat-send').addEventListener('click', () => { unlock(); sendChat(); });
+$('chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+});
+
 // A continuous loop so the legal-move highlights can pulse and the sea drifts.
 //
 // It only draws when there is something to look at. The board is behind the home and
@@ -2148,6 +2277,7 @@ function render() {
   renderHand(g);
   renderActions(g);
   renderTrade(g);
+  renderChatButton();
   syncSheets(g);
 
   if (g.phase === 'over') renderOver(g);
