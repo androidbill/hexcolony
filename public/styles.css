@@ -624,6 +624,56 @@ button { background: none; border: 0; cursor: pointer; }
   flex: 0 0 auto;
 }
 
+/* ------------------------------------------------------------ room browser */
+.room-list { display: flex; flex-direction: column; gap: 10px; }
+.room-card {
+  display: block; width: 100%; text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--sky);
+  border-radius: var(--r);
+  padding: 12px 13px;
+  transition: transform .12s, border-color .15s;
+}
+.room-card:active { transform: scale(0.985); border-color: var(--sky); }
+/* A full table stays on the list. Taking it off would make the list flicker as somebody
+   takes the last seat, and "that one is full" is information too. */
+.room-card.full { opacity: 0.5; border-left-color: var(--dim); }
+.room-card:disabled { pointer-events: none; }
+
+.room-top { display: flex; align-items: baseline; gap: 8px; }
+.room-host {
+  flex: 1 1 auto; min-width: 0;
+  font-weight: 800; font-size: 15px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.room-code {
+  flex: 0 0 auto;
+  font-size: 13px; font-weight: 800; letter-spacing: 0.12em;
+  color: var(--sky);
+}
+
+.room-seats { display: flex; align-items: center; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+.seat-dot {
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--c, #6b7a8c);
+  border: 1px solid rgba(0, 0, 0, .4);
+  flex: 0 0 auto;
+}
+/* An empty chair reads as an outline rather than as a grey player. */
+.seat-dot.empty { background: none; border: 1px dashed rgba(255, 255, 255, 0.28); }
+.room-count { font-size: 12px; font-weight: 700; color: var(--dim); margin-left: 4px; }
+
+.room-bits { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.room-bits span {
+  font-size: 10.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+  padding: 3px 7px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--dim);
+}
+.room-age { margin-top: 7px; font-size: 11px; color: var(--dim); }
+
 /* ------------------------------------------------------------ sea picker */
 .sea-row {
   display: grid;

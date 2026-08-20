@@ -57,6 +57,16 @@ export { db, IN_DISCORD };
 const offline = () => Promise.reject(new Error('You are offline — online rooms need a connection.'));
 const noop = () => () => {};
 
+// The room browser needs to ask about the whole collection rather than one document by
+// id. Deliberately only ever a single equality filter and a limit — Firestore serves that
+// from the automatic single-field index, where adding an orderBy on a second field would
+// demand a composite index that has to be created in the console before the query works
+// at all. The sorting is done on the client instead, on at most fifty rooms.
+export const collection = fs ? fs.collection : (() => null);
+export const query = fs ? fs.query : (() => null);
+export const where = fs ? fs.where : (() => null);
+export const limit = fs ? fs.limit : (() => null);
+
 export const doc = fs ? fs.doc : (() => ({ id: 'offline' }));
 export const getDoc = fs ? fs.getDoc : offline;
 export const getDocFromServer = fs ? fs.getDocFromServer : offline;

@@ -70,6 +70,11 @@
         <button class="btn btn-go" id="btn-join">Join</button>
       </div>
 
+      <button class="btn btn-ghost" id="btn-rooms">
+        <span class="btn-label">Browse Rooms</span>
+        <span class="btn-sub">See who is waiting for players</span>
+      </button>
+
       <div class="or-split"><span>or play alone</span></div>
 
       <button class="btn btn-key" id="btn-resume" hidden>
@@ -89,6 +94,31 @@
     </div>
 
     <footer class="ver" id="ver-home"></footer>
+  </div>
+</section>
+
+<!-- ============================== ROOMS ============================== -->
+<section class="screen" id="screen-rooms">
+  <header class="topbar">
+    <button class="icon-btn" id="rooms-back" aria-label="Back">
+      <svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <div class="topbar-title">Open rooms</div>
+    <button class="icon-btn" id="rooms-refresh" aria-label="Refresh the list">
+      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </header>
+
+  <div class="lobby-scroll">
+    <button class="btn btn-key" id="btn-rooms-create">
+      <span class="btn-label">Create a Room</span>
+      <span class="btn-sub">Open a table and let people join</span>
+    </button>
+
+    <div class="or-split"><span>or join one below</span></div>
+
+    <div class="room-list" id="room-list"></div>
+    <p class="hint" id="rooms-hint"></p>
   </div>
 </section>
 
