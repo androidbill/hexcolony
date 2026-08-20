@@ -2088,11 +2088,18 @@ function renderHand(g) {
     const card = resCard(r, {
       count: n || null, dim: !n, size: 'sm', selected: !!take,
       dataset: ` data-res="${r}"`,
-      label: trading ? (take ? `give ${take}` : `${R.tradeRate(g, board, playerId, r)}:1`) : '',
+      // A non-breaking space rather than nothing, so a card with no count under it is
+      // exactly as tall as one that has: the hand aligns on its bottom edge, and cards
+      // of two heights sitting in it look broken.
+      label: trading ? (take ? `give ${take}` : '\u00a0') : '',
     });
-    return trading
-      ? pickCell(r, take, card, 'data-pay', `Offer ${RES_NAME[r]}${take ? ` — ${take} so far` : ''}`)
-      : card;
+    if (!trading) return card;
+    // The rate goes above, where it is read before the decision rather than after it:
+    // what the bank charges for this card is the whole of what you are weighing up when
+    // you choose which cards to part with.
+    const rate = `${R.tradeRate(g, board, playerId, r)}:1`;
+    return pickCell(r, take, card, 'data-pay',
+      `Offer ${RES_NAME[r]} at ${rate}${take ? ` — ${take} so far` : ''}`, rate);
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
   }).join('') + devCard({ count: devs || null, dim: !devs, size: 'sm' });
@@ -2107,10 +2114,6 @@ $('hand').addEventListener('click', (e) => {
   const clear = e.target.closest('[data-clear]');
   if (clear) {
     delete giveSel[clear.dataset.clear];
-    // Taking a card back out is an edit like any other, so the payment is yours from
-    // here and stays as you left it — including empty. Releasing it here is what made
-    // the button do nothing: the next render simply filled the card back in.
-    payTouched = true;
     sfx.tap(); render(); return;
   }
   const el = e.target.closest('[data-pay]');
@@ -2119,7 +2122,6 @@ $('hand').addEventListener('click', (e) => {
   const r = el.dataset.pay;
   const have = g.players[playerId]?.res[r] || 0;
   if (!have || (giveSel[r] || 0) >= have) return;
-  payTouched = true;
   giveSel[r] = (giveSel[r] || 0) + 1;
   sfx.tap();
   render();
@@ -2451,10 +2453,6 @@ function openPickRes(kind) {
 // the payment works itself out at your own port rates.
 let trading = false;
 let giveSel = {}, wantSel = {};
-// Once you have picked your own payment the app stops picking one for you. Choosing
-// cards by hand says plainly that the automatic answer was not the one you wanted, and
-// having it overwritten on your next tap would be maddening.
-let payTouched = false;
 // Acceptances already announced, as `offerId:playerId`. An acceptance is not written to
 // the game log — see the note in syncSheets — so nothing else would ever say it happened.
 const notedAccepts = new Set();
@@ -2478,58 +2476,25 @@ const gettableOf = (g, r) => (g.bank[r] || 0) + Object.entries(g.players || {})
 
 function startTrade() {
   trading = true;
-  giveSel = {}; wantSel = {}; payTouched = false;
+  giveSel = {}; wantSel = {};
   render();
 }
 
 function stopTrade(quiet = false) {
   trading = false;
-  giveSel = {}; wantSel = {}; payTouched = false;
+  giveSel = {}; wantSel = {};
   if (!quiet) render();
 }
 
 /** A different game entirely: forget the basket and every offer already announced. */
 function resetTrade() {
   trading = false;
-  giveSel = {}; wantSel = {}; payTouched = false;
+  giveSel = {}; wantSel = {};
   notedAccepts.clear();
   // The tray is only redrawn once there is a game to draw it for, and the rows would
   // otherwise still be showing the last one's offers while the lobby loads.
   for (const id of ['trade-want', 'trade-bar', 'trade-offers', 'trade-asks']) $(id).hidden = true;
   $('actions').hidden = false;
-}
-
-/**
- * The cheapest way to pay for what has been asked for, out of the hand, at this player's
- * own rates.
- *
- * Lowest rate first — owning a 2:1 port ought to be the reason it gets used — and among
- * equal rates the deepest pile, so a trade spends the wheat you are drowning in rather
- * than the last of your ore. Nothing being asked for is ever spent: the bank will not
- * take a card in exchange for itself.
- *
- * Null means the hand cannot cover the ask at any rate, which is the signal that this
- * one has to go to the table instead of the bank.
- */
-function autoPay(g) {
-  let left = bundleTotal(wantSel);
-  const p = g.players[playerId];
-  if (!left || !p) return {};
-  const asking = new Set(kindsIn(wantSel));
-  const piles = RESOURCES
-    .filter((r) => !asking.has(r) && (p.res[r] || 0) > 0)
-    .map((r) => ({ r, have: p.res[r], rate: R.tradeRate(g, board, playerId, r) }))
-    .sort((a, b) => a.rate - b.rate || b.have - a.have);
-
-  const pay = {};
-  for (const pile of piles) {
-    while (left > 0 && pile.have - (pay[pile.r] || 0) >= pile.rate) {
-      pay[pile.r] = (pay[pile.r] || 0) + pile.rate;
-      left -= 1;
-    }
-    if (!left) break;
-  }
-  return left ? null : pay;
 }
 
 /**
@@ -2544,20 +2509,6 @@ function settlePay(g) {
   if (!trading) return;
   if (!(R.isTurn(g, playerId) && g.phase === 'build' && g.players[playerId])) return;
   clampPay(g);
-}
-
-/**
- * Choose a payment for what is being asked for.
- *
- * Called when the ask changes, and only then. It used to run on every single render,
- * which quietly made the clear button useless: clear the four sheep it had picked, the
- * next render put them straight back, and there was no way at all to ask for a wheat and
- * offer one sheep for it to the table instead of four to the bank. An automatic answer
- * that cannot be argued with is not a suggestion, it is a decision.
- */
-function autoFillPay(g) {
-  if (payTouched) return;
-  giveSel = autoPay(g) || {};
 }
 
 /**
@@ -2643,14 +2594,10 @@ function tradeReadout(g, bank, offer) {
   const giveN = bundleTotal(giveSel);
   if (!wantN) {
     return giveN ? 'Now tap what you want for them.'
-      : 'Tap what you need. The payment fills itself in.';
+      : 'Tap what you need, then tap what you will pay with.';
   }
   if (bank.ok) return `Bank: ${bank.note}`;
-  if (!giveN) {
-    return payTouched
-      ? 'Tap your own cards to choose what to offer for it.'
-      : 'Your hand will not cover that at the bank — tap cards to offer a swap.';
-  }
+  if (!giveN) return 'Now tap the cards you will pay with. The rate is above each one.';
   if (offer.ok) return `Offer: ${bundleText(giveSel)} → ${bundleText(wantSel)}`;
   return bank.note;
 }
@@ -2675,7 +2622,8 @@ function renderWantRow(g) {
  * round to nothing, and up again. One tap on the cross clears the card whatever it is
  * holding.
  */
-const pickCell = (r, n, card, act, label) => `<span class="pick">`
+const pickCell = (r, n, card, act, label, top = '') => `<span class="pick">`
+  + `${top ? `<span class="pick-rate">${esc(top)}</span>` : ''}`
   + `<button class="pick-tap" ${act}="${r}" aria-label="${esc(label)}">${card}</button>`
   + `${n ? `<button class="pick-clear" data-clear="${r}" aria-label="Clear ${RES_NAME[r]}">×</button>` : ''}`
   + `</span>`;
@@ -2781,9 +2729,6 @@ $('trade-want').addEventListener('click', (e) => {
   const clear = e.target.closest('[data-clear]');
   if (clear) {
     delete wantSel[clear.dataset.clear];
-    // Asking for nothing at all is a fresh start, so the app may choose again.
-    if (!bundleTotal(wantSel)) payTouched = false;
-    autoFillPay(g);
     sfx.tap(); render(); return;
   }
   const el = e.target.closest('[data-want]');
@@ -2794,7 +2739,6 @@ $('trade-want').addEventListener('click', (e) => {
   const room = gettableOf(g, r);
   if ((wantSel[r] || 0) >= room) return;
   wantSel[r] = (wantSel[r] || 0) + 1;
-  autoFillPay(g);
   sfx.tap();
   render();
 });
@@ -2811,13 +2755,13 @@ $('trade-bar').addEventListener('click', (e) => {
     // failure partway through left the player halfway into something they had asked for
     // as one thing.
     send({ type: 'bankTrade', give: giveSel, want: wantSel });
-    giveSel = {}; wantSel = {}; payTouched = false;
+    giveSel = {}; wantSel = {};
     render();
     return;
   }
   if (!offerPlan(g).ok) return;
   send({ type: 'offerTrade', give: giveSel, want: wantSel });
-  giveSel = {}; wantSel = {}; payTouched = false;
+  giveSel = {}; wantSel = {};
   render();
 });
 

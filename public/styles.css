@@ -433,7 +433,21 @@ button { background: none; border: 0; cursor: pointer; }
 /* A card with its clear button. The cross sits on the opposite corner from the count,
    so a selected card carries "how many" on one shoulder and "not any more" on the
    other, and neither has to move to make room for the other. */
-.pick { position: relative; display: inline-flex; flex: 0 0 auto; }
+/* A column: the bank's rate for this card, the card, and how many of it are going.
+   The rate sits above because that is the order it is used in — you read what a card
+   costs, then decide whether to part with it. Underneath is the answer, not the input. */
+.pick {
+  position: relative;
+  display: inline-flex; flex-direction: column; align-items: center;
+  flex: 0 0 auto;
+}
+.pick-rate {
+  font-size: 10px; font-weight: 800;
+  letter-spacing: .03em;
+  color: var(--gold);
+  margin-bottom: 3px;
+  line-height: 1;
+}
 /* The card you tap is a button again. It was a bare span carrying a data attribute,
    which works for a finger and for nothing else — no keyboard, no screen reader, no
    announcement of what tapping it would do. The old trade sheet had this right. */
