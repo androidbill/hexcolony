@@ -45,6 +45,17 @@ export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expan
 export const MAX_OFFERS = 4;
 
 /**
+ * How long an offer stands before it lapses.
+ *
+ * The deadline arrives as part of the move rather than being read off a clock in here.
+ * applyMove has to stay a pure function of the state it is given — the bot tournament
+ * replays a quarter of a million moves through it and the engine tests depend on the
+ * same state producing the same answer — so the one device that knows when "now" is
+ * works the deadline out and hands it over as data.
+ */
+export const TRADE_SECONDS = 10;
+
+/**
  * How much history the room carries, and what gets thrown out first.
  *
  * The whole log rides inside the room document, and every move rewrites that document to
@@ -1129,7 +1140,11 @@ export function applyMove(state, pid, move, rng = Math.random) {
       // want whichever of them bites first, not both — and acceptTrade re-checks the hand
       // at the moment it closes, so the second one simply fails rather than conjuring a
       // card that is already gone.
-      g.trades.push({ id: ++g.tradeIds, from: pid, give, want, replies: {} });
+      // A deadline is optional: a device that has not yet measured its distance from the
+      // server clock declines to set one rather than set a wrong one, and that offer
+      // simply stands until it is answered or the turn ends.
+      const until = Number.isFinite(move.until) ? move.until : null;
+      g.trades.push({ id: ++g.tradeIds, from: pid, give, want, replies: {}, until });
       note(g, events, { t: 'offer', p: pid, give, want });
       // Waiting on other people should not cost you the turn you are waiting during.
       bumpClock(g);
@@ -1147,6 +1162,14 @@ export function applyMove(state, pid, move, rng = Math.random) {
         }
       }
       offer.replies[pid] = move.yes ? 'yes' : 'no';
+      // Nobody left to hear from and nobody said yes. An offer in that state is not
+      // pending, it is finished — leaving it on the table asks its author to notice four
+      // separate "Declined" rows and tidy it away themselves.
+      const others = g.seats.filter((s) => s !== offer.from);
+      if (others.length && others.every((s) => offer.replies[s] === 'no')) {
+        g.trades = g.trades.filter((t) => t.id !== offer.id);
+        note(g, events, { t: 'declined', p: offer.from, give: offer.give, want: offer.want });
+      }
       return ok();
     }
 
@@ -1168,6 +1191,19 @@ export function applyMove(state, pid, move, rng = Math.random) {
       bumpClock(g);
       // Only this one closes. The rest stay up; they are separate offers.
       g.trades = g.trades.filter((t) => t.id !== deal.id);
+      return ok();
+    }
+
+    // An offer whose time ran out. Separate from cancelTrade because the deadline is a
+    // fact about the offer rather than a change of mind, and because it says so in the
+    // log — a strip vanishing on its own with no word for it reads as a fault.
+    case 'expireTrade': {
+      const offer = g.trades.find((t) => t.id === move.id);
+      if (!offer) return fail('That offer is already gone.');
+      if (offer.from !== pid) return fail('Not your offer.');
+      if (!offer.until) return fail('That offer has no deadline.');
+      g.trades = g.trades.filter((t) => t.id !== offer.id);
+      note(g, events, { t: 'expired', p: pid, give: offer.give, want: offer.want });
       return ok();
     }
 

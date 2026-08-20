@@ -202,7 +202,8 @@ let seenLogAt = 0;
 // the long way round.
 const PREDICTABLE = new Set([
   'setupSettlement', 'setupRoad', 'build', 'buyDev', 'playDev', 'discard',
-  'bankTrade', 'offerTrade', 'replyTrade', 'acceptTrade', 'cancelTrade', 'endTurn',
+  'bankTrade', 'offerTrade', 'replyTrade', 'acceptTrade', 'cancelTrade', 'expireTrade',
+  'endTurn',
 ]);
 
 // Longer than the transaction's own timeout, so in the ordinary failure the move
@@ -1778,6 +1779,37 @@ function drawTimer() {
   el.classList.toggle('urgent', secs <= 5);
 }
 
+// Offers already sent for expiry, so a deadline is not fired at four times a second
+// while the transaction is in flight.
+const expiredOffers = new Set();
+
+/**
+ * Count the offers down without redrawing them.
+ *
+ * The strips are rebuilt with innerHTML, and doing that four times a second would throw
+ * away the tap you were halfway through making on the buttons inside them. Only the
+ * number changes, so only the number is written.
+ */
+function drawOfferClocks() {
+  const g = game();
+  if (!g) return;
+  for (const t of g.trades || []) {
+    const el = document.querySelector(`[data-offer-clock="${t.id}"]`);
+    const left = offerLeft(t);
+    if (!el || left === null) continue;
+    const secs = Math.max(0, Math.ceil(left));
+    el.textContent = `${secs}s`;
+    el.classList.toggle('urgent', secs <= 3);
+    // Only the player who made it may retire it, which is also the phone whose clock set
+    // the deadline in the first place. If they have gone quiet the offer lapses with the
+    // turn instead, since a turn ending clears the table.
+    if (left <= 0 && t.from === playerId && !expiredOffers.has(t.id)) {
+      expiredOffers.add(t.id);
+      send({ type: 'expireTrade', id: t.id }, { quiet: true });
+    }
+  }
+}
+
 /**
  * Run out of time and the turn takes itself.
  *
@@ -1816,6 +1848,7 @@ function startTimerLoop() {
   timerInterval = setInterval(() => {
     if (!room || room.state !== 'playing') return;
     drawTimer();
+    drawOfferClocks();
     fireTimeout();
   }, 250);
 }
@@ -1903,6 +1936,12 @@ function reactToLog(g) {
       case 'offer':
         // The tray shows the offer; this is what makes you look down at it.
         if (e.p !== playerId) { sfx.card(); toast(`${nameFor(e.p)} offers you a trade.`); }
+        break;
+      case 'declined':
+        if (e.p === playerId) toast('Everybody passed on that one.');
+        break;
+      case 'expired':
+        if (e.p === playerId) toast('Your offer ran out of time.');
         break;
       case 'trade': sfx.trade(); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
@@ -2491,6 +2530,7 @@ function resetTrade() {
   trading = false;
   giveSel = {}; wantSel = {};
   notedAccepts.clear();
+  expiredOffers.clear();
   // The tray is only redrawn once there is a game to draw it for, and the rows would
   // otherwise still be showing the last one's offers while the lobby loads.
   for (const id of ['trade-want', 'trade-bar', 'trade-offers', 'trade-asks']) $(id).hidden = true;
@@ -2680,6 +2720,7 @@ function renderMyOffers(g) {
     }).join('');
     return `<div class="my-offer">
       <div class="my-offer-top">
+        ${offerClock(t)}
         <span class="offer-cards">${cardRow(t.give, { size: 'xs' })}</span>
         <span class="swap-arrow" aria-hidden="true">⇄</span>
         <span class="offer-cards">${cardRow(t.want, { size: 'xs' })}</span>
@@ -2760,7 +2801,14 @@ $('trade-bar').addEventListener('click', (e) => {
     return;
   }
   if (!offerPlan(g).ok) return;
-  send({ type: 'offerTrade', give: giveSel, want: wantSel });
+  // Worked out here because this is the one device that knows when "now" is, and handed
+  // over as data so the engine stays a pure function. serverNow() is this phone's clock
+  // corrected by the offset it has measured against Firestore, so the number lands in
+  // the frame every other phone reads deadlines in. Until that offset has been measured
+  // there is no honest number to send, and the offer goes out without a deadline rather
+  // than with a wrong one — see clockTrusted().
+  const until = clockTrusted() ? serverNow() + R.TRADE_SECONDS * 1000 : null;
+  send({ type: 'offerTrade', give: giveSel, want: wantSel, until });
   giveSel = {}; wantSel = {};
   render();
 });
@@ -2777,15 +2825,24 @@ $('trade-offers').addEventListener('click', (e) => {
 });
 
 /**
- * Offers waiting on an answer from you, in the tray.
+ * Seconds left on an offer, or null when it has no deadline or cannot be judged.
  *
- * This was a sheet, and it had exactly the fault the trade sheet had: it covered your
- * hand and the turn clock. Being asked "will you take two wheat for an ore" is precisely
- * the moment you need to see what you are holding and how long you have got — arguably
- * more than the person doing the asking does, because you are answering on their clock.
- *
- * Read from your side of the table: what leaves your hand first, what arrives second.
+ * Same rule as the turn clock: a phone that has not measured its distance from the
+ * server does not get to decide that somebody's time is up.
  */
+function offerLeft(t) {
+  if (!t?.until || !clockTrusted()) return null;
+  return (t.until - serverNow()) / 1000;
+}
+
+/** The countdown pill, and the marker the ticking loop updates in place. */
+function offerClock(t) {
+  const left = offerLeft(t);
+  if (left === null) return '';
+  const secs = Math.max(0, Math.ceil(left));
+  return `<span class="offer-clock${secs <= 3 ? ' urgent' : ''}" data-offer-clock="${t.id}">${secs}s</span>`;
+}
+
 /**
  * The cards in an offer, drawn for a sentence rather than a column.
  *
@@ -2800,6 +2857,16 @@ const askCards = (bundle) => Object.entries(bundle || {})
 /** "a" only where a single card follows it. Two wheat is not "a" anything. */
 const article = (bundle) => (bundleTotal(bundle) === 1 ? ' a' : '');
 
+/**
+ * Offers waiting on an answer from you, in the tray.
+ *
+ * This was a sheet, and it had exactly the fault the trade sheet had: it covered your
+ * hand and the turn clock. Being asked "will you take two wheat for an ore" is precisely
+ * the moment you need to see what you are holding and how long you have got — arguably
+ * more than the person doing the asking does, because you are answering on their clock.
+ *
+ * Read from your side of the table: what leaves your hand first, what arrives second.
+ */
 function renderAsks(g) {
   const box = $('trade-asks');
   const me = g.players[playerId];
@@ -2815,7 +2882,7 @@ function renderAsks(g) {
     const able = Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n);
     return `<div class="ask" style="--c:${esc(colorFor(t.from))}">
       <div class="ask-line">
-        <span class="ask-who">${esc(nameFor(t.from))}</span>
+        <span class="ask-who">${esc(nameFor(t.from))}</span>${offerClock(t)}
         <span>is offering you${article(t.give)}</span>
         <span class="ask-cards">${askCards(t.give)}</span>
         <span>in exchange for${article(t.want)}</span>
@@ -2936,6 +3003,8 @@ function logLine(e) {
     case 'plenty': text = `<b>${who(e.p)}</b> took ${bits(e.res)} from the bank`; break;
     case 'bankTrade': text = `<b>${who(e.p)}</b> traded ${bits(e.give)} to the bank for ${bits(e.want)}`; break;
     case 'offer': text = `<b>${who(e.p)}</b> offered ${bits(e.give)} for ${bits(e.want)}`; break;
+    case 'declined': text = `<span class="r">Nobody took <b>${who(e.p)}</b>'s ${bits(e.give)} for ${bits(e.want)}</span>`; break;
+    case 'expired': text = `<span class="r"><b>${who(e.p)}</b>'s offer of ${bits(e.give)} ran out of time</span>`; break;
     // The engine has always recorded both halves of a deal; this line threw them away and
     // said only that two people had traded, which is the one thing you could already
     // guess. Who got what is the whole reason to look a trade up afterwards. Older games

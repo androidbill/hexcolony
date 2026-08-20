@@ -108,6 +108,17 @@ One line under the cards says what the basket does — the deal in words, or the
 instruction. Exactly one button is ever the loud one, and it is whichever can actually
 happen: the bank when the basket balances, the table when it does not.
 
+An offer stands for ten seconds and counts down on every screen. The deadline is worked
+out by the one device that knows when "now" is — the offerer's, using the clock offset it
+has measured against Firestore — and travels as part of the move, because `applyMove` has
+to stay a pure function of the state it is handed. A phone that has not measured that
+offset yet sends no deadline at all rather than a wrong one, and that offer stands until
+it is answered or the turn ends.
+
+If everyone declines, the offer closes itself. That one is decided in the engine, where
+it belongs: it needs no clock, and every device reaches the same answer at the same
+moment.
+
 Answering an offer happens in the tray too, for the same reason. Being asked "will you
 take two wheat for an ore" is the moment you most need to see your own hand and the
 clock, because you are deciding on somebody else's timer — and that is exactly what the

@@ -513,6 +513,21 @@ button { background: none; border: 0; cursor: pointer; }
   font-size: 13px; font-weight: 600; line-height: 1.35;
   color: var(--text);
 }
+/* Ten seconds, counted where the offer is rather than up on the board. It is a deadline
+   on this one thing, not on the turn, and the two would be read as the same clock if they
+   sat together. The number is written in place by the ticking loop — rebuilding the strip
+   four times a second would throw away whatever tap was half-made on it. */
+.offer-clock {
+  flex: 0 0 auto;
+  min-width: 30px; text-align: center;
+  padding: 2px 7px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--dim);
+  font-size: 11px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.offer-clock.urgent { background: rgba(229, 72, 77, 0.22); color: #ff9fa1; }
+
 .ask-who {
   font-size: 13px; font-weight: 800;
   color: var(--c, var(--gold));
