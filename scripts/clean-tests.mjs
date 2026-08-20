@@ -50,6 +50,13 @@ for (const s of [
   'sh1t', 's h i t', '$hit', 'shiiit', 'b1tch', 'a$$hole', 'c u n t', 'phuck', 'fck', 'fuk',
 ]) t(s, true);
 
+// Names, which is the other place this runs. A name sits on the score strip all game,
+// so it gets the same treatment as a message.
+for (const s of ['Bad Assistant', 'Bass Player', 'Classic Bill', 'Assam tea', 'my assistant']) {
+  t(s, false, 'a name somebody might reasonably want');
+}
+for (const s of ['asshat', 'a$hat', 'a$$hat', 'dumbass', 'jack ass', 'smartass']) t(s, true, 'as a name');
+
 // The milder end, on its own rather than inside a word.
 for (const s of ['damn', 'what the hell', 'hell of a game', 'that is crap', 'piss off']) {
   t(s, true);

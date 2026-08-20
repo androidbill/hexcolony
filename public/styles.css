@@ -156,15 +156,6 @@ button { background: none; border: 0; cursor: pointer; }
 .text-input:focus { border-color: var(--gold); background: rgba(4, 16, 28, 0.92); }
 .text-input::placeholder { color: #5f778e; }
 
-.code-box {
-  text-transform: uppercase;
-  letter-spacing: 0.36em;
-  text-align: center;
-  font-weight: 800;
-  font-size: 22px;
-  padding-right: 0;
-  text-indent: 0.36em;
-}
 
 .or-split {
   display: flex; align-items: center; gap: 12px;
@@ -172,9 +163,6 @@ button { background: none; border: 0; cursor: pointer; }
   color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em;
 }
 .or-split::before, .or-split::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-
-.join-row { display: flex; gap: 10px; }
-.join-row .code-box { flex: 1; }
 
 /* ------------------------------------------------------------ buttons */
 .btn {
@@ -203,6 +191,18 @@ button { background: none; border: 0; cursor: pointer; }
   border: 1px solid var(--line);
   color: var(--text);
 }
+/* On the landing page the quiet buttons are blue too, outlined rather than filled.
+   Everything on that screen is a way into a game, so nothing there is really secondary —
+   but four solid blue slabs in a column is a wall, and an outline says "blue, and not
+   the first thing to press". Scoped to the home screen: Cancel and Close inside a sheet
+   are genuinely secondary and stay grey. */
+#screen-home .btn-ghost {
+  background: rgba(53, 196, 255, 0.10);
+  border-color: rgba(53, 196, 255, 0.55);
+  color: var(--sky);
+}
+#screen-home .btn-ghost .btn-sub { color: var(--sky); opacity: 0.75; }
+#screen-home .btn-ghost:active { background: rgba(53, 196, 255, 0.2); }
 .btn-ghost:active { background: rgba(255, 255, 255, 0.12); }
 
 .btn-go {

@@ -296,7 +296,33 @@ const stillChoosing = () => Object.keys(room?.players || {}).filter((id) => !has
 /** Whether this device is being held in the picker rather than merely visiting it. */
 const needsColour = () => !solo && !!roomRef && room?.state === 'lobby' && !hasColour(playerId);
 
-function nameFor(pid) { return room?.players?.[pid]?.name || 'Someone'; }
+/**
+ * Somebody's name, masked on the way out.
+ *
+ * The same two-ended rule the chat follows: refused when it is set, and masked wherever
+ * it is drawn. A name is worse than a message — a message scrolls away and a name is on
+ * the score strip for the whole game — and the check when it is set only binds people
+ * using the app as written.
+ */
+function nameFor(pid) { return maskText(room?.players?.[pid]?.name || 'Someone'); }
+
+/**
+ * The name in the box, if it can be used. Null and a reason if not.
+ *
+ * Every route into a game asks this rather than reading the box directly, so there is no
+ * way in that skips the check.
+ */
+function usableName() {
+  const name = myName();
+  if (!name) { toast('Enter your name first.'); return null; }
+  const bad = findBadWord(name);
+  if (bad) {
+    toast(`Pick another name — "${bad}" is not allowed.`);
+    sfx.error();
+    return null;
+  }
+  return name;
+}
 view.colorOf = colorFor;
 
 function drawColourGrid() {
@@ -383,10 +409,6 @@ function syncColourPicker() {
   if (openSheet === 'sheet-colour') drawColourGrid();
 }
 
-$('code-input').addEventListener('input', (e) => {
-  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
-});
-
 function makeCode() { return WORD_CODES[Math.floor(Math.random() * WORD_CODES.length)]; }
 
 function roomIsStale(data) {
@@ -409,12 +431,11 @@ function freshPlayer(name) {
 }
 
 $('btn-create').addEventListener('click', createRoom);
-$('btn-join').addEventListener('click', joinRoom);
 
 async function createRoom() {
   unlock();
-  const name = myName();
-  if (!name) return toast('Enter your name first.');
+  const name = usableName();
+  if (!name) return;
   localStorage.setItem('hexcolony_name', name);
   $('btn-create').disabled = true;
   try {
@@ -453,12 +474,6 @@ async function createRoom() {
   }
 }
 
-async function joinRoom() {
-  const code = ($('code-input').value || '').trim().toUpperCase();
-  if (code.length !== 4) return toast('Room codes are four letters.');
-  return joinCode(code, $('btn-join'));
-}
-
 /**
  * Sit down at a room, however it was found.
  *
@@ -469,8 +484,8 @@ async function joinRoom() {
  */
 async function joinCode(code, btn = null) {
   unlock();
-  const name = myName();
-  if (!name) return toast('Enter your name first.');
+  const name = usableName();
+  if (!name) return;
   localStorage.setItem('hexcolony_name', name);
   if (btn) btn.disabled = true;
   try {
@@ -511,8 +526,8 @@ async function joinCode(code, btn = null) {
 async function joinDiscordRoom() {
   const code = discordRoomCode();
   if (!code) return toast('Could not read the Discord session.');
-  const name = myName();
-  if (!name) return toast('Enter your name first.');
+  const name = usableName();
+  if (!name) return;
   localStorage.setItem('hexcolony_name', name);
 
   const btn = $('btn-discord-join');
@@ -1482,7 +1497,7 @@ function enterSolo(saved) {
 
 function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7) {
   const bots = makeBots(botCount, level, myColorIdx);
-  const me = myName() || 'You';
+  const me = (findBadWord(myName()) ? 'You' : myName()) || 'You';
   const players = {
     [playerId]: { name: me, colorIdx: myColorIdx, joinedAt: Date.now() },
   };
@@ -2047,7 +2062,9 @@ async function sendChat() {
   try {
     await withTimeout(addDoc(collection(db, 'rooms', roomCode, 'chat'), {
       by: playerId,
-      name: myName() || room?.players?.[playerId]?.name || 'Someone',
+      // The room already holds a name that passed the check when it was set; the box can
+      // have been edited since.
+      name: room?.players?.[playerId]?.name || (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
       text,
       at: serverTimestamp(),
     }), 8000);
@@ -3925,9 +3942,7 @@ window.HEXCOLONY = {
   if (!NET_READY) {
     // No Firebase: solo still plays, so say so rather than letting the buttons fail.
     $('btn-create').disabled = true;
-    $('btn-join').disabled = true;
-    $('code-input').disabled = true;
-    $('code-input').placeholder = 'OFFLINE';
+    $('btn-rooms').disabled = true;
   }
 
   if (IN_DISCORD) {

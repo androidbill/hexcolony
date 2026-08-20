@@ -66,6 +66,10 @@ const HARD = [
   // own. Each checked against English the same way the rest were: no ordinary word puts
   // these letters next to each other. 'fuc' is deliberately NOT here — fuchsia.
   'phuck', 'fuk', 'fck', 'fkn',
+  // The -ass compounds. Each is a whole word in its own right, so none can turn up inside
+  // an innocent one — and "Bad Assistant" survives because the allowlist takes 'assistant'
+  // out of the haystack before the hard list ever sees it.
+  'asshat', 'dumbass', 'jackass', 'smartass', 'badass', 'fatass', 'asswipe',
 ];
 
 /**
