@@ -915,6 +915,21 @@ async function postMove(move, opts, drew, era) {
       if (!res.ok) { rejected = res.error; return; }
       const patch = { game: res.game };
       if (res.game.phase === 'over') patch.state = 'over';
+      // Offers are stamped by Firestore, never by this phone. The engine cannot do it —
+      // it has no clock — and a deadline one handset worked out is exactly the thing that
+      // goes wrong when that handset's clock has drifted, which on a sleeping iPhone it
+      // routinely has. Written by field path because a sentinel cannot go inside the
+      // array the offers live in.
+      //
+      // Derived from what actually changed rather than from the move type, so accepting,
+      // declining, expiring, withdrawing and the turn ending are all covered without any
+      // of them having to remember to tidy up.
+      const had = new Set((data.game.trades || []).map((t) => t.id));
+      const has = new Set((res.game.trades || []).map((t) => t.id));
+      for (const id of has) if (!had.has(id)) patch[`tradeDeadlines.${id}`] = serverTimestamp();
+      for (const id of Object.keys(data.tradeDeadlines || {})) {
+        if (!has.has(Number(id))) patch[`tradeDeadlines.${id}`] = deleteField();
+      }
       // The engine says the allowance restarts; Firestore says when. Stamping it
       // server-side is what stops a device with a wrong clock poisoning the deadline
       // for everyone — no client's idea of "now" ever reaches the shared state.
@@ -1024,7 +1039,12 @@ async function acceptMap() {
   // exactly as it does for every later turn.
   game.turn.clockRestart = false;
   try {
-    await updateDoc(roomRef, { state: 'playing', order, game, turnStartedAt: serverTimestamp() });
+    await updateDoc(roomRef, {
+      state: 'playing', order, game, turnStartedAt: serverTimestamp(),
+      // Offer ids restart at 1 with the new game, so last game's stamps would be read as
+      // this game's deadlines.
+      tradeDeadlines: {},
+    });
   } catch (e) {
     console.error(e);
     toast('Could not start — check your connection.');
@@ -1101,7 +1121,15 @@ function sendLocal(move, opts = {}) {
     if (!opts.quiet) { toast(res.error); sfx.error(); }
     return false;
   }
+  const had = new Set((g.trades || []).map((t) => t.id));
   room.game = res.game;
+  // Solo keeps the same book, against the local clock — which is authoritative here
+  // because there is no other device to disagree with it. See clockTrusted().
+  const marks = { ...(room.tradeDeadlines || {}) };
+  const has = new Set((res.game.trades || []).map((t) => t.id));
+  for (const id of has) if (!had.has(id)) marks[id] = Date.now();
+  for (const id of Object.keys(marks)) if (!has.has(Number(id))) delete marks[id];
+  room.tradeDeadlines = marks;
   if (res.game.turn.clockRestart) { res.game.turn.clockRestart = false; room.turnStartedAt = Date.now(); }
   saveSolo();
   render();
@@ -2801,14 +2829,7 @@ $('trade-bar').addEventListener('click', (e) => {
     return;
   }
   if (!offerPlan(g).ok) return;
-  // Worked out here because this is the one device that knows when "now" is, and handed
-  // over as data so the engine stays a pure function. serverNow() is this phone's clock
-  // corrected by the offset it has measured against Firestore, so the number lands in
-  // the frame every other phone reads deadlines in. Until that offset has been measured
-  // there is no honest number to send, and the offer goes out without a deadline rather
-  // than with a wrong one — see clockTrusted().
-  const until = clockTrusted() ? serverNow() + R.TRADE_SECONDS * 1000 : null;
-  send({ type: 'offerTrade', give: giveSel, want: wantSel, until });
+  send({ type: 'offerTrade', give: giveSel, want: wantSel });
   giveSel = {}; wantSel = {};
   render();
 });
@@ -2831,8 +2852,12 @@ $('trade-offers').addEventListener('click', (e) => {
  * server does not get to decide that somebody's time is up.
  */
 function offerLeft(t) {
-  if (!t?.until || !clockTrusted()) return null;
-  return (t.until - serverNow()) / 1000;
+  // Whatever Firestore said the moment this offer landed, plus the allowance. Until that
+  // snapshot comes back there is no deadline to show — the offer is drawn the instant it
+  // is tapped, and the clock starts when the server says it started.
+  const made = stampMs(room?.tradeDeadlines?.[t?.id]);
+  if (made === null || !clockTrusted()) return null;
+  return (made + R.TRADE_SECONDS * 1000 - serverNow()) / 1000;
 }
 
 /** The countdown pill, and the marker the ticking loop updates in place. */
@@ -3105,7 +3130,7 @@ $('btn-again').addEventListener('click', async () => {
   if (!isHost()) return toast('Only the host can start a new game.');
   closeSheet();
   try {
-    await updateDoc(roomRef, { state: 'lobby', game: null, order: [] });
+    await updateDoc(roomRef, { state: 'lobby', game: null, order: [], tradeDeadlines: {} });
     lastSeq = 0;
     announcedUp = null;
     resetGuess(); resetTrade();

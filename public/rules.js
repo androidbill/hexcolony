@@ -47,11 +47,13 @@ export const MAX_OFFERS = 4;
 /**
  * How long an offer stands before it lapses.
  *
- * The deadline arrives as part of the move rather than being read off a clock in here.
- * applyMove has to stay a pure function of the state it is given — the bot tournament
- * replays a quarter of a million moves through it and the engine tests depend on the
- * same state producing the same answer — so the one device that knows when "now" is
- * works the deadline out and hands it over as data.
+ * The deadline itself is not in here and is not in the game state either. applyMove has
+ * to stay a pure function of the state it is given — the tournament replays a quarter of
+ * a million moves through it — so it cannot read a clock, and a clock a phone worked out
+ * for itself has no business in shared state. Firestore stamps the moment an offer was
+ * made, in `tradeDeadlines` on the room, exactly as it stamps the turn clock; every
+ * device adds this many seconds to that and reads the answer against its own measured
+ * offset. Nothing here needs to know any of it.
  */
 export const TRADE_SECONDS = 10;
 
@@ -1140,11 +1142,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       // want whichever of them bites first, not both — and acceptTrade re-checks the hand
       // at the moment it closes, so the second one simply fails rather than conjuring a
       // card that is already gone.
-      // A deadline is optional: a device that has not yet measured its distance from the
-      // server clock declines to set one rather than set a wrong one, and that offer
-      // simply stands until it is answered or the turn ends.
-      const until = Number.isFinite(move.until) ? move.until : null;
-      g.trades.push({ id: ++g.tradeIds, from: pid, give, want, replies: {}, until });
+      g.trades.push({ id: ++g.tradeIds, from: pid, give, want, replies: {} });
       note(g, events, { t: 'offer', p: pid, give, want });
       // Waiting on other people should not cost you the turn you are waiting during.
       bumpClock(g);
@@ -1201,7 +1199,6 @@ export function applyMove(state, pid, move, rng = Math.random) {
       const offer = g.trades.find((t) => t.id === move.id);
       if (!offer) return fail('That offer is already gone.');
       if (offer.from !== pid) return fail('Not your offer.');
-      if (!offer.until) return fail('That offer has no deadline.');
       g.trades = g.trades.filter((t) => t.id !== offer.id);
       note(g, events, { t: 'expired', p: pid, give: offer.give, want: offer.want });
       return ok();

@@ -108,12 +108,16 @@ One line under the cards says what the basket does — the deal in words, or the
 instruction. Exactly one button is ever the loud one, and it is whichever can actually
 happen: the bank when the basket balances, the table when it does not.
 
-An offer stands for ten seconds and counts down on every screen. The deadline is worked
-out by the one device that knows when "now" is — the offerer's, using the clock offset it
-has measured against Firestore — and travels as part of the move, because `applyMove` has
-to stay a pure function of the state it is handed. A phone that has not measured that
-offset yet sends no deadline at all rather than a wrong one, and that offer stands until
-it is answered or the turn ends.
+An offer stands for ten seconds and counts down on every screen. Firestore stamps the
+moment it was made — in `tradeDeadlines` on the room, by field path, exactly as it stamps
+the turn clock — and every device adds ten seconds to that and reads the answer against
+its own measured offset. No phone's idea of "now" ever reaches the shared state, which is
+the same rule the turn clock has always followed and for the same reason: a handset that
+has been asleep does not know what time it is.
+
+The stamping is worked out from which offers appeared and disappeared, not from the move
+type, so accepting, declining, expiring, withdrawing and the turn ending all tidy up
+after themselves without any of them having to remember to.
 
 If everyone declines, the offer closes itself. That one is decided in the engine, where
 it belongs: it needs no clock, and every device reaches the same answer at the same

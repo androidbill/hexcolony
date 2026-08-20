@@ -37,7 +37,11 @@ export function resCard(res, {
     ? `<span class="rcard-count">${count}</span>` : '';
   const name = label ? `<span class="rcard-label">${label}</span>` : '';
 
-  return `<span class="rcard-wrap"${dataset}>${edges}`
+  // The resource class goes on the WRAP as well as the card. It carries --rc, and the
+  // stack edges are siblings of the card rather than children of it — so they could never
+  // see that variable and every stack in the game has been drawing its edges in the grey
+  // fallback colour instead of the resource's own.
+  return `<span class="rcard-wrap rcard--${res}"${dataset}>${edges}`
     + `<span class="${cls.join(' ')}"><span class="rcard-face"></span>${badge}</span>`
     + `${name}</span>`;
 }
@@ -53,7 +57,7 @@ export function devCard({ count = null, size = '', dim = false, dataset = '', la
   const badge = (count !== null && count !== undefined)
     ? `<span class="rcard-count">${count}</span>` : '';
   const name = label ? `<span class="rcard-label">${label}</span>` : '';
-  return `<span class="rcard-wrap"${dataset}>${edges}`
+  return `<span class="rcard-wrap rcard--dev"${dataset}>${edges}`
     + `<span class="${cls.join(' ')}"><span class="rcard-face rcard-face--dev">?</span>${badge}</span>`
     + `${name}</span>`;
 }
