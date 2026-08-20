@@ -16,33 +16,42 @@ import * as R from './rules.js';
 export const LEVELS = {
   easy: {
     label: 'Easy',
-    blurb: 'Settles wherever looks fine, trades rarely, and forgets the robber is a weapon.',
-    noise: 7,            // random points added to every judgement
-    robberSmart: 0.10,   // chance of aiming the robber rather than dropping it anywhere
-    bankTrade: 0.25,     // willingness to convert spare cards toward a goal
-    devPlay: 0.35,       // chance of remembering to play a card it holds
+    blurb: 'Takes a decent corner, asks for a card now and then, and is slow to reach for the robber.',
+    noise: 5,            // random points added to every judgement
+    robberSmart: 0.25,   // chance of aiming the robber rather than dropping it anywhere
+    bankTrade: 0.45,     // willingness to convert spare cards toward a goal
+    devPlay: 0.55,       // chance of remembering to play a card it holds
+    offerTrade: 0.15,    // chance of asking the table for what it is short of
+    asksPerTurn: 1,      // how many times in one turn it will put something to the table
     acceptBias: 0.55,    // how readily it accepts an offered trade
     denyLeader: false,   // does it refuse to help whoever is winning
     roadPlan: false,     // does it build roads toward somewhere worth going
   },
   medium: {
     label: 'Medium',
-    blurb: 'Plays the odds, upgrades to cities, and puts the robber where it hurts.',
-    noise: 2,
-    robberSmart: 0.75,
-    bankTrade: 0.85,
-    devPlay: 0.85,
+    blurb: 'Plays the odds, upgrades to cities, trades to fill a gap, and puts the robber where it hurts.',
+    noise: 1,
+    robberSmart: 0.92,
+    bankTrade: 0.95,
+    devPlay: 0.95,
+    offerTrade: 0.7,
+    asksPerTurn: 1,
     acceptBias: 0.35,
     denyLeader: false,
     roadPlan: true,
   },
   hard: {
     label: 'Hard',
-    blurb: 'Chases the cheapest points, blocks the leader, and will not trade with a winner.',
+    blurb: 'Works the table for the card it needs, chases the cheapest points, blocks the leader, and will not trade with a winner.',
     noise: 0,
     robberSmart: 1,
     bankTrade: 1,
     devPlay: 1,
+    offerTrade: 0.95,
+    // Two goes at the table in a turn, where the others get one. The first ask is often
+    // refused for a reason that has nothing to do with the price — nobody happened to
+    // hold it — and asking again for something else is exactly what a person does next.
+    asksPerTurn: 2,
     acceptBias: 0.25,
     denyLeader: true,
     roadPlan: true,
@@ -255,6 +264,21 @@ export function botMove(game, board, pid, level, rng = Math.random) {
 
   if (!R.isTurn(g, pid)) return null;
 
+  // ---- an offer of ours that the table has finished answering
+  //
+  // Reached only once everybody has replied: while somebody is still thinking, neither
+  // the app's botActor nor the tournament hands the turn back to us. An offer nobody
+  // wanted has already taken itself off the table by then — the engine drops it on the
+  // last "no" — so in practice this is here to close a deal, and the withdrawal is the
+  // belt and braces.
+  const ours = (g.trades || []).find((t) => t.from === pid);
+  if (ours) {
+    const yes = g.seats.find((s) => s !== pid && ours.replies[s] === 'yes');
+    if (yes) return { type: 'acceptTrade', id: ours.id, with: yes };
+    if (g.seats.some((s) => s !== pid && !ours.replies[s])) return null;
+    return { type: 'cancelTrade', id: ours.id };
+  }
+
   // ---- setup
   if (g.phase === 'setup') {
     if (g.setup.need === 's') {
@@ -345,6 +369,19 @@ export function botMove(game, board, pid, level, rng = Math.random) {
   }
   if (can.dev && (want === 'dev' || R.handSize(p) > 8)) return { type: 'buyDev' };
 
+  // ---- ask the table before paying the bank's rate
+  //
+  // Before, not after: two of something for the one card you need beats every bank rate
+  // but a two-for-one port, and the worst that happens is three people say no and the
+  // bank is still there. Capped at one ask per turn per bot — the engine closes an
+  // offer the moment the last player declines, so without the cap a bot could stand
+  // there asking the same table the same question all turn.
+  if (rng() < (cfg.offerTrade || 0) && g.seats.length > 1
+      && asksThisTurn(g, pid) < (cfg.asksPerTurn || 1)) {
+    const offer = findTableOffer(g, board, pid, NEEDS[want] || NEEDS.road);
+    if (offer) return offer;
+  }
+
   // ---- convert spare cards toward whatever we are saving for
   if (rng() < cfg.bankTrade) {
     const trade = findBankTrade(g, board, pid, NEEDS[want] || NEEDS.road);
@@ -355,6 +392,42 @@ export function botMove(game, board, pid, level, rng = Math.random) {
   if (R.handSize(p) > 7 && can.dev) return { type: 'buyDev' };
 
   return { type: 'endTurn' };
+}
+
+/** How many times this bot has put something to the table this turn. */
+function asksThisTurn(g, pid) {
+  return (g.log || []).filter((e) => e.t === 'offer' && e.p === pid && e.n === g.turn.num).length;
+}
+
+/**
+ * Something to put to the table, or null.
+ *
+ * Two cards it can spare for one it is short of. That is a real offer rather than a
+ * lowball — it beats 4:1 and 3:1 handily, so somebody sitting on a spare is likely to
+ * take it, and it still costs less than the bank would. Where the bot holds the matching
+ * two-for-one port it does not ask at all: the bank is already that cheap and the bank
+ * never says no.
+ */
+function findTableOffer(g, board, pid, cost) {
+  const p = g.players[pid];
+  const need = Object.keys(shortfall(p, cost));
+  if (!need.length) return null;
+  // Where a bot gets more than one go, the second has to be a different question — the
+  // table has already answered the first one.
+  const asked = new Set((g.log || [])
+    .filter((e) => e.t === 'offer' && e.p === pid && e.n === g.turn.num)
+    .flatMap((e) => Object.keys(e.want || {})));
+  const open = need.filter((r) => !asked.has(r));
+  if (!open.length) return null;
+  const spare = surplusFor(p, cost);
+  for (const give of Object.keys(spare).sort((a, b) => spare[b] - spare[a])) {
+    if (spare[give] < 2) continue;
+    if (R.tradeRate(g, board, pid, give) <= 2) continue;
+    const want = open.find((w) => w !== give);
+    if (!want) continue;
+    return { type: 'offerTrade', give: { [give]: 2 }, want: { [want]: 1 } };
+  }
+  return null;
 }
 
 /** A 4:1 (or better) swap that moves us closer to the current goal. */

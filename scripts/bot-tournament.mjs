@@ -17,10 +17,14 @@ const stats={rejects:0,stalls:0,moves:0,rejectMsgs:{}};
 
 function whoActs(g){
   if(g.phase==='discard'){const k=Object.keys(g.pending.discard); if(k.length) return k[0];}
-  if(g.trade){
-    const pend=g.seats.filter(s=>s!==g.trade.from&&!g.trade.replies[s]);
+  // The engine has carried a LIST of offers for a long time; this still asked for the
+  // single `g.trade` it replaced, found undefined, and fell straight through. Nothing
+  // failed, because nothing proposed a trade — so the day bots learned to, the harness
+  // meant to prove it would have quietly tested none of it.
+  for(const t of g.trades||[]){
+    const pend=g.seats.filter(s=>s!==t.from&&!t.replies[s]);
     if(pend.length) return pend[0];
-    return g.trade.from;
+    return t.from;
   }
   return R.currentPid(g);
 }

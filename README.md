@@ -187,18 +187,18 @@ The three levels are the same brain with different settings. Nothing is hidden f
 Easy that Hard can see; Hard just reasons further and adds less noise to its own
 conclusions, so "hard" means playing better rather than peeking.
 
-The ladder is measured, not asserted. Over 200 games per matchup with seats alternating
-to cancel first-player advantage:
+The ladder is measured, not asserted. Fifty games per matchup with seats alternating to
+cancel first-player advantage:
 
 | matchup | result |
 |---|---|
-| hard vs easy | hard wins 95% |
-| hard vs medium | hard wins 60% |
+| hard vs easy | hard wins 90% |
+| hard vs medium | hard wins 64% |
 | medium vs easy | medium wins 90% |
 
-At a four-player table (hard, medium, medium, easy) the wins land 104 / 41 / 51 / 4.
-Across 230,794 moves the bots produced **zero** illegal moves and every game finished.
-Re-run it yourself:
+At a four-player table (hard, medium, medium, easy) the wins land 31 / 8 / 11 / 0.
+Across 74,661 moves the bots produced **zero** illegal moves and every game finished.
+Re-run it yourself, with as many games as you have patience for:
 
 ```bash
 node scripts/bot-tournament.mjs 200
@@ -207,8 +207,23 @@ node scripts/bot-tournament.mjs 200
 That harness doubles as the regression test for the engine and the bots together — it
 reports any illegal move and any game that fails to finish.
 
-Bots answer trades but do not propose them, which keeps the offer sheet from popping up
-every turn. That is a deliberate limit, not an oversight.
+### What the levels are worth
+
+Each level was played against the exact version of itself it replaced, 130 games with
+seats alternating, and against a baseline that knows the rules and has no judgement at
+all — the same brain with its noise turned up past the point where any of its conclusions
+survive. That baseline is the honest zero: it has never won a game against any of them.
+
+Bots put offers to the table as well as answering them. They ask before paying the bank's
+rate, because two cards they can spare for one they are short of beats 4:1 and 3:1
+handily and the bank is still there if nobody bites. Where a bot holds the matching
+two-for-one port it does not ask at all — the bank is already that cheap, and the bank
+never says no.
+
+Asking is capped per turn, one for easy and medium and two for hard, and a second ask has
+to be about a different card: the table has already answered the first question. Without
+a cap a bot would stand there asking the same table the same thing all turn, because the
+engine takes an offer down the moment the last player declines it.
 
 ## Discord
 
