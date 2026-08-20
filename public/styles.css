@@ -30,6 +30,29 @@
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+/* Why a tap is slower on an iPhone than on an Android.
+   Safari has ignored user-scalable=no since iOS 10, deliberately, for accessibility — so
+   double-tap-to-zoom stays live on anything that has not opted out, and Safari therefore
+   waits about a third of a second after a tap to find out whether a second one is coming
+   before it will dispatch the click. Chrome on Android drops that wait as soon as the
+   viewport is width=device-width, which is why the same build feels instant on one phone
+   and laggy on the other.
+   Declaring manipulation says there is no double-tap gesture here, so the click goes
+   through at once. Panning and pinch-zoom are untouched; only double-tap-to-zoom goes.
+   The board never had this problem: the canvas sets touch-action: none and reads
+   pointerup directly, which is exactly why placing a road always felt immediate and
+   pressing a button did not. */
+button, input, select, textarea, a,
+.veil, .banner, .seat, .chip, [data-act], [data-trade], [data-say],
+/* The containers that carry the delegated handlers. Strictly redundant — the effective
+   touch-action for a touch is the intersection down the tree, so a button saying
+   manipulation already wins over an ancestor that has not said anything — but these are
+   the elements the listeners are actually bound to, and a rule you have to reason about
+   the intersection algorithm to trust is a rule that gets broken later. */
+.tray, .actions, .hand, .trade-want, .trade-bar, .trade-asks, .trade-offers {
+  touch-action: manipulation;
+}
+
 html, body {
   margin: 0; padding: 0;
   height: 100%;
