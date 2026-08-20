@@ -1936,6 +1936,7 @@ function bumpCards(list) {
 
 function renderScoreStrip(g) {
   const up = R.currentPid(g);
+  $('score-strip').classList.toggle('tight', g.seats.length > 2);
   $('score-strip').innerHTML = g.seats.map((pid) => {
     const p = g.players[pid];
     const crowns = (g.award.road === pid ? '🛣️' : '') + (g.award.army === pid ? '⚔️' : '');

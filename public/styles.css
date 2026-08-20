@@ -585,13 +585,18 @@ button { background: none; border: 0; cursor: pointer; }
 }
 
 /* ------------------------------------------------------------ score strip */
+/* Everybody at once, on as many rows as that takes.
+   This scrolled sideways, and the chips were flex-shrink: 0, so with four or more
+   players the back of the table was simply off the edge — you had to drag the strip to
+   find out who was winning, during somebody else's turn, on a bar two thumbs wide. The
+   whole point of a score strip is being able to glance at it.
+   Wrapping costs a row of height with five or six players, taken off a board that has
+   room to give it. */
 .score-strip {
   flex: 1;
-  display: flex; gap: 5px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  display: flex; flex-wrap: wrap; justify-content: center;
+  gap: 5px;
 }
-.score-strip::-webkit-scrollbar { display: none; }
 
 .chip {
   display: flex; align-items: center; gap: 5px;
@@ -601,7 +606,11 @@ button { background: none; border: 0; cursor: pointer; }
   background: var(--c, #888);
   color: var(--ink, #fff);
   border: 1px solid rgba(0, 0, 0, 0.35);
-  flex-shrink: 0;
+  /* A floor rather than no shrinking at all. Without one, flexbox squashes six chips to
+     six ellipses rather than starting a second row — shrinking wins over wrapping every
+     time, and a chip narrower than this says nothing. */
+  flex: 0 1 auto;
+  min-width: 88px;
   font-size: 12.5px;
   max-width: 132px;
   opacity: 0.72;
@@ -624,6 +633,19 @@ button { background: none; border: 0; cursor: pointer; }
 .chip-vp { font-weight: 800; }
 .chip-cards { font-size: 11.5px; opacity: 0.8; }
 .chip-crown { font-size: 11px; }
+
+/* Three or more and the chips give up some padding. 72px is chosen, not guessed: it is
+   the widest floor that still fits three across the narrowest phone worth supporting
+   (360px, leaving the strip 240px between the two icon buttons), which is what keeps six
+   players down to two rows rather than three. */
+.score-strip.tight { gap: 4px; }
+.score-strip.tight .chip {
+  padding: 4px 8px; gap: 4px;
+  font-size: 11.5px;
+  min-width: 72px; max-width: 116px;
+}
+.score-strip.tight .chip-cards { font-size: 10.5px; }
+.score-strip.tight .chip-crown { font-size: 10px; }
 
 /* ------------------------------------------------------------ resource cards */
 /* The card faces are the board's own tile illustrations. Those files are cropped to the
