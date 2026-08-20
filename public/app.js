@@ -1327,7 +1327,7 @@ function enterSolo(saved) {
   scheduleBots(900);
 }
 
-function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true) {
+function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7) {
   const bots = makeBots(botCount, level, myColorIdx);
   const me = myName() || 'You';
   const players = {
@@ -1342,7 +1342,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   // Seat order is shuffled, so you don't always open the board.
   const order = shuffle([playerId, ...bots.map((b) => b.id)]);
   const settings = {
-    targetVP, discardLimit: 7, boardMode: 'random', layout, useRobber,
+    targetVP, discardLimit, boardMode: 'random', layout, useRobber,
     turnSeconds: soloTurnSeconds, sea: soloSea,
   };
 
@@ -1392,6 +1392,7 @@ let soloBots = Number(localStorage.getItem('hexcolony_solo_bots') || 3);
 let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
 let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'classic';
 let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
+let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
 let soloSea = localStorage.getItem('hexcolony_solo_sea') || SEA_DEFAULT;
 
@@ -1425,6 +1426,12 @@ function drawSoloSheet() {
   $('solo-sea-blurb').textContent = `${seaAt(soloSea).name} — the water around the island`;
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
+  $('solo-discard').textContent = String(soloDiscard);
+  // Nothing to set when a seven takes a card instead of emptying hands: the limit would
+  // govern a rule that is switched off. The lobby dims this row rather than hiding it,
+  // because there the host is changing settings other people are watching — here nobody
+  // else is looking, so it can simply go.
+  $('solo-discard-row').hidden = !soloRobber;
 }
 
 for (const b of document.querySelectorAll('[data-solo-timer]')) {
@@ -1474,10 +1481,18 @@ for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
 for (const b of document.querySelectorAll('[data-solo]')) {
   b.addEventListener('click', () => {
     const step = Number(b.dataset.step);
+    // Named branches rather than a catch-all else. There were two steppers and the
+    // second was "everything that is not the first", which is the shape that quietly
+    // sends a third one to the wrong place.
     if (b.dataset.solo === 'bots') {
       soloBots = Math.max(1, Math.min(R.MAX_PLAYERS - 1, soloBots + step));
       localStorage.setItem('hexcolony_solo_bots', String(soloBots));
-    } else {
+    } else if (b.dataset.solo === 'discard') {
+      // The same five to twelve the lobby allows, so a solo game cannot be set up in a
+      // shape an online one could not be.
+      soloDiscard = Math.max(5, Math.min(12, soloDiscard + step));
+      localStorage.setItem('hexcolony_solo_discard', String(soloDiscard));
+    } else if (b.dataset.solo === 'target') {
       soloTarget = Math.max(5, Math.min(15, soloTarget + step));
       localStorage.setItem('hexcolony_solo_target', String(soloTarget));
     }
@@ -1487,7 +1502,7 @@ for (const b of document.querySelectorAll('[data-solo]')) {
 }
 $('btn-solo-start').addEventListener('click', () => {
   closeSheet();
-  startSolo(soloLevel, soloBots, soloTarget, soloLayout, soloRobber);
+  startSolo(soloLevel, soloBots, soloTarget, soloLayout, soloRobber, soloDiscard);
 });
 
 // ---------------------------------------------------------------- lobby
