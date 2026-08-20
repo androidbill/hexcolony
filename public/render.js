@@ -1063,12 +1063,23 @@ export class BoardView {
   }
 
   // ------------------------------------------------------------ highlights
+  /**
+   * Corners a settlement could go on.
+   *
+   * Half the size they were. They are a pointer at a spot, not a picture of the piece
+   * that will land on it, and at the old size a board full of legal corners in the
+   * opening placements read as a rash of white blobs with an island somewhere behind it.
+   *
+   * The dot shrinking does not shrink what you can hit: hitTest works to a fixed radius
+   * in board coordinates and has never looked at what was drawn, so the target stays as
+   * generous as it was while the mark over it gets out of the way.
+   */
   drawVertexHighlights() {
     const list = this.highlights.verts || [];
     if (!list.length) return;
     const c = this.ctx;
     const R = this.scale;
-    const grow = 0.20 + this.pulse * 0.06;
+    const grow = 0.10 + this.pulse * 0.03;
     for (const vid of list) {
       const [x, y] = this.toScreen(VERTS[vid].x, VERTS[vid].y);
       c.beginPath(); c.arc(x, y, R * grow, 0, Math.PI * 2);
@@ -1076,7 +1087,9 @@ export class BoardView {
       c.fill();
       c.beginPath(); c.arc(x, y, R * grow, 0, Math.PI * 2);
       c.strokeStyle = `rgba(255,255,255,${0.65 + this.pulse * 0.3})`;
-      c.lineWidth = Math.max(1.5, R * 0.05);
+      // Halved with the circle. A ring drawn at the old width around a dot half the size
+      // is mostly ring, and the pulse stops reading as a pulse.
+      c.lineWidth = Math.max(1, R * 0.025);
       c.stroke();
     }
   }
