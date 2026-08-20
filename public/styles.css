@@ -445,6 +445,44 @@ button { background: none; border: 0; cursor: pointer; }
 .trade-go .btn { flex: 1; padding: 11px 8px; font-size: 13.5px; }
 .trade-go .btn:disabled { opacity: 0.4; }
 
+/* An offer waiting on your answer. It used to be a sheet, and it covered your hand and
+   the clock — which is worse for the person answering than for the person asking, since
+   you are deciding on somebody else's timer. Struck through with the asker's colour so
+   it is obvious at a glance who is waiting on you. */
+.trade-asks { max-height: 34vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.ask {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--c, var(--gold));
+  border-radius: var(--r);
+  background: var(--panel-2);
+  padding: 8px 10px;
+  margin-bottom: 7px;
+}
+.ask-top {
+  display: flex; align-items: center; gap: 8px;
+  flex-wrap: wrap;
+}
+.ask-who {
+  font-size: 12px; font-weight: 800;
+  color: var(--c, var(--gold));
+  max-width: 84px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ask-side { display: flex; align-items: center; gap: 5px; }
+.ask-tag {
+  font-size: 9px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .05em;
+  color: var(--dim);
+}
+.ask-side .offer-cards { display: flex; gap: 3px; }
+.ask-go { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
+.ask-go .btn { flex: 1; padding: 9px 8px; font-size: 13px; }
+.ask-go .btn:disabled { opacity: 0.4; }
+.ask-cant {
+  font-size: 10.5px; font-weight: 700;
+  color: var(--danger);
+  flex: 1 0 100%;
+}
+
 /* Your own offers ride above the pickers, and stay in the tray after you leave trade
    mode — an acceptance should not need a sheet reopened at you to be seen. */
 .trade-offers {
@@ -453,7 +491,6 @@ button { background: none; border: 0; cursor: pointer; }
   margin-bottom: 4px;
 }
 
-.offer-mine { margin-top: 16px; }
 .my-offer {
   border: 1px solid var(--line);
   border-radius: var(--r);
@@ -474,18 +511,6 @@ button { background: none; border: 0; cursor: pointer; }
   font-size: 13px;
   flex: 0 0 auto;
 }
-
-/* Incoming offers, one card each — there can be several from the same player. */
-.offer-list { display: flex; flex-direction: column; gap: 10px; }
-.in-offer {
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: var(--panel-2);
-  padding: 11px 12px;
-}
-.in-offer-who { font-size: 13px; font-weight: 800; margin-bottom: 7px; }
-.in-offer-actions { display: flex; gap: 8px; margin-top: 9px; }
-.in-offer-actions .btn { flex: 1; }
 
 /* ------------------------------------------------------------ sea picker */
 .sea-row {
@@ -916,26 +941,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 .pick-pm button:active { background: rgba(255, 255, 255, 0.18); }
 
-.offer-row {
-  display: flex; align-items: center; gap: 14px;
-  padding: 12px 14px;
-  border-radius: var(--r);
-  border: 1px solid var(--line);
-  min-height: 84px;
-}
-/* Giving and getting are told apart by colour and arrow direction, so the shape of a
-   trade is readable before any of the words are. */
-.offer-row--give { background: rgba(229, 72, 77, 0.12); border-color: rgba(229, 72, 77, 0.35); }
-.offer-row--get  { background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.35); }
-.offer-tag {
-  display: flex; flex-direction: column; align-items: center; gap: 2px;
-  flex: 0 0 62px;
-  font-size: 10.5px; font-weight: 800;
-  text-transform: uppercase; letter-spacing: 0.05em;
-}
-.offer-tag svg { width: 22px; height: 22px; }
-.offer-row--give .offer-tag { color: #ff9fa1; }
-.offer-row--get .offer-tag { color: #7ee2a8; }
 .offer-cards { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 4px 0; }
 .offer-replies { display: flex; flex-direction: column; gap: 7px; }
 .reply-row {

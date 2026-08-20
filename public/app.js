@@ -146,12 +146,6 @@ function closeSheet() {
 const MANDATORY_SHEETS = new Set(['sheet-discard', 'sheet-steal']);
 $('veil').addEventListener('click', () => {
   if (MANDATORY_SHEETS.has(openSheet)) return;
-  // Waving the offers away has to stick, or the next snapshot puts them straight back up.
-  // Recorded here rather than in a listener of its own because closeSheet() below clears
-  // the very thing that says which sheet was open.
-  if (openSheet === 'sheet-offer') {
-    for (const t of game()?.trades || []) if (t.from !== playerId) dismissedOffers.add(t.id);
-  }
   closeSheet();
 });
 document.addEventListener('click', (e) => {
@@ -182,9 +176,6 @@ let lastSeq = 0;               // highest game-log id already reacted to
 let announcedUp = null;        // the turn already shouted; null until the first render
 let lastPhaseKey = '';
 let seenLogAt = 0;
-// Offers this player has waved away, by id. A Set rather than a single value because
-// several can be on the table at once and dismissing one must not silence the rest.
-const dismissedOffers = new Set();
 
 // ---------------------------------------------------------------- optimistic moves
 // A tap used to take the full width of a Firestore transaction before anything moved on
@@ -715,7 +706,7 @@ function enterRoom(code) {
   lastFreshAt = now; lastPulseSeenAt = now;
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
   clockSamples = []; clockOffset = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
   announcedUp = null;
   resetGuess(); resetTrade();
   subscribeRoom();
@@ -1159,7 +1150,7 @@ function clearSolo() { try { localStorage.removeItem(SOLO_KEY); } catch { /* fin
 function enterSolo(saved) {
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
   announcedUp = null;
   resetGuess(); resetTrade();
   room = {
@@ -1202,7 +1193,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   // Straight to the map picker: solo has a host too, and it is you.
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
-  lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
   announcedUp = null;
   resetGuess(); resetTrade();
   boardSeed = null;
@@ -1786,6 +1777,10 @@ function reactToLog(g) {
       case 'noloot':
         if (e.p === playerId) toast('Nobody had a card to take.');
         break;
+      case 'offer':
+        // The tray shows the offer; this is what makes you look down at it.
+        if (e.p !== playerId) { sfx.card(); toast(`${nameFor(e.p)} offers you a trade.`); }
+        break;
       case 'trade': sfx.trade(); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
       case 'buyDev': if (e.p === playerId) sfx.card(); break;
@@ -2348,7 +2343,7 @@ function resetTrade() {
   notedAccepts.clear();
   // The tray is only redrawn once there is a game to draw it for, and the rows would
   // otherwise still be showing the last one's offers while the lobby loads.
-  for (const id of ['trade-want', 'trade-bar', 'trade-offers']) $(id).hidden = true;
+  for (const id of ['trade-want', 'trade-bar', 'trade-offers', 'trade-asks']) $(id).hidden = true;
   $('actions').hidden = false;
 }
 
@@ -2480,15 +2475,21 @@ function renderWantRow(g) {
 function renderTradeBar(g) {
   const bank = bankPlan(g);
   const offer = offerPlan(g);
-  const btn = (act, label, cls, off) =>
-    `<button class="btn ${cls}" data-trade="${act}"${off ? ' disabled' : ''}>${esc(label)}</button>`;
+  // Exactly one button is ever the loud one, and it is whichever can actually happen —
+  // the bank when the basket balances, the table when it does not. Two equally bright
+  // buttons is the shape the old sheet had, and it made the player choose between them
+  // before finding out which one their cards even qualified for.
+  const loud = bank.ok ? 'bank' : offer.ok ? 'table' : null;
+  const btn = (act, label, off) =>
+    `<button class="btn ${act === loud ? 'btn-key' : 'btn-ghost'}" data-trade="${act}"`
+    + `${off ? ' disabled' : ''}>${esc(label)}</button>`;
 
   $('trade-bar').innerHTML =
     `<div class="trade-note">${esc(tradeReadout(g, bank, offer))}</div>
      <div class="trade-go">
-       ${btn('cancel', 'Cancel', 'btn-ghost', false)}
-       ${btn('table', 'Ask table', 'btn-key', !offer.ok)}
-       ${btn('bank', 'Bank', bank.ok ? 'btn-key primary' : 'btn-key', !bank.ok)}
+       ${btn('cancel', 'Cancel', false)}
+       ${btn('table', 'Ask table', !offer.ok)}
+       ${btn('bank', 'Bank', !bank.ok)}
      </div>`;
 }
 
@@ -2550,6 +2551,7 @@ function renderTrade(g) {
   $('trade-bar').hidden = !on;
   $('actions').hidden = on;
 
+  renderAsks(g);
   renderMyOffers(g);
   if (!on) return;
   refillPay(g);
@@ -2606,54 +2608,58 @@ $('trade-offers').addEventListener('click', (e) => {
   if (drop) { sfx.tap(); send({ type: 'cancelTrade', id: Number(drop.dataset.dropOffer) }); }
 });
 
-const cardBits = (obj) => cardRow(obj, { size: 'sm' });
-
-/** Offers from other people that are waiting on an answer from you. */
-function openOffer(g) {
-  const waiting = (g.trades || []).filter((t) => t.from !== playerId && !t.replies[playerId]);
-  if (!waiting.length) return;
+/**
+ * Offers waiting on an answer from you, in the tray.
+ *
+ * This was a sheet, and it had exactly the fault the trade sheet had: it covered your
+ * hand and the turn clock. Being asked "will you take two wheat for an ore" is precisely
+ * the moment you need to see what you are holding and how long you have got — arguably
+ * more than the person doing the asking does, because you are answering on their clock.
+ *
+ * Read from your side of the table: what leaves your hand first, what arrives second.
+ */
+function renderAsks(g) {
+  const box = $('trade-asks');
   const me = g.players[playerId];
+  const waiting = me
+    ? (g.trades || []).filter((t) => t.from !== playerId && !t.replies[playerId])
+    : [];
+  if (!waiting.length) { box.innerHTML = ''; box.hidden = true; return; }
+  box.hidden = false;
 
-  $('offer-title').textContent = waiting.length > 1
-    ? `${waiting.length} trade offers`
-    : `${nameFor(waiting[0].from)} offers a trade`;
-
-  $('offer-list').innerHTML = waiting.map((t) => {
-    // Shown from the reader's point of view: what they would hand over and what they get.
+  box.innerHTML = waiting.map((t) => {
+    // No point offering a button that the engine will refuse: replyTrade checks the hand
+    // before it will record a yes.
     const able = Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n);
-    return `<div class="in-offer">
-      <div class="in-offer-who">${esc(nameFor(t.from))}</div>
-      <div class="offer-row offer-row--give">
-        <span class="offer-tag">You give</span>
-        <span class="offer-cards">${cardBits(t.want)}</span>
+    return `<div class="ask" style="--c:${esc(colorFor(t.from))}">
+      <div class="ask-top">
+        <span class="ask-who">${esc(nameFor(t.from))}</span>
+        <span class="ask-side">
+          <span class="ask-tag">you give</span>
+          <span class="offer-cards">${cardRow(t.want, { size: 'xs' })}</span>
+        </span>
+        <span class="swap-arrow" aria-hidden="true">⇄</span>
+        <span class="ask-side">
+          <span class="ask-tag">you get</span>
+          <span class="offer-cards">${cardRow(t.give, { size: 'xs' })}</span>
+        </span>
       </div>
-      <div class="offer-row offer-row--get">
-        <span class="offer-tag">You get</span>
-        <span class="offer-cards">${cardBits(t.give)}</span>
-      </div>
-      ${able ? '' : '<p class="hint">You do not have what they are asking for.</p>'}
-      <div class="in-offer-actions">
-        <button class="btn btn-key" data-say="${t.id}:yes"${able ? '' : ' disabled'}>
-          <span class="btn-label">Accept</span></button>
+      <div class="ask-go">
+        ${able ? '' : '<span class="ask-cant">You have not got that</span>'}
         <button class="btn btn-ghost" data-say="${t.id}:no">No thanks</button>
+        <button class="btn btn-key" data-say="${t.id}:yes"${able ? '' : ' disabled'}>Accept</button>
       </div>
     </div>`;
   }).join('');
-
-  for (const b of $('offer-list').querySelectorAll('[data-say]')) {
-    b.addEventListener('click', () => {
-      const [id, yes] = b.dataset.say.split(':');
-      // Waving one away should not keep bringing it back while the rest are answered.
-      dismissedOffers.add(Number(id));
-      send({ type: 'replyTrade', id: Number(id), yes: yes === 'yes' });
-      const g2 = game();
-      const left = (g2?.trades || []).filter((t) => t.from !== playerId
-        && !t.replies[playerId] && !dismissedOffers.has(t.id));
-      if (left.length) openOffer(g2); else closeSheet();
-    });
-  }
-  sheet('sheet-offer');
 }
+
+$('trade-asks').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-say]');
+  if (!b || b.disabled) return;
+  const [id, yes] = b.dataset.say.split(':');
+  sfx.tap();
+  send({ type: 'replyTrade', id: Number(id), yes: yes === 'yes' });
+});
 
 // ---------------------------------------------------------------- steal / players / log
 function openSteal(g) {
@@ -2778,25 +2784,13 @@ function syncSheets(g) {
   }
   if (openSheet === 'sheet-discard' || openSheet === 'sheet-steal') closeSheet();
 
-  // Anything still waiting on an answer from me, minus what I have already waved away.
-  const asked = trades.filter((t) => t.from !== playerId
-    && !t.replies[playerId] && !dismissedOffers.has(t.id));
-
-  // Your own offers no longer need a sheet reopening at you when somebody says yes:
-  // they live in the tray, under the board, whether or not you are still trading.
-  if (asked.length) {
-    if (openSheet !== 'sheet-offer' || changed) openOffer(g);
-  } else if (openSheet === 'sheet-offer') {
-    closeSheet();
-  }
+  // Trades need no sheet at all any more. Both sides of one live in the tray, under the
+  // board, where the clock and your own cards stay visible while you decide.
 
   // Now that Cards can be opened on somebody else's turn, it can still be open when
   // your own arrives — and it would have sat there insisting it was not your turn, with
   // every card greyed, until it was closed and opened again.
   if (openSheet === 'sheet-dev' && changed) openDev(g);
-
-  // Ids are never reused, so this only ever forgets offers that are gone.
-  if (!trades.length && dismissedOffers.size) dismissedOffers.clear();
 
   if (g.phase === 'over' && openSheet !== 'sheet-over') { renderOver(g); sheet('sheet-over'); }
 }

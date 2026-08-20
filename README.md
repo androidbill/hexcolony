@@ -79,7 +79,13 @@ Everything is a plain tap that wraps back to nothing, so any tap undoes itself a
 are no plus and minus buttons to find.
 
 One line under the cards says what the basket does — the deal in words, or the next
-instruction. Bank and table are offered as buttons only where each is genuinely open.
+instruction. Exactly one button is ever the loud one, and it is whichever can actually
+happen: the bank when the basket balances, the table when it does not.
+
+Answering an offer happens in the tray too, for the same reason. Being asked "will you
+take two wheat for an ore" is the moment you most need to see your own hand and the
+clock, because you are deciding on somebody else's timer — and that is exactly what the
+sheet used to cover. There are no trade sheets left at all.
 
 ### Taps draw before the server answers
 
