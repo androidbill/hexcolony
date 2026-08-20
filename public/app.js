@@ -164,7 +164,37 @@ let seenLogAt = 0;
 // Offers this player has waved away, by id. A Set rather than a single value because
 // several can be on the table at once and dismissing one must not silence the rest.
 const dismissedOffers = new Set();
-let sending = false;
+
+// ---------------------------------------------------------------- optimistic moves
+// A tap used to take the full width of a Firestore transaction before anything moved on
+// screen: a server read, a commit, then the snapshot coming back. On a phone that is a
+// second or two of nothing happening, on every single tap, all game long.
+//
+// So the device works the move out for itself and draws it immediately. The transaction
+// still runs, still re-validates against the state actually on the server, and still has
+// the last word — when its snapshot lands it replaces whatever was drawn here. Guessing
+// only ever shortens the wait for the answer the server was going to give anyway; it
+// never changes what that answer is.
+//
+// Only moves this device can work out on its own are guessed. `roll`, `steal`,
+// `takeCard` and `moveRobber` (which can rob on the way past) all draw from the server's
+// random source, and `timeout` re-enters as whatever move was owed, which may be a roll.
+// Showing a guessed die and then correcting it is worse than a short wait, so those go
+// the long way round.
+const PREDICTABLE = new Set([
+  'setupSettlement', 'setupRoad', 'build', 'buyDev', 'playDev', 'discard',
+  'bankTrade', 'offerTrade', 'replyTrade', 'acceptTrade', 'cancelTrade', 'endTurn',
+]);
+
+// Longer than the transaction's own timeout, so in the ordinary failure the move
+// itself takes the guess down. This is the backstop for the case where it cannot —
+// a guess must never be able to wedge a device on a state the server has moved past.
+const GUESS_HOLD_MS = 20000;
+
+let serverRoom = null;   // the last state the server actually sent
+let guessSeq = 0;        // g.seq the guess on screen has reached; 0 when not guessing
+let guessAt = 0;         // when it was drawn
+const resetGuess = () => { serverRoom = null; guessSeq = 0; guessAt = 0; };
 
 const myName = () => ($('name-input').value || '').trim().slice(0, 14);
 const isHost = () => room && room.hostId === playerId;
@@ -452,8 +482,55 @@ function setConnBadge(bad) { $('conn-badge').hidden = !bad; }
 
 function applyRoom(data, fresh) {
   if (fresh) markFresh();
-  room = data;
+  serverRoom = data;
   if (data.pulseAt) applyPulse({ at: data.pulseAt, by: data.pulseBy }, fresh);
+  // A guess is on screen and this snapshot predates it. Drawing it would take the road
+  // back off the board for a moment and then put it straight back — the flicker the
+  // guess exists to avoid. The snapshot that confirms the move is already on its way,
+  // and it carries everything this one did.
+  if (guessSeq && Date.now() - guessAt < GUESS_HOLD_MS && (data.game?.seq ?? 0) < guessSeq) return;
+  guessSeq = 0;
+  room = data;
+  render();
+}
+
+/**
+ * Draw `move` now, on this device's own reading of the rules.
+ *
+ * Returns false when the move cannot be guessed — either it is one of the random ones,
+ * or the engine refuses it here. A local refusal is never reported: this copy of the
+ * state can be a moment behind, so the server gets to say no rather than this.
+ */
+function drawGuess(move) {
+  const g = room?.game;
+  if (!g || !PREDICTABLE.has(move?.type)) return false;
+  const res = R.applyMove(g, playerId, move);
+  if (!res.ok) return false;
+  room = { ...room, game: res.game };
+  // The engine says the allowance restarts; normally Firestore says when. Until the real
+  // stamp arrives, use this device's *corrected* clock — the one measured against the
+  // server — so the timer does not jump. An unmeasured clock is left alone: the timer
+  // already shows nothing rather than a number that could be minutes wrong.
+  if (res.game.turn.clockRestart && clockTrusted()) {
+    res.game.turn.clockRestart = false;
+    room.turnStartedAt = serverNow();
+  }
+  guessSeq = res.game.seq || 0;
+  guessAt = Date.now();
+  render();
+  return true;
+}
+
+/** The server disagreed, or never heard. Put back what it last told us. */
+function dropGuess() {
+  if (!guessSeq) return;
+  guessSeq = 0;
+  if (!serverRoom) return;
+  room = serverRoom;
+  // Drawing the guess also moved the log marker past entries that turned out never to
+  // have happened. Wind it back to what the server has actually said, or the next real
+  // move would be read as already seen and go through without its sound.
+  lastSeq = Math.max(0, ...(serverRoom.game?.log || []).map((e) => e.i || 0));
   render();
 }
 
@@ -618,6 +695,7 @@ function enterRoom(code) {
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
   clockSamples = []; clockOffset = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  resetGuess();
   subscribeRoom();
   subscribePulse();
   // One immediate beat so this phone has a clock reading straight away.
@@ -677,6 +755,7 @@ async function leaveRoom(removeSelf = true) {
   setConnBadge(false);
   roomCode = null; roomRef = null; pulseRef = null; room = null;
   board = null; boardSeed = null;
+  resetGuess();
   localStorage.removeItem('hexcolony_room');
   keepAwake(false);
   closeSheet();
@@ -684,19 +763,42 @@ async function leaveRoom(removeSelf = true) {
 }
 
 // ---------------------------------------------------------------- posting moves
+// Moves go up one at a time and in the order they were tapped, so the server replays
+// the turn the way it was played. They used to be *refused* while one was in flight,
+// which was invisible when a tap took a second to show anything — and now that the tap
+// draws at once, a refusal would contradict a road already on the board. Two quick taps
+// (the pair of free roads off a Road Building card, say) both land.
+let sendChain = Promise.resolve();
+// Bumped whenever the server turns a move down. Anything already queued behind the
+// refusal was worked out from a state that never existed, so it is dropped rather than
+// sent.
+let sendEra = 0;
+
 /**
- * Send a move. The engine re-validates inside the transaction against the state that
- * is actually on the server, so two people acting at once cannot both win the race.
+ * Send a move.
+ *
+ * The move is drawn straight away where this device can work it out (see `drawGuess`),
+ * and the transaction below then confirms or overrules it. The engine re-validates
+ * inside that transaction against the state actually on the server, so two people
+ * acting at once cannot both win the race — the guess never gets a vote.
  */
-async function send(move, opts = {}) {
-  if (solo) return sendLocal(move, opts);
+function send(move, opts = {}) {
+  if (solo) return Promise.resolve(sendLocal(move, opts));
+  if (!roomRef) return Promise.resolve(false);
+  const drew = drawGuess(move);
+  const era = sendEra;
+  const run = sendChain.then(() => postMove(move, opts, drew, era));
+  // The chain must survive a failed move, or every later tap queues behind a rejection
+  // that already resolved.
+  sendChain = run.then(() => {}, () => {});
+  return run;
+}
+
+async function postMove(move, opts, drew, era) {
+  // A move queued behind one the server refused was reasoned from a state that never
+  // happened. Sending it anyway would be asking for a second, more confusing refusal.
+  if (era !== sendEra) return false;
   if (!roomRef) return false;
-  // One move at a time, but never for ever. A transaction that hangs on a dead
-  // connection used to leave this flag raised forever, and with it up every later tap —
-  // build, trade, end turn — returned false in silence. The game looked frozen and
-  // nothing said why.
-  if (sending) { if (!opts.quiet) toast('Still sending the last move…'); return false; }
-  sending = true;
   let rejected = null;
   try {
     await withTimeout(runTransaction(db, async (tx) => {
@@ -720,10 +822,11 @@ async function send(move, opts = {}) {
   } catch (e) {
     console.error(e);
     rejected = 'That did not go through — check your connection.';
-  } finally {
-    sending = false;
   }
   if (rejected) {
+    // Whatever was drawn for this move did not happen. Put the server's state back
+    // before saying so, so the message and the board agree.
+    if (drew) { sendEra += 1; dropGuess(); }
     // Automatic moves are sent by every device at once; all but the first are expected
     // to be refused, and saying so would be noise rather than news.
     if (!opts.quiet) { toast(rejected); sfx.error(); }
@@ -1034,6 +1137,7 @@ function enterSolo(saved) {
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  resetGuess();
   room = {
     code: 'SOLO', hostId: playerId, state: 'playing', solo: true,
     players: saved.players, order: saved.order, game: saved.game,
@@ -1075,6 +1179,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  resetGuess();
   boardSeed = null;
   room = {
     code: 'SOLO', hostId: playerId, state: 'map', solo: true,
@@ -1446,26 +1551,26 @@ view.onPick = (hit) => {
   }
 
   if (g.phase === 'setup') {
-    if (hit.kind === 'vertex') send({ type: 'setupSettlement', v: hit.id }).then((ok) => ok && sfx.build());
-    if (hit.kind === 'edge') send({ type: 'setupRoad', e: hit.id }).then((ok) => ok && sfx.road());
+    if (hit.kind === 'vertex') send({ type: 'setupSettlement', v: hit.id });
+    if (hit.kind === 'edge') send({ type: 'setupRoad', e: hit.id });
     return;
   }
   if (g.phase === 'robber' && hit.kind === 'hex') {
-    send({ type: 'moveRobber', hex: hit.id }).then((ok) => ok && sfx.robber());
+    send({ type: 'moveRobber', hex: hit.id });
     return;
   }
   // Only legal, affordable targets are ever highlighted, and only highlighted things can
   // be hit — so what was tapped is the whole instruction. No mode to choose first.
   if (hit.kind === 'edge') {
-    send({ type: 'build', what: 'road', e: hit.id }).then((ok) => ok && sfx.road());
+    send({ type: 'build', what: 'road', e: hit.id });
     return;
   }
   if (hit.kind === 'vertex') {
-    send({ type: 'build', what: 'settlement', v: hit.id }).then((ok) => ok && sfx.build());
+    send({ type: 'build', what: 'settlement', v: hit.id });
     return;
   }
   if (hit.kind === 'city') {
-    send({ type: 'build', what: 'city', v: hit.id }).then((ok) => ok && sfx.city());
+    send({ type: 'build', what: 'city', v: hit.id });
   }
 };
 
@@ -1656,6 +1761,7 @@ function reactToLog(g) {
         break;
       case 'trade': sfx.trade(); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
+      case 'buyDev': if (e.p === playerId) sfx.card(); break;
       case 'longest': toast(`${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Longest Road (${e.len}).`); break;
       case 'army': toast(`${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Largest Army (${e.size}).`); break;
       case 'turn':
@@ -1937,7 +2043,7 @@ function openDev(g) {
   if (can.dev) {
     $('btn-buy-dev').addEventListener('click', () => {
       closeSheet();
-      send({ type: 'buyDev' }).then((ok) => ok && sfx.card());
+      send({ type: 'buyDev' });
     });
   }
 
@@ -2314,7 +2420,7 @@ function drawMyOffers(g) {
   for (const b of box.querySelectorAll('[data-close-deal]')) {
     b.addEventListener('click', () => {
       const [id, who] = b.dataset.closeDeal.split(':');
-      send({ type: 'acceptTrade', id: Number(id), with: who }).then((ok) => ok && sfx.trade());
+      send({ type: 'acceptTrade', id: Number(id), with: who });
     });
   }
   for (const b of box.querySelectorAll('[data-drop-offer]')) {
@@ -2330,25 +2436,20 @@ $('btn-trade-bank').addEventListener('click', () => {
   if (!g || !bankPlan(g).ok) return;
   // One move for the whole basket. Sending it as several trades in a row meant a failure
   // partway through left the player halfway into something they asked for as one thing.
-  send({ type: 'bankTrade', give: giveSel, want: wantSel }).then((ok) => {
-    if (!ok) return;
-    sfx.trade();
-    giveSel = {}; wantSel = {};
-    const now = game();
-    if (now) drawTrade(now);
-  });
+  send({ type: 'bankTrade', give: giveSel, want: wantSel });
+  giveSel = {}; wantSel = {};
+  const now = game();
+  if (now) drawTrade(now);
 });
 
 $('btn-trade-players').addEventListener('click', () => {
   const g = game();
   if (!g || !offerPlan(g).ok) return;
-  send({ type: 'offerTrade', give: giveSel, want: wantSel }).then((ok) => {
-    if (!ok) return;
-    // Cleared for the next one — the whole point of the sheet staying open.
-    giveSel = {}; wantSel = {};
-    const now = game();
-    if (now) drawTrade(now);
-  });
+  send({ type: 'offerTrade', give: giveSel, want: wantSel });
+  // Cleared for the next one — the whole point of the sheet staying open.
+  giveSel = {}; wantSel = {};
+  const now = game();
+  if (now) drawTrade(now);
 });
 
 const cardBits = (obj) => cardRow(obj, { size: 'sm' });
@@ -2416,7 +2517,7 @@ function openSteal(g) {
     b.addEventListener('click', () => {
       closeSheet();
       const type = game()?.phase === 'take' ? 'takeCard' : 'steal';
-      send({ type, from: b.dataset.steal }).then((ok) => ok && sfx.steal());
+      send({ type, from: b.dataset.steal });
     });
   }
   sheet('sheet-steal');
@@ -2581,6 +2682,7 @@ $('btn-again').addEventListener('click', async () => {
   try {
     await updateDoc(roomRef, { state: 'lobby', game: null, order: [] });
     lastSeq = 0;
+    resetGuess();
   } catch { toast('Could not reset the room.'); }
 });
 $('btn-home').addEventListener('click', () => leaveRoom(true));

@@ -65,6 +65,29 @@ One Firestore document per room holds the entire game. Every move runs inside a
 transaction: the engine re-validates against the state actually on the server, so two
 people acting at once cannot both win the race.
 
+### Taps draw before the server answers
+
+A move goes up inside a transaction, and a transaction is a server read followed by a
+commit followed by the snapshot coming back — one to two seconds on a phone. Waiting
+for all of that before drawing anything meant every tap, all game long, appeared to do
+nothing for a beat.
+
+So the device works the move out for itself with the same `applyMove` and draws it at
+once. The transaction still runs, still re-validates against the state actually on the
+server, and still has the last word: when its snapshot lands it replaces whatever was
+drawn locally. Guessing shortens the wait for the server's answer without ever changing
+what that answer is — a guess gets no vote, so this cannot be used to cheat, and a move
+the server refuses is taken back off the board with the refusal.
+
+Only moves this device can work out on its own are guessed. `roll`, `steal`,
+`takeCard` and `moveRobber` (which can rob on the way past) draw from the server's
+random source, and `timeout` re-enters as whatever move was owed. Showing a guessed die
+and then correcting it is worse than a short wait, so those go the long way round.
+
+Snapshots that predate the guess are held back rather than drawn, or the road would come
+off the board and go back on. Moves queue in the order they were tapped rather than
+being refused while one is in flight, so both halves of a Road Building card land.
+
 Liveness uses the same design as the other party games in this collection. A separate
 `pulses/{code}` document is heartbeated every four seconds by exactly one device.
 Every healthy phone must therefore receive a server-sent snapshot on that cadence, and
