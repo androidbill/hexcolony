@@ -16,6 +16,13 @@
   --panel-2: rgba(14, 40, 66, 0.92);
   --gold: #e3ba57;
   --gold-2: #c9963a;
+  /* Sky, the same blue the app icon is ringed in and the same one on the player palette
+     in rules.js — so the name on the landing page, the ring round the icon on the home
+     screen and a player's own colour are all one blue rather than three. */
+  --sky: #35c4ff;
+  --sky-2: #1f9ed6;
+  --sky-ink: #04222f;   /* 8.2:1 on the top of the gradient, 5.4:1 on the bottom */
+  --sky-shade: #0f5f85; /* the lip the raised buttons sit on */
   --danger: #e5484d;
   --good: #22c55e;
 
@@ -112,7 +119,7 @@ button { background: none; border: 0; cursor: pointer; }
   color: var(--parch);
   text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
 }
-.wordmark span { color: var(--gold); }
+.wordmark span { color: var(--sky); }
 
 .tagline { margin: 6px 0 0; color: var(--dim); font-size: 13.5px; }
 
@@ -183,11 +190,11 @@ button { background: none; border: 0; cursor: pointer; }
 .btn:disabled { opacity: 0.45; pointer-events: none; }
 
 .btn-key {
-  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-2) 100%);
-  color: #2a1e08;
-  box-shadow: 0 5px 0 #926b23, 0 12px 24px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(180deg, var(--sky) 0%, var(--sky-2) 100%);
+  color: var(--sky-ink);
+  box-shadow: 0 5px 0 var(--sky-shade), 0 12px 24px rgba(0, 0, 0, 0.35);
 }
-.btn-key:active { box-shadow: 0 2px 0 #926b23, 0 6px 14px rgba(0, 0, 0, 0.35); }
+.btn-key:active { box-shadow: 0 2px 0 var(--sky-shade), 0 6px 14px rgba(0, 0, 0, 0.35); }
 .btn-label { font-size: 16.5px; }
 .btn-sub { font-size: 12px; font-weight: 600; opacity: 0.72; }
 
@@ -199,10 +206,10 @@ button { background: none; border: 0; cursor: pointer; }
 .btn-ghost:active { background: rgba(255, 255, 255, 0.12); }
 
 .btn-go {
-  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-2) 100%);
-  color: #2a1e08;
+  background: linear-gradient(180deg, var(--sky) 0%, var(--sky-2) 100%);
+  color: var(--sky-ink);
   width: auto; padding: 13px 22px;
-  box-shadow: 0 4px 0 #926b23;
+  box-shadow: 0 4px 0 var(--sky-shade);
 }
 
 .home-row { display: flex; gap: 10px; }
@@ -883,8 +890,8 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .act:disabled { opacity: 0.35; pointer-events: none; }
 .act-ico { font-size: 18px; line-height: 1; }
 .act.primary {
-  background: linear-gradient(180deg, var(--gold), var(--gold-2));
-  color: #2a1e08;
+  background: linear-gradient(180deg, var(--sky), var(--sky-2));
+  color: var(--sky-ink);
   border-color: transparent;
   box-shadow: 0 4px 0 #926b23;
 }
@@ -916,10 +923,10 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .map-accept {
   flex: 1;
   border-radius: 13px;
-  background: linear-gradient(180deg, var(--gold), var(--gold-2));
-  color: #2a1e08;
+  background: linear-gradient(180deg, var(--sky), var(--sky-2));
+  color: var(--sky-ink);
   border: 0;
-  box-shadow: 0 4px 0 #926b23;
+  box-shadow: 0 4px 0 var(--sky-shade);
   font-weight: 800; font-size: 15px;
 }
 .map-accept:active { box-shadow: 0 1px 0 #926b23; transform: scale(0.98); }
@@ -1201,7 +1208,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   background: #fff;
   transition: transform .2s;
 }
-.tog.on { background: var(--gold); }
+.tog.on { background: var(--sky); }
 .tog.on i { transform: translateX(21px); }
 
 .set-label {
@@ -1338,7 +1345,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 #update-banner span { text-decoration: underline; text-underline-offset: 3px; }
 .banner span { flex: 1; font-size: 13.5px; font-weight: 600; }
 .banner button {
-  background: var(--gold); color: #2a1e08;
+  background: var(--sky); color: var(--sky-ink);
   border-radius: 9px; padding: 7px 13px; font-weight: 700; font-size: 13px;
 }
 .banner .banner-x { background: none; color: var(--dim); padding: 6px 4px; }
