@@ -93,6 +93,11 @@ You ask first: tap what you need, and the payment fills itself in — cheapest r
 so a 2:1 port is used because you own it, and out of the deepest pile, so a trade spends
 the wheat you are drowning in rather than the last of your ore. Tapping your own cards
 takes the payment over, and the app stops choosing one for you until the trade is done.
+The payment is a suggestion, not a decision: auto-fill answers a change to what you are
+asking for and nothing else, so clearing a card it chose leaves it cleared. Ask for a
+wheat with five sheep in hand and it offers four to the bank; take those four back out
+and offer one to the table instead.
+
 Ask for as much as you like. The only ceiling is what exists to be given — the bank's
 pile plus everyone else's hand, not counting your own, since nobody can hand you a card
 you are already holding — and the only limit on the other side is that you cannot offer

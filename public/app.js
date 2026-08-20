@@ -2107,10 +2107,10 @@ $('hand').addEventListener('click', (e) => {
   const clear = e.target.closest('[data-clear]');
   if (clear) {
     delete giveSel[clear.dataset.clear];
-    // Clearing the last of it is a request to start over, not a preference to keep. Left
-    // as "touched" there was no way back to the automatic payment short of cancelling
-    // the whole trade.
-    payTouched = bundleTotal(giveSel) > 0;
+    // Taking a card back out is an edit like any other, so the payment is yours from
+    // here and stays as you left it — including empty. Releasing it here is what made
+    // the button do nothing: the next render simply filled the card back in.
+    payTouched = true;
     sfx.tap(); render(); return;
   }
   const el = e.target.closest('[data-pay]');
@@ -2544,8 +2544,20 @@ function settlePay(g) {
   if (!trading) return;
   if (!(R.isTurn(g, playerId) && g.phase === 'build' && g.players[playerId])) return;
   clampPay(g);
-  // Work the payment out again, unless the player has taken it over.
-  if (!payTouched) giveSel = autoPay(g) || {};
+}
+
+/**
+ * Choose a payment for what is being asked for.
+ *
+ * Called when the ask changes, and only then. It used to run on every single render,
+ * which quietly made the clear button useless: clear the four sheep it had picked, the
+ * next render put them straight back, and there was no way at all to ask for a wheat and
+ * offer one sheep for it to the table instead of four to the bank. An automatic answer
+ * that cannot be argued with is not a suggestion, it is a decision.
+ */
+function autoFillPay(g) {
+  if (payTouched) return;
+  giveSel = autoPay(g) || {};
 }
 
 /**
@@ -2567,9 +2579,9 @@ function clampPay(g) {
     if (giveSel[r] <= max) continue;
     if (max) giveSel[r] = max; else delete giveSel[r];
   }
-  // Nothing of it survived, so let the app work one out again rather than leaving the
-  // player stuck holding an empty selection it has been told not to touch.
-  if (!bundleTotal(giveSel)) payTouched = false;
+  // Deliberately does NOT hand the job back when it empties the basket. Trimming cannot
+  // tell a payment the player cleared from one a robber emptied, and guessing wrong means
+  // four sheep reappearing under a player who just took them out.
 }
 
 function bankPlan(g) {
@@ -2634,7 +2646,11 @@ function tradeReadout(g, bank, offer) {
       : 'Tap what you need. The payment fills itself in.';
   }
   if (bank.ok) return `Bank: ${bank.note}`;
-  if (!giveN) return 'Your hand will not cover that at the bank — tap cards to offer a swap.';
+  if (!giveN) {
+    return payTouched
+      ? 'Tap your own cards to choose what to offer for it.'
+      : 'Your hand will not cover that at the bank — tap cards to offer a swap.';
+  }
   if (offer.ok) return `Offer: ${bundleText(giveSel)} → ${bundleText(wantSel)}`;
   return bank.note;
 }
@@ -2763,7 +2779,13 @@ $('trade-want').addEventListener('click', (e) => {
   const g = game();
   if (!g) return;
   const clear = e.target.closest('[data-clear]');
-  if (clear) { delete wantSel[clear.dataset.clear]; sfx.tap(); render(); return; }
+  if (clear) {
+    delete wantSel[clear.dataset.clear];
+    // Asking for nothing at all is a fresh start, so the app may choose again.
+    if (!bundleTotal(wantSel)) payTouched = false;
+    autoFillPay(g);
+    sfx.tap(); render(); return;
+  }
   const el = e.target.closest('[data-want]');
   if (!el) return;
   // One more each tap, as far as there are cards in the game to be given. Ask for eleven
@@ -2772,6 +2794,7 @@ $('trade-want').addEventListener('click', (e) => {
   const room = gettableOf(g, r);
   if ((wantSel[r] || 0) >= room) return;
   wantSel[r] = (wantSel[r] || 0) + 1;
+  autoFillPay(g);
   sfx.tap();
   render();
 });
