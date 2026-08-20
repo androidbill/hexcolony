@@ -731,15 +731,24 @@ export class BoardView {
       const by = e.y + out.y * 0.72;
       const [sx, sy] = this.toScreen(bx, by);
 
-      // Two mooring lines from the badge back to the vertices that can use it. Dark
-      // rope, not cream — these cross open water and have to read against it.
+      // Two mooring lines from the badge back to the vertices that can use it, in
+      // white so they read as rope against the water rather than as more water.
+      //
+      // Drawn twice: a dark line first, a little wider, then the white one over it. The
+      // seas run from near-black to near-white, and a plain white line simply vanishes
+      // on Ice or Sky — the darker line underneath is what keeps it a line on all
+      // twenty-seven of them.
       c.save();
-      c.strokeStyle = 'rgba(51, 78, 96, 0.62)';
-      c.lineWidth = Math.max(1, R * 0.055);
       c.lineCap = 'round';
-      for (const vid of [p.a, p.b]) {
-        const [vx, vy] = this.toScreen(VERTS[vid].x, VERTS[vid].y);
-        c.beginPath(); c.moveTo(sx, sy); c.lineTo(vx, vy); c.stroke();
+      const ropeW = Math.max(1, R * 0.055);
+      for (const [style, width] of [['rgba(10, 28, 44, 0.45)', ropeW + Math.max(1.2, R * 0.03)],
+                                    ['rgba(255, 255, 255, 0.95)', ropeW]]) {
+        c.strokeStyle = style;
+        c.lineWidth = width;
+        for (const vid of [p.a, p.b]) {
+          const [vx, vy] = this.toScreen(VERTS[vid].x, VERTS[vid].y);
+          c.beginPath(); c.moveTo(sx, sy); c.lineTo(vx, vy); c.stroke();
+        }
       }
       c.restore();
 

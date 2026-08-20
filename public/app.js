@@ -97,6 +97,26 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
+// Three seconds of somebody's name across the middle of the screen. Six people round a
+// table watching six phones needed one place that said whose go it was without anyone
+// having to read the score strip and work it out.
+let shoutTimer = null;
+function shoutout(msg, accent) {
+  const box = $('shoutout');
+  const card = $('shoutout-card');
+  card.textContent = msg;
+  card.style.setProperty('--c', accent || 'var(--gold)');
+  box.hidden = false;
+  // Taking the class off and reading a layout property in between is what restarts the
+  // animation. Without the read the browser coalesces both changes and nothing replays,
+  // so a second shoutout in a row would never appear.
+  card.classList.remove('show');
+  void card.offsetWidth;
+  card.classList.add('show');
+  clearTimeout(shoutTimer);
+  shoutTimer = setTimeout(() => { card.classList.remove('show'); box.hidden = true; }, 3000);
+}
+
 // The one measurement that matters on a phone: 100vh lies when the URL bar is showing,
 // and an installed PWA reports a different height again.
 function appHeight() {
@@ -159,6 +179,7 @@ loadTerrainArt(() => view.draw(performance.now()));
 let board = null;              // regenerated whenever the seed changes
 let boardSeed = null;
 let lastSeq = 0;               // highest game-log id already reacted to
+let announcedUp = null;        // the turn already shouted; null until the first render
 let lastPhaseKey = '';
 let seenLogAt = 0;
 // Offers this player has waved away, by id. A Set rather than a single value because
@@ -695,6 +716,7 @@ function enterRoom(code) {
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
   clockSamples = []; clockOffset = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  announcedUp = null;
   resetGuess();
   subscribeRoom();
   subscribePulse();
@@ -1137,6 +1159,7 @@ function enterSolo(saved) {
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  announcedUp = null;
   resetGuess();
   room = {
     code: 'SOLO', hostId: playerId, state: 'playing', solo: true,
@@ -1179,6 +1202,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
   lastSeq = 0; lastPhaseKey = ''; dismissedOffers.clear(); payoutKey = null;
+  announcedUp = null;
   resetGuess();
   boardSeed = null;
   room = {
@@ -1709,6 +1733,7 @@ function render() {
   view.setHighlights(R.highlightsFor(g, playerId));
 
   reactToLog(g);
+  announceTurn(g);
   updatePayout(g);
   startTimerLoop();
   drawTimer();
@@ -1771,6 +1796,32 @@ function reactToLog(g) {
       default: break;
     }
   }
+}
+
+/**
+ * Shout whose turn it is, once per turn, on every screen in the room.
+ *
+ * Keyed on the turn rather than just the player, so the same person coming round again
+ * is a new turn and a player leaving mid-game cannot make the key repeat. Setup has no
+ * turn number and turns proper have no setup index, so the two are keyed apart.
+ */
+const upKey = (g) => (g.phase === 'setup' ? `s${g.setup.at}` : `t${g.turn.num}`)
+  + ':' + R.currentPid(g);
+
+function announceTurn(g) {
+  if (g.phase === 'over') return;
+  const up = R.currentPid(g);
+  if (!up) return;
+  const key = upKey(g);
+  if (key === announcedUp) return;
+  const first = announcedUp === null;
+  announcedUp = key;
+  // Opening the app into a game already under way is not a turn changing hands — it is
+  // finding out where the game got to, and shouting it would claim something happened
+  // that did not. A game still on its first placement is the exception: that turn is
+  // news to everyone watching it start.
+  if (first && !(g.phase === 'setup' && (g.setup?.at ?? 0) === 0)) return;
+  shoutout(`${nameFor(up)}'s turn`, colorFor(up));
 }
 
 function bumpCards(list) {
@@ -2682,6 +2733,7 @@ $('btn-again').addEventListener('click', async () => {
   try {
     await updateDoc(roomRef, { state: 'lobby', game: null, order: [] });
     lastSeq = 0;
+    announcedUp = null;
     resetGuess();
   } catch { toast('Could not reset the room.'); }
 });
