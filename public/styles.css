@@ -534,11 +534,24 @@ button { background: none; border: 0; cursor: pointer; }
   max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ask-cards { display: inline-flex; gap: 4px; padding-top: 5px; }
+/* Each half of the sentence holds on to its own card.
+   Loose in the line, the cards were separate items and the line broke wherever it ran
+   out of room — which on a narrow phone meant a card alone on the next row, reading as a
+   mistake rather than as a sentence. Bound to the words they belong to, a long name
+   breaks the line between the two halves instead: "Dag is offering you a wheat" over
+   "in exchange for an ore", which is where a person would break it too. */
+.ask-part { display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; }
 /* wrap is load-bearing: .ask-cant below asks for a whole line of its own, and without
    somewhere to wrap to it took this row and pushed both buttons off the right of the
    screen. It only showed when the line was there — which is to say only for the player
    who could not accept, who is exactly the one who needs to reach "No thanks". */
+/* The countdown rides with the buttons, not in the sentence.
+   In the sentence it was one more item competing for the same line, and it was the item
+   that tipped "…in exchange for a [card]" onto a second row — the sentence fits in about
+   308px of a 345px strip, and the pill and its gap are 35 of them. Down here it is also
+   nearer what it actually governs: how long is left to press one of these. */
 .ask-go { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 8px; }
+.ask-go .offer-clock { flex: 0 0 auto; }
 .ask-go .btn { flex: 1 1 0; min-width: 0; padding: 9px 8px; font-size: 13px; }
 .ask-go .btn:disabled { opacity: 0.4; }
 .ask-cant {

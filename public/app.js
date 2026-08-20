@@ -2979,14 +2979,15 @@ function renderAsks(g) {
     const able = Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n);
     return `<div class="ask" style="--c:${esc(colorFor(t.from))}">
       <div class="ask-line">
-        <span class="ask-who">${esc(nameFor(t.from))}</span>${offerClock(t)}
-        <span>is offering you${article(t.give)}</span>
-        <span class="ask-cards">${askCards(t.give)}</span>
-        <span>in exchange for${article(t.want)}</span>
-        <span class="ask-cards">${askCards(t.want)}</span>
+        <span class="ask-who">${esc(nameFor(t.from))}</span>
+        <span class="ask-part">is offering you${article(t.give)}
+          <span class="ask-cards">${askCards(t.give)}</span></span>
+        <span class="ask-part">in exchange for${article(t.want)}
+          <span class="ask-cards">${askCards(t.want)}</span></span>
       </div>
       <div class="ask-go">
         ${able ? '' : '<span class="ask-cant">You have not got that</span>'}
+        ${offerClock(t)}
         <button class="btn btn-ghost" data-say="${t.id}:no">No thanks</button>
         <button class="btn btn-key" data-say="${t.id}:yes"${able ? '' : ' disabled'}>Accept</button>
       </div>
