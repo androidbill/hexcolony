@@ -234,7 +234,7 @@ button { background: none; border: 0; cursor: pointer; }
 
 .seat-list { display: flex; flex-direction: column; gap: 8px; }
 .seat {
-  display: flex; align-items: center; gap: 11px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 11px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid var(--line);
   border-left-width: 5px;
@@ -262,7 +262,7 @@ button { background: none; border: 0; cursor: pointer; }
 /* Your own row is a button — it opens the colour picker. */
 .seat-me { width: 100%; text-align: left; cursor: pointer; }
 .seat-me:active { background: rgba(255, 255, 255, 0.1); }
-.seat-name { flex: 1; font-weight: 700; }
+.seat-name { flex: 1 1 auto; min-width: 0; font-weight: 700; overflow-wrap: anywhere; }
 .seat-tag {
   font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em;
   padding: 3px 8px; border-radius: 999px;
@@ -496,13 +496,18 @@ button { background: none; border: 0; cursor: pointer; }
   max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ask-cards { display: inline-flex; gap: 4px; padding-top: 5px; }
-.ask-go { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
-.ask-go .btn { flex: 1; padding: 9px 8px; font-size: 13px; }
+/* wrap is load-bearing: .ask-cant below asks for a whole line of its own, and without
+   somewhere to wrap to it took this row and pushed both buttons off the right of the
+   screen. It only showed when the line was there — which is to say only for the player
+   who could not accept, who is exactly the one who needs to reach "No thanks". */
+.ask-go { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 8px; }
+.ask-go .btn { flex: 1 1 0; min-width: 0; padding: 9px 8px; font-size: 13px; }
 .ask-go .btn:disabled { opacity: 0.4; }
 .ask-cant {
   font-size: 10.5px; font-weight: 700;
   color: var(--danger);
   flex: 1 0 100%;
+  margin-bottom: 1px;
 }
 
 /* Your own offers ride above the pickers, and stay in the tray after you leave trade
@@ -520,8 +525,8 @@ button { background: none; border: 0; cursor: pointer; }
   padding: 9px 10px;
   margin-bottom: 8px;
 }
-.my-offer-top { display: flex; align-items: center; gap: 8px; }
-.my-offer-top .offer-cards { display: flex; gap: 3px; flex-wrap: wrap; }
+.my-offer-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.my-offer-top .offer-cards { display: flex; gap: 3px; flex-wrap: wrap; min-width: 0; }
 .swap-arrow { color: var(--gold); font-size: 15px; }
 .offer-drop {
   margin-left: auto;
@@ -974,14 +979,14 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .offer-cards { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 4px 0; }
 .offer-replies { display: flex; flex-direction: column; gap: 7px; }
 .reply-row {
-  display: flex; align-items: center; gap: 9px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 9px;
   padding: 9px 11px; border-radius: var(--r-sm);
   background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line);
   width: 100%;
 }
 .reply-row.yes { border-color: rgba(34, 197, 94, 0.45); background: rgba(34, 197, 94, 0.1); }
 .reply-row.no { opacity: 0.5; }
-.reply-name { flex: 1; font-weight: 600; text-align: left; }
+.reply-name { flex: 1 1 auto; min-width: 0; font-weight: 600; text-align: left; overflow-wrap: anywhere; }
 .reply-tag { font-size: 11.5px; font-weight: 700; color: var(--dim); }
 .reply-row.yes .reply-tag { color: #7ee2a8; }
 
