@@ -29,6 +29,7 @@ import * as R from './rules.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
+const CHAT_EMOJIS = ['😀', '😄', '😂', '🤣', '😊', '😎', '😍', '🤔', '😭', '😡', '🙌', '👋', '👍', '👎', '❤️', '🔥', '🎉', '✅', '💯', '⚡', '🌊', '🏝️', '🎲', '🏆'];
 
 // Firestore promises can hang forever on a bad mobile connection — never let a UI flow
 // await one without a deadline.
@@ -2318,8 +2319,6 @@ let unsubChat = null;
 let chatLog = [];
 let chatSeenAt = Number(localStorage.getItem('hexcolony_chat_seen') || 0);
 let chatUnread = 0;
-const CHAT_EMOJIS = ['😀', '😄', '😂', '🤣', '😊', '😎', '😍', '🤔', '😭', '😡', '🙌', '👋', '👍', '👎', '❤️', '🔥', '🎉', '✅', '💯', '⚡', '🌊', '🏝️', '🎲', '🏆'];
-
 function chatMentionHandle(name) {
   return String(name || '').trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 24);
 }
