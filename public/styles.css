@@ -1338,6 +1338,30 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .menu-item i { font-style: normal; font-size: 12px; color: var(--dim); }
 .menu-item.danger b { color: #ff9fa1; }
 
+.history-summary, .history-list { display: flex; flex-direction: column; gap: 7px; }
+.history-list { margin-top: 18px; }
+.history-heading {
+  margin: 2px 0 3px;
+  color: var(--gold);
+  font-size: 11px; font-weight: 800;
+  letter-spacing: .1em; text-transform: uppercase;
+}
+.history-total, .history-game {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 9px 10px;
+}
+.history-total { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: baseline; }
+.history-total b { color: var(--gold); }
+.history-total i { grid-column: 1 / -1; color: var(--dim); font-size: 11px; font-style: normal; }
+.history-game-top { display: flex; justify-content: space-between; gap: 8px; }
+.history-game-top b { color: var(--sky); }
+.history-game-top span { color: var(--dim); font-size: 11px; white-space: nowrap; }
+.history-players { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 7px; }
+.history-player { padding: 3px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font-size: 12px; }
+.history-player.winner { background: rgba(227, 186, 87, 0.18); color: var(--gold); }
+
 .toggle-row {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 0; border-top: 1px solid var(--line);

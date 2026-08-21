@@ -241,6 +241,8 @@ let unsub = null;
 let solo = false;
 let soloTimer = null;
 const SOLO_KEY = 'hexcolony_solo';
+const HISTORY_KEY = 'hexcolony_history';
+const HISTORY_KEEP = 100;
 
 const view = new BoardView($('board-cv'));
 // Illustrated terrain tiles load in the background. Until they arrive (or if they are
@@ -1709,7 +1711,11 @@ for (const b of document.querySelectorAll('[data-solo-robber]')) {
   });
 }
 
-$('btn-solo').addEventListener('click', () => { unlock(); sfx.tap(); drawSoloSheet(); sheet('sheet-solo'); });
+$('btn-solo').addEventListener('click', () => {
+  unlock();
+  if (!usableName()) return;
+  sfx.tap(); drawSoloSheet(); sheet('sheet-solo');
+});
 $('btn-resume').addEventListener('click', () => {
   unlock();
   const saved = loadSolo();
@@ -3677,6 +3683,79 @@ function spell(ms) {
     + `${secs} second${secs === 1 ? '' : 's'}`;
 }
 
+function loadHistory() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+    return Array.isArray(saved) ? saved : [];
+  } catch { return []; }
+}
+
+function historyNameKey(name) {
+  return String(name || 'Someone').trim().toLowerCase();
+}
+
+/** Save one finished game once on every device that saw it finish. */
+function recordHistory(g) {
+  if (!room || g?.phase !== 'over' || !g.winner) return;
+  const started = stampMs(room.startedAt);
+  const key = [room.code || 'unknown', started || g.seed || 'unknown', g.winner, g.turn.num].join(':');
+  const history = loadHistory();
+  if (history.some((entry) => entry.id === key)) return;
+
+  const players = g.seats.map((pid) => ({
+    id: pid,
+    name: nameFor(pid),
+  }));
+  history.unshift({
+    id: key,
+    at: stampMs(room.endedAt) || Date.now(),
+    winner: g.winner,
+    winnerName: nameFor(g.winner),
+    players,
+  });
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_KEEP))); }
+  catch { /* history is helpful, never essential to play */ }
+}
+
+function openHistory() {
+  const history = loadHistory();
+  const totals = new Map();
+  for (const game of history) {
+    for (const player of game.players || []) {
+      const key = historyNameKey(player.name);
+      const row = totals.get(key) || { name: player.name, games: 0, wins: 0 };
+      row.games++;
+      if (player.id === game.winner) row.wins++;
+      totals.set(key, row);
+    }
+  }
+  const standings = [...totals.values()].sort((a, b) => b.wins - a.wins || b.games - a.games || a.name.localeCompare(b.name));
+  $('history-summary').innerHTML = standings.length
+    ? `<div class="history-heading">Win totals</div>${standings.map((row) => `
+        <div class="history-total">
+          <span>${esc(row.name)}</span>
+          <b>${row.wins} win${row.wins === 1 ? '' : 's'}</b>
+          <i>${row.games} game${row.games === 1 ? '' : 's'}</i>
+        </div>`).join('')}`
+    : '<p class="hint">No completed games on this device yet.</p>';
+
+  $('history-list').innerHTML = history.length
+    ? `<div class="history-heading">Games</div>${history.map((game) => {
+        const date = new Date(game.at).toLocaleDateString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric',
+        });
+        const players = (game.players || []).map((player) =>
+          `<span class="history-player${player.id === game.winner ? ' winner' : ''}">${esc(player.name)}${player.id === game.winner ? ' 🏆' : ''}</span>`
+        ).join('');
+        return `<div class="history-game">
+          <div class="history-game-top"><b>${esc(game.winnerName || 'Someone')} won</b><span>${date}</span></div>
+          <div class="history-players">${players}</div>
+        </div>`;
+      }).join('')}`
+    : '';
+  sheet('sheet-history');
+}
+
 /**
  * Where a player's points came from.
  *
@@ -3705,6 +3784,7 @@ function pointSources(g, pid) {
 }
 
 function renderOver(g) {
+  recordHistory(g);
   const win = g.winner;
   $('over-title').textContent = win === playerId ? 'You win!' : `${nameFor(win)} wins`;
 
@@ -3763,6 +3843,7 @@ $('btn-home').addEventListener('click', () => leaveRoom(true));
 $('game-menu').addEventListener('click', () => { sfx.tap(); sheet('sheet-menu'); });
 $('game-log-btn').addEventListener('click', () => { const g = game(); if (g) openLog(g); });
 $('menu-players').addEventListener('click', openPlayers);
+$('menu-history').addEventListener('click', openHistory);
 $('menu-how').addEventListener('click', openHow);
 $('menu-settings').addEventListener('click', openSettings);
 $('menu-leave').addEventListener('click', () => { closeSheet(); leaveRoom(true); });
@@ -3950,6 +4031,7 @@ function openAbout() {
 }
 
 $('kebab-refresh').addEventListener('click', () => { closeKebab(); fullRefresh(); });
+$('kebab-history').addEventListener('click', () => { closeKebab(); openHistory(); });
 $('kebab-share').addEventListener('click', () => { closeKebab(); shareApp(); });
 $('kebab-about').addEventListener('click', () => { closeKebab(); openAbout(); });
 $('menu-share').addEventListener('click', () => { closeSheet(); shareApp(); });

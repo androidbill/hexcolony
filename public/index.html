@@ -325,6 +325,7 @@
   <h3 class="sheet-title">Menu</h3>
   <div class="menu-list">
     <button class="menu-item" id="menu-players"><b>Players</b><i>Scores, cards and awards</i></button>
+    <button class="menu-item" id="menu-history"><b>Game history</b><i>Past games and win totals</i></button>
     <button class="menu-item" id="menu-how"><b>How to Play</b><i>Costs, rules and the robber</i></button>
     <button class="menu-item" id="menu-settings"><b>Settings</b><i>Sound, haptics, board</i></button>
     <button class="menu-item" id="menu-share"><b>Share</b><i>Send the game to a friend</i></button>
@@ -491,9 +492,17 @@
   </button>
   <div class="kebab-menu" id="kebab-menu" hidden role="menu">
     <button id="kebab-refresh" role="menuitem"><span>&#128260;</span>Refresh</button>
+    <button id="kebab-history" role="menuitem"><span>🏆</span>Game history</button>
     <button id="kebab-share" role="menuitem"><span>&#128228;</span>Share</button>
     <button id="kebab-about" role="menuitem"><span>&#8505;&#65039;</span>About</button>
   </div>
+</div>
+
+<div class="sheet" id="sheet-history">
+  <h3 class="sheet-title">Game history</h3>
+  <div class="history-summary" id="history-summary"></div>
+  <div class="history-list" id="history-list"></div>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
 
 <div class="sheet" id="sheet-colour">
