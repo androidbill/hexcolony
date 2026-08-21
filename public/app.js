@@ -1091,6 +1091,7 @@ async function leaveRoom(removeSelf = true) {
   localStorage.removeItem('hexcolony_room');
   keepAwake(false);
   closeSheet();
+  renderChatButton();
   showScreen('screen-home');
 }
 
