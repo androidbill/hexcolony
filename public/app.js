@@ -1546,6 +1546,10 @@ function loadSolo() {
 function clearSolo() { try { localStorage.removeItem(SOLO_KEY); } catch { /* fine */ } }
 
 function enterSolo(saved) {
+  const name = usableName();
+  if (!name) return false;
+  localStorage.setItem('hexcolony_name', name);
+  saved.players[playerId] = { ...saved.players[playerId], name };
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
   lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
@@ -1568,13 +1572,15 @@ function enterSolo(saved) {
   // Skip the audio replay of everything that already happened on a resume.
   lastSeq = Math.max(0, ...(room.game.log || []).map((e) => e.i || 0));
   scheduleBots(900);
+  return true;
 }
 
 function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7) {
+  const name = usableName();
+  if (!name) return false;
   const bots = makeBots(botCount, level, myColorIdx);
-  const me = (findBadWord(myName()) ? 'You' : myName()) || 'You';
   const players = {
-    [playerId]: { name: me, colorIdx: myColorIdx, joinedAt: Date.now() },
+    [playerId]: { name, colorIdx: myColorIdx, joinedAt: Date.now() },
   };
   for (const b of bots) {
     players[b.id] = {
@@ -1602,6 +1608,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
     mapSeeds: [newSeed()], mapIndex: 0,
   };
   render();
+  return true;
 }
 
 function exitSolo() {
@@ -1744,8 +1751,7 @@ for (const b of document.querySelectorAll('[data-solo]')) {
   });
 }
 $('btn-solo-start').addEventListener('click', () => {
-  closeSheet();
-  startSolo(soloLevel, soloBots, soloTarget, soloLayout, soloRobber, soloDiscard);
+  if (startSolo(soloLevel, soloBots, soloTarget, soloLayout, soloRobber, soloDiscard)) closeSheet();
 });
 
 // ---------------------------------------------------------------- lobby
@@ -3737,8 +3743,9 @@ function renderOver(g) {
 
 $('btn-again').addEventListener('click', async () => {
   if (solo) {
-    closeSheet();
-    startSolo(room.level, room.bots, room.settings.targetVP, room.settings.layout, room.settings.useRobber);
+    if (startSolo(room.level, room.bots, room.settings.targetVP, room.settings.layout, room.settings.useRobber)) {
+      closeSheet();
+    }
     return;
   }
   if (!isHost()) return toast('Only the host can start a new game.');
