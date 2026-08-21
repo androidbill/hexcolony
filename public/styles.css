@@ -742,6 +742,17 @@ button { background: none; border: 0; cursor: pointer; }
   background: linear-gradient(180deg, #bfe7f7 0%, #7cc2e4 100%);
   color: var(--ink);
 }
+#sheet-chat .text-input {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(13, 27, 40, 0.28);
+  caret-color: var(--ink);
+}
+#sheet-chat .text-input:focus {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: var(--ink);
+}
+#sheet-chat .text-input::placeholder { color: rgba(13, 27, 40, 0.58); }
 .chat-row {
   border-left: 3px solid var(--c, var(--dim));
   padding: 5px 9px;
