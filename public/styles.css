@@ -746,21 +746,21 @@ button { background: none; border: 0; cursor: pointer; }
   display: flex; flex-direction: column; gap: 7px;
   padding: 2px 0 6px;
 }
-#sheet-chat {
+#sheet-chat, #sheet-lobby-chat {
   background: linear-gradient(180deg, #bfe7f7 0%, #7cc2e4 100%);
   color: var(--ink);
 }
-#sheet-chat .text-input {
+#sheet-chat .text-input, #sheet-lobby-chat .text-input {
   color: var(--ink);
   background: rgba(255, 255, 255, 0.72);
   border-color: rgba(13, 27, 40, 0.28);
   caret-color: var(--ink);
 }
-#sheet-chat .text-input:focus {
+#sheet-chat .text-input:focus, #sheet-lobby-chat .text-input:focus {
   background: rgba(255, 255, 255, 0.9);
   border-color: var(--ink);
 }
-#sheet-chat .text-input::placeholder { color: rgba(13, 27, 40, 0.58); }
+#sheet-chat .text-input::placeholder, #sheet-lobby-chat .text-input::placeholder { color: rgba(13, 27, 40, 0.58); }
 .chat-row {
   border-left: 3px solid var(--c, var(--dim));
   padding: 5px 9px;
@@ -780,6 +780,16 @@ button { background: none; border: 0; cursor: pointer; }
 
 /* ------------------------------------------------------------ room browser */
 .room-list { display: flex; flex-direction: column; gap: 10px; }
+.presence-summary {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+.presence-summary b { color: var(--gold); }
+.presence-summary span { color: var(--dim); font-size: 12px; }
 .room-card {
   display: block; width: 100%; text-align: left;
   background: rgba(255, 255, 255, 0.05);

@@ -627,8 +627,121 @@ $('btn-discord-join').addEventListener('click', () => { unlock(); joinDiscordRoo
 // that fails until somebody does that is a query that fails in production. Fifty rooms
 // is a small enough list to sort here.
 const ROOM_LIST_MAX = 50;
+const PRESENCE_TTL_MS = 45 * 1000;
+const PRESENCE_HEARTBEAT_MS = 15 * 1000;
 let unsubRooms = null;
 let roomList = [];
+let unsubPresence = null;
+let presenceList = [];
+let presenceInterval = null;
+let unsubLobbyChat = null;
+let lobbyChatLog = [];
+
+function presenceMode() {
+  return room && ['map', 'playing'].includes(room.state) ? 'playing' : 'lobby';
+}
+
+function writePresence() {
+  if (!NET_READY || !playerId) return;
+  setDoc(doc(db, 'presence', playerId), {
+    name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
+    at: serverTimestamp(),
+    mode: presenceMode(),
+  }).catch(() => { /* presence is helpful, never essential to play */ });
+}
+
+function startPresence() {
+  writePresence();
+  if (presenceInterval) clearInterval(presenceInterval);
+  presenceInterval = setInterval(writePresence, PRESENCE_HEARTBEAT_MS);
+}
+
+function stopPresenceListener() {
+  if (unsubPresence) { unsubPresence(); unsubPresence = null; }
+  presenceList = [];
+}
+
+function subscribePresence() {
+  if (unsubPresence) unsubPresence();
+  unsubPresence = onSnapshot(collection(db, 'presence'), (snap) => {
+    presenceList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderPresence();
+  }, (err) => console.error('presence', err));
+  renderPresence();
+}
+
+function renderPresence() {
+  const box = $('presence-summary');
+  if (!box) return;
+  const online = presenceList.filter((p) => {
+    const at = stampMs(p.at);
+    return at !== null && Date.now() - at < PRESENCE_TTL_MS;
+  });
+  const playing = online.filter((p) => p.mode === 'playing').length;
+  const lobby = Math.max(0, online.length - playing);
+  box.innerHTML = `<b>Online now: ${online.length}</b><span>Playing: ${playing} · In lobby: ${lobby}</span>`;
+}
+
+function stopLobbyChat() {
+  if (unsubLobbyChat) { unsubLobbyChat(); unsubLobbyChat = null; }
+  lobbyChatLog = [];
+}
+
+function subscribeLobbyChat() {
+  if (unsubLobbyChat) unsubLobbyChat();
+  const q = query(collection(db, 'lobbyChat'), orderBy('at', 'desc'), limit(CHAT_KEEP));
+  unsubLobbyChat = onSnapshot(q, (snap) => {
+    lobbyChatLog = snap.docs.map((d) => ({ id: d.id, ...d.data() })).reverse();
+    drawLobbyChat();
+  }, (err) => console.error('lobby chat', err));
+}
+
+function drawLobbyChat() {
+  const box = $('lobby-chat-log');
+  if (!box) return;
+  if (!lobbyChatLog.length) {
+    box.innerHTML = '<p class="hint">Nothing said yet. Say hello.</p>';
+    return;
+  }
+  box.innerHTML = lobbyChatLog.map((m) => `
+    <div class="chat-row${m.by === playerId ? ' mine' : ''}" style="--c:#35c4ff">
+      <span class="chat-who">${esc(m.name || 'Someone')}</span>
+      <span class="chat-text">${esc(maskText(m.text || ''))}</span>
+    </div>`).join('');
+  box.scrollTop = box.scrollHeight;
+}
+
+function openLobbyChat() {
+  if (!NET_READY) return toast('Lobby Chat needs a connection.');
+  subscribeLobbyChat();
+  sheet('sheet-lobby-chat');
+  $('lobby-chat-input').focus();
+}
+
+async function sendLobbyChat() {
+  const input = $('lobby-chat-input');
+  const text = (input.value || '').trim().slice(0, CHAT_MAX);
+  if (!text) return;
+  const bad = findBadWord(text);
+  if (bad) {
+    toast(`Let's keep it clean — "${bad}" will not send.`);
+    sfx.error();
+    return;
+  }
+  input.value = '';
+  try {
+    await withTimeout(addDoc(collection(db, 'lobbyChat'), {
+      by: playerId,
+      name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
+      text,
+      at: serverTimestamp(),
+    }), 8000);
+  } catch (e) {
+    console.error(e);
+    toast('That message did not send.');
+    input.value = text;
+  }
+}
 
 function showRooms() {
   if (!NET_READY) return toast('Online play needs a connection.');
@@ -638,10 +751,14 @@ function showRooms() {
   $('rooms-hint').textContent = 'Looking for open tables…';
   $('room-list').innerHTML = '';
   subscribeRoomList();
+  subscribePresence();
+  subscribeLobbyChat();
 }
 
 function leaveRooms() {
   if (unsubRooms) { unsubRooms(); unsubRooms = null; }
+  stopPresenceListener();
+  stopLobbyChat();
   roomList = [];
   showScreen('screen-home');
 }
@@ -727,6 +844,11 @@ function renderRoomList() {
 $('btn-rooms').addEventListener('click', showRooms);
 $('rooms-back').addEventListener('click', () => { sfx.tap(); leaveRooms(); });
 $('rooms-refresh').addEventListener('click', () => { sfx.tap(); subscribeRoomList(); });
+$('btn-lobby-chat').addEventListener('click', () => { unlock(); sfx.tap(); openLobbyChat(); });
+$('lobby-chat-send').addEventListener('click', () => { unlock(); sendLobbyChat(); });
+$('lobby-chat-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); sendLobbyChat(); }
+});
 $('btn-rooms-create').addEventListener('click', () => {
   if (unsubRooms) { unsubRooms(); unsubRooms = null; }
   createRoom();
@@ -817,6 +939,7 @@ function applyRoom(data, fresh) {
   if (guessSeq && Date.now() - guessAt < GUESS_HOLD_MS && (data.game?.seq ?? 0) < guessSeq) return;
   guessSeq = 0;
   room = data;
+  writePresence();
   render();
 }
 
@@ -1023,6 +1146,7 @@ function enterRoom(code) {
   lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
   announcedUp = null;
   resetGuess(); resetTrade();
+  writePresence();
   subscribeChat();
   subscribeRoom();
   subscribePulse();
@@ -1086,6 +1210,7 @@ async function leaveRoom(removeSelf = true) {
   setConnBadge(false);
   stopChat();
   roomCode = null; roomRef = null; pulseRef = null; room = null;
+  writePresence();
   board = null; boardSeed = null;
   resetGuess(); resetTrade();
   localStorage.removeItem('hexcolony_room');
@@ -1565,6 +1690,7 @@ function enterSolo(saved) {
     settings: saved.settings, level: saved.level, bots: saved.bots,
     startedAt: saved.startedAt || null, endedAt: saved.endedAt || null,
   };
+  writePresence();
   boardSeed = null;
   // A resumed game has no start stamp — it was never saved, and holding someone to a
   // deadline that expired while the app was shut would be absurd. The current step
@@ -1611,6 +1737,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
     players, order, game: null, settings, level, bots: botCount,
     mapSeeds: [newSeed()], mapIndex: 0,
   };
+  writePresence();
   render();
   return true;
 }
@@ -1619,11 +1746,13 @@ function exitSolo() {
   clearTimeout(soloTimer);
   solo = false;
   room = null;
+  writePresence();
   board = null; boardSeed = null;
   clearSolo();
   closeSheet();
   keepAwake(false);
   showScreen('screen-home');
+  startPresence();
   refreshResume();
 }
 

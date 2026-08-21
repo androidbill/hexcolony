@@ -104,6 +104,13 @@
   </header>
 
   <div class="lobby-scroll">
+    <div class="presence-summary" id="presence-summary">
+      <b>Online now: —</b><span>Playing: — · In lobby: —</span>
+    </div>
+    <button class="btn btn-ghost" id="btn-lobby-chat">
+      <span class="btn-label">Lobby Chat</span>
+      <span class="btn-sub">Chat with people browsing and waiting</span>
+    </button>
     <button class="btn btn-key" id="btn-rooms-create">
       <span class="btn-label">Create a Room</span>
       <span class="btn-sub">Open a table and let people join</span>
@@ -115,6 +122,18 @@
     <p class="hint" id="rooms-hint"></p>
   </div>
 </section>
+
+<div class="sheet" id="sheet-lobby-chat">
+  <h3 class="sheet-title">Lobby Chat</h3>
+  <p class="sheet-sub">A shared chat for people browsing and waiting for a game.</p>
+  <div class="chat-log" id="lobby-chat-log"></div>
+  <div class="chat-send">
+    <input id="lobby-chat-input" class="text-input" type="text" maxlength="140"
+           autocomplete="off" autocapitalize="sentences" placeholder="Say something">
+    <button class="btn btn-go" id="lobby-chat-send">Send</button>
+  </div>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
 
 <!-- ============================== LOBBY ============================== -->
 <section class="screen" id="screen-lobby">
