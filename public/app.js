@@ -2582,7 +2582,17 @@ function startTimerLoop() {
         || room.pause?.status === 'resuming') finishPause();
     if (pauseBlocksGame()) {
       drawTimer();
-      if (openSheet === 'sheet-pause') renderPauseSheet();
+      if (openSheet === 'sheet-pause') {
+        if (room.pause?.status === 'resuming') {
+          renderPauseSheet();
+        } else if (room.pause?.status === 'active') {
+          const started = stampMs(room.pause.startedAt);
+          const left = started === null ? Number(room.pause.duration || 0)
+            : Math.max(0, Math.ceil((started + Number(room.pause.duration || 0) * 1000 - serverNow()) / 1000));
+          const countdown = $('pause-options').querySelector('.pause-status strong');
+          if (countdown) countdown.textContent = `${left}s`;
+        }
+      }
       return;
     }
     drawTimer();
