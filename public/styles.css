@@ -708,6 +708,10 @@ button { background: none; border: 0; cursor: pointer; }
   display: flex; flex-direction: column; gap: 7px;
   padding: 2px 0 6px;
 }
+#sheet-chat {
+  background: linear-gradient(180deg, #bfe7f7 0%, #7cc2e4 100%);
+  color: var(--ink);
+}
 .chat-row {
   border-left: 3px solid var(--c, var(--dim));
   padding: 5px 9px;

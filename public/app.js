@@ -3655,16 +3655,13 @@ function syncSheets(g) {
 }
 
 // ---------------------------------------------------------------- game over
-/** How long something took, in the roundest terms that are still true. */
+/** How long something took, as whole minutes and seconds. */
 function spell(ms) {
-  // Tested before rounding, or forty seconds rounds up to "1 minute" and the shorter
-  // wording never appears at all.
-  if (ms < 60000) return 'under a minute';
-  const mins = Math.max(1, Math.round(ms / 60000));
-  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'}`;
-  const hrs = Math.floor(mins / 60);
-  const rest = mins % 60;
-  return `${hrs} hour${hrs === 1 ? '' : 's'}${rest ? ` ${rest} min` : ''}`;
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins} minute${mins === 1 ? '' : 's'}, `
+    + `${secs} second${secs === 1 ? '' : 's'}`;
 }
 
 /**
@@ -3704,7 +3701,7 @@ function renderOver(g) {
   const to = stampMs(room?.endedAt);
   const turns = g.turn.num;
   const bits = [];
-  if (from !== null && to !== null && to > from) bits.push(spell(to - from));
+  if (from !== null && to !== null && to > from) bits.push(`Game length: ${spell(to - from)}`);
   bits.push(`${turns} turn${turns === 1 ? '' : 's'}`);
 
   $('over-hero').innerHTML = `
