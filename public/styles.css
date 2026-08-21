@@ -395,6 +395,11 @@ button { background: none; border: 0; cursor: pointer; }
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
 .board-badge.mine { border-color: var(--gold); color: var(--gold); }
+.board-badge.pause-badge { border-color: var(--gold); color: var(--gold); }
+.board-badge.pause-badge.pause-urgent {
+  border-color: var(--danger); color: #ff9fa1;
+  animation: timer-tick 1s steps(2) infinite;
+}
 
 .turn-timer {
   flex: 0 0 auto;

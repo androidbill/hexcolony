@@ -2270,6 +2270,8 @@ let timerInterval = null;
 // The last whole second a heartbeat was played for, so one beat lands per second rather
 // than four — the loop runs at 250ms.
 let lastBeat = null;
+let pauseBeat = null;
+let pauseBannerKey = null;
 const COUNTDOWN_FROM = 10;
 // How long the winner has the screen before the scoreboard arrives. Slightly longer than
 // the shoutout, so the card is gone rather than being pushed aside by the sheet.
@@ -2301,7 +2303,11 @@ function pauseElapsedMs(p = room?.pause) {
   const started = stampMs(p.startedAt);
   if (started === null) return 0;
   const finished = stampMs(p.endedAt);
-  const end = finished === null ? serverNow() : finished;
+  const resumeAt = stampMs(p.resumingAt);
+  const fixedEnd = p.status === 'resuming' || p.status === 'ended'
+    ? (resumeAt === null ? started + Number(p.duration || 0) * 1000 : resumeAt + 3000)
+    : started + Number(p.duration || 0) * 1000;
+  const end = finished === null ? Math.min(serverNow(), fixedEnd) : finished;
   const elapsed = Math.max(0, end - started);
   return p.status === 'active' ? Math.min(Number(p.duration || 0) * 1000, elapsed) : elapsed;
 }
@@ -2545,6 +2551,35 @@ function pulseCountdown() {
   buzz(secs <= 3 ? [45, 85, 55] : [28, 95, 34]);
 }
 
+function drawPauseCountdown() {
+  const badge = $('turn-badge');
+  const p = room?.pause;
+  if (!p || !['active', 'resuming'].includes(p.status)) {
+    badge.classList.remove('pause-badge', 'pause-urgent');
+    pauseBeat = null;
+    pauseBannerKey = null;
+    return;
+  }
+
+  const started = stampMs(p.status === 'resuming' ? p.resumingAt : p.startedAt);
+  const duration = p.status === 'resuming' ? 3 : Number(p.duration || 0);
+  const left = started === null ? duration
+    : Math.max(0, Math.ceil((started + duration * 1000 - serverNow()) / 1000));
+  const key = `${p.status}:${stampMs(p.startedAt) || ''}:${stampMs(p.resumingAt) || ''}`;
+  if (key !== pauseBannerKey) { pauseBannerKey = key; pauseBeat = null; }
+
+  badge.textContent = p.status === 'resuming' ? `Game resuming · ${left}s` : `Game paused · ${left}s`;
+  badge.classList.add('pause-badge');
+  badge.classList.toggle('pause-urgent', left <= 5);
+  $('turn-timer').hidden = true;
+
+  if (left > 0 && left <= 5 && left !== pauseBeat) {
+    pauseBeat = left;
+    sfx.heartbeat();
+    buzz(left <= 3 ? [45, 85, 55] : [28, 95, 34]);
+  }
+}
+
 /**
  * Run out of time and the turn takes itself.
  *
@@ -2586,6 +2621,7 @@ function startTimerLoop() {
         || room.pause?.status === 'resuming') finishPause();
     if (pauseBlocksGame()) {
       drawTimer();
+      drawPauseCountdown();
       if (openSheet === 'sheet-pause') {
         if (room.pause?.status === 'resuming') {
           renderPauseSheet();
