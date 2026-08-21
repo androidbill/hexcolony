@@ -1112,7 +1112,13 @@ async function postMove(move, opts, drew, era) {
       const res = R.applyMove(data.game, playerId, move);
       if (!res.ok) { rejected = res.error; return; }
       const patch = { game: res.game };
-      if (res.game.phase === 'over') patch.state = 'over';
+      if (res.game.phase === 'over') {
+        patch.state = 'over';
+        // Only on the move that ends it, and only if nothing has stamped it yet, so the
+        // length everybody reads is the same length and does not creep while the results
+        // are on screen.
+        if (!data.endedAt) patch.endedAt = serverTimestamp();
+      }
       // Offers are stamped by Firestore, never by this phone. The engine cannot do it —
       // it has no clock — and a deadline one handset worked out is exactly the thing that
       // goes wrong when that handset's clock has drifted, which on a sleeping iPhone it
@@ -1213,6 +1219,8 @@ async function acceptMap() {
     game.turn.clockRestart = false;
     room.state = 'playing';
     room.game = game;
+    room.startedAt = Date.now();
+    room.endedAt = null;
     // The first placement is already on the clock, so it needs its starting point.
     room.turnStartedAt = Date.now();
     delete room.mapSeeds;
@@ -1239,6 +1247,10 @@ async function acceptMap() {
   try {
     await updateDoc(roomRef, {
       state: 'playing', order, game, turnStartedAt: serverTimestamp(),
+      // The clock the finished game is measured against. Firestore stamps it, like every
+      // other time in this app: turnStartedAt is overwritten on every turn, so it cannot
+      // be the one, and no phone's idea of when the game began should reach the room.
+      startedAt: serverTimestamp(), endedAt: null,
       // Offer ids restart at 1 with the new game, so last game's stamps would be read as
       // this game's deadlines.
       tradeDeadlines: {},
@@ -1338,6 +1350,7 @@ function sendLocal(move, opts = {}) {
     return false;
   }
   room.game = res.game;
+  if (res.game.phase === 'over' && !room.endedAt) room.endedAt = Date.now();
   // The local clock is authoritative in solo: there is no other device to disagree with
   // it. See clockTrusted().
   markSoloDeadlines(g, res.game);
@@ -3576,24 +3589,78 @@ function syncSheets(g) {
 }
 
 // ---------------------------------------------------------------- game over
+/** How long something took, in the roundest terms that are still true. */
+function spell(ms) {
+  // Tested before rounding, or forty seconds rounds up to "1 minute" and the shorter
+  // wording never appears at all.
+  if (ms < 60000) return 'under a minute';
+  const mins = Math.max(1, Math.round(ms / 60000));
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'}`;
+  const hrs = Math.floor(mins / 60);
+  const rest = mins % 60;
+  return `${hrs} hour${hrs === 1 ? '' : 's'}${rest ? ` ${rest} min` : ''}`;
+}
+
+/**
+ * Where a player's points came from.
+ *
+ * Every point in the game is one of these five, so the parts add up to the total by
+ * construction rather than by my remembering to keep them in step — which is the only
+ * way a scoreboard is worth reading.
+ */
+function pointSources(g, pid) {
+  const p = g.players[pid];
+  let houses = 0, cities = 0;
+  for (const v of Object.keys(g.bldg)) {
+    const b = g.bldg[v];
+    if (b.p !== pid) continue;
+    b.t === 'c' ? (cities += 1) : (houses += 1);
+  }
+  const cards = (p.dev.vp || 0) + (p.devNew.vp || 0);
+  return [
+    { key: 'houses', icon: '🏠', label: houses === 1 ? 'settlement' : 'settlements', n: houses, vp: houses },
+    { key: 'cities', icon: '🏛️', label: cities === 1 ? 'city' : 'cities', n: cities, vp: cities * 2 },
+    { key: 'road', icon: '🛣️', label: `longest road${g.award.road === pid ? ` (${g.award.roadLen})` : ''}`,
+      n: g.award.road === pid ? 1 : 0, vp: g.award.road === pid ? 2 : 0 },
+    { key: 'army', icon: '⚔️', label: `largest army${g.award.army === pid ? ` (${g.award.armySize})` : ''}`,
+      n: g.award.army === pid ? 1 : 0, vp: g.award.army === pid ? 2 : 0 },
+    { key: 'cards', icon: '🃏', label: cards === 1 ? 'victory card' : 'victory cards', n: cards, vp: cards },
+  ];
+}
+
 function renderOver(g) {
   const win = g.winner;
   $('over-title').textContent = win === playerId ? 'You win!' : `${nameFor(win)} wins`;
+
+  // The length of the game, if both ends of it were stamped. A game begun before this
+  // was added has no start, and says nothing rather than guessing.
+  const from = stampMs(room?.startedAt);
+  const to = stampMs(room?.endedAt);
+  const turns = g.turn.num;
+  const bits = [];
+  if (from !== null && to !== null && to > from) bits.push(spell(to - from));
+  bits.push(`${turns} turn${turns === 1 ? '' : 's'}`);
+
   $('over-hero').innerHTML = `
     <div class="over-name">${esc(nameFor(win))}</div>
-    <div class="over-sub">${R.totalVP(g, win)} victory points</div>`;
+    <div class="over-sub">${R.totalVP(g, win)} victory points</div>
+    <div class="over-meta">${esc(bits.join(' · '))}</div>`;
 
   const rows = g.seats.slice().sort((a, b) => R.totalVP(g, b) - R.totalVP(g, a));
   $('final-table').innerHTML = rows.map((pid, i) => {
-    const p = g.players[pid];
-    const hidden = (p.dev.vp || 0) + (p.devNew.vp || 0);
-    const parts = [`${R.publicVP(g, pid)} on the board`];
-    if (hidden) parts.push(`${hidden} hidden (${esc(p.vpCards.join(', '))})`);
+    const src = pointSources(g, pid).filter((s) => s.n > 0);
+    const lines = src.map((s) => `<span class="src">
+        <span class="src-ico">${s.icon}</span>
+        <span class="src-lab">${s.n > 1 ? `${s.n} ` : ''}${esc(s.label)}</span>
+        <span class="src-vp">${s.vp}</span>
+      </span>`).join('');
     return `<div class="final-row${pid === win ? ' win' : ''}" style="--c:${esc(colorFor(pid))}">
-      <span class="final-pos">${i + 1}</span>
-      <span class="final-name">${esc(nameFor(pid))}
-        <span class="final-break">${parts.join(' · ')}</span></span>
-      <span class="final-vp">${R.totalVP(g, pid)}</span>
+      <div class="final-top">
+        <span class="final-pos">${i + 1}</span>
+        <span class="final-name">${esc(nameFor(pid))}</span>
+        <span class="final-vp">${R.totalVP(g, pid)}</span>
+      </div>
+      <div class="final-sources">${lines || '<span class="src-none">no points</span>'}</div>
     </div>`;
   }).join('');
 }

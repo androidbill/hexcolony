@@ -617,6 +617,26 @@ button { background: none; border: 0; cursor: pointer; }
   flex: 0 0 auto;
 }
 
+/* ------------------------------------------------------------ results */
+.over-meta { margin-top: 4px; font-size: 12.5px; color: var(--dim); }
+
+.final-top { display: flex; align-items: baseline; gap: 10px; }
+.final-sources {
+  display: flex; flex-wrap: wrap; gap: 4px 10px;
+  margin-top: 7px; padding-left: 30px;
+}
+/* One line per source of points, so the parts visibly add to the total beside them. */
+.src { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; }
+.src-ico { font-size: 12px; }
+.src-lab { color: var(--dim); }
+.src-vp {
+  min-width: 17px; text-align: center;
+  font-weight: 800;
+  padding: 1px 5px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+}
+.src-none { font-size: 12px; color: var(--dim); font-style: italic; }
+
 /* ------------------------------------------------------------ chat */
 /* Chat and the game log, in the board's bottom-left corner, opposite the recentre
    control — so nothing floating sits under the thumb that is placing a road.
@@ -1343,7 +1363,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .final-pos { width: 20px; font-weight: 800; color: var(--dim); }
 .final-name { flex: 1; font-weight: 700; }
 .final-vp { font-weight: 800; font-size: 17px; }
-.final-break { font-size: 11.5px; color: var(--dim); }
 
 /* ------------------------------------------------------------ chrome */
 /* Whose turn it is, said out loud on every screen for three seconds.
