@@ -290,7 +290,8 @@ let guessSeq = 0;        // g.seq the guess on screen has reached; 0 when not gu
 let guessAt = 0;         // when it was drawn
 const resetGuess = () => { serverRoom = null; guessSeq = 0; guessAt = 0; wasSeated = false; };
 
-const myName = () => ($('name-input').value || '').trim().slice(0, 14);
+const myName = () => (($('name-input').value || localStorage.getItem('hexcolony_name') || '')
+  .trim().slice(0, 14));
 const isHost = () => room && room.hostId === playerId;
 const game = () => room && room.game;
 
@@ -647,7 +648,10 @@ function writePresence() {
   if (!NET_READY || !playerId) return;
   setDoc(doc(db, 'presence', playerId), {
     name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
-    at: serverTimestamp(),
+    // Presence is a short-lived display signal, not a game deadline. A local millisecond
+    // value avoids the serverTimestamp pending state making a freshly active player look
+    // absent until a second snapshot arrives.
+    at: Date.now(),
     mode: presenceMode(),
   }).catch(() => { /* presence is helpful, never essential to play */ });
 }
@@ -774,11 +778,15 @@ function drawLobbyChat() {
     box.innerHTML = '<p class="hint">Nothing said yet. Say hello.</p>';
     return;
   }
-  box.innerHTML = lobbyChatLog.map((m) => `
+  box.innerHTML = lobbyChatLog.map((m) => {
+    const liveName = presenceList.find((p) => p.id === m.by)?.name;
+    const displayName = m.name && m.name !== 'Someone' ? m.name : (liveName || 'Someone');
+    return `
     <div class="chat-row${m.by === playerId ? ' mine' : ''}" style="--c:#35c4ff">
-      <span class="chat-who">${esc(m.name || 'Someone')}</span>
+      <span class="chat-who">${esc(displayName)}</span>
       <span class="chat-text">${esc(maskText(m.text || ''))}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   box.scrollTop = box.scrollHeight;
 }
 
