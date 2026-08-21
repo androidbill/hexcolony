@@ -630,6 +630,7 @@ $('btn-discord-join').addEventListener('click', () => { unlock(); joinDiscordRoo
 const ROOM_LIST_MAX = 50;
 const PRESENCE_TTL_MS = 45 * 1000;
 const PRESENCE_HEARTBEAT_MS = 15 * 1000;
+const LOBBY_CHAT_LIFETIME_MS = 60 * 1000;
 let unsubRooms = null;
 let roomList = [];
 let unsubPresence = null;
@@ -637,6 +638,7 @@ let presenceList = [];
 let presenceInterval = null;
 let unsubLobbyChat = null;
 let lobbyChatLog = [];
+let lobbyChatExpiryTimers = new Map();
 let unsubNotifications = null;
 let lobbySelectedPerson = null;
 
@@ -759,14 +761,42 @@ function startNotifications() {
 
 function stopLobbyChat() {
   if (unsubLobbyChat) { unsubLobbyChat(); unsubLobbyChat = null; }
+  for (const timer of lobbyChatExpiryTimers.values()) clearTimeout(timer);
+  lobbyChatExpiryTimers = new Map();
   lobbyChatLog = [];
+}
+
+function scheduleLobbyChatExpiry(message) {
+  if (lobbyChatExpiryTimers.has(message.id)) return;
+  const sentAt = stampMs(message.at);
+  if (sentAt === null) return;
+  const delay = Math.max(0, sentAt + LOBBY_CHAT_LIFETIME_MS - Date.now());
+  const timer = setTimeout(() => {
+    lobbyChatExpiryTimers.delete(message.id);
+    deleteDoc(doc(db, 'lobbyChat', message.id)).catch(() => {});
+  }, delay);
+  lobbyChatExpiryTimers.set(message.id, timer);
 }
 
 function subscribeLobbyChat() {
   if (unsubLobbyChat) unsubLobbyChat();
   const q = query(collection(db, 'lobbyChat'), orderBy('at', 'desc'), limit(CHAT_KEEP));
   unsubLobbyChat = onSnapshot(q, (snap) => {
-    lobbyChatLog = snap.docs.map((d) => ({ id: d.id, ...d.data() })).reverse();
+    const messages = snap.docs.map((d) => ({ id: d.id, ref: d.ref, ...d.data() }));
+    for (const message of messages) {
+      const sentAt = stampMs(message.at);
+      if (sentAt !== null && Date.now() - sentAt >= LOBBY_CHAT_LIFETIME_MS) {
+        deleteDoc(message.ref).catch(() => {});
+      } else {
+        scheduleLobbyChatExpiry(message);
+      }
+    }
+    lobbyChatLog = messages
+      .filter((message) => {
+        const sentAt = stampMs(message.at);
+        return sentAt === null || Date.now() - sentAt < LOBBY_CHAT_LIFETIME_MS;
+      })
+      .reverse();
     drawLobbyChat();
   }, (err) => console.error('lobby chat', err));
 }
@@ -813,12 +843,13 @@ async function sendLobbyChat() {
   }
   input.value = '';
   try {
-    await withTimeout(addDoc(collection(db, 'lobbyChat'), {
+    const messageRef = await withTimeout(addDoc(collection(db, 'lobbyChat'), {
       by: playerId,
       name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
       text,
       at: serverTimestamp(),
     }), 8000);
+    scheduleLobbyChatExpiry({ id: messageRef.id, at: Date.now() });
   } catch (e) {
     console.error(e);
     toast('That message did not send.');
@@ -4763,6 +4794,8 @@ window.HEXCOLONY = {
 
   showScreen('screen-home');
   refreshResume();
+  startPresence();
+  startNotifications();
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
 
   if (!NET_READY) {

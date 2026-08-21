@@ -1411,7 +1411,12 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   padding: calc(var(--safe-t) + 12px) 16px calc(var(--safe-b) + 16px);
   display: flex; flex-direction: column;
 }
-.lobby-chat-head { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.lobby-chat-head {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
+  background: linear-gradient(180deg, #bfe7f7 0%, rgba(191, 231, 247, 0.96) 82%, rgba(191, 231, 247, 0) 100%);
+  padding: 0 0 10px;
+}
 .lobby-chat-head .sheet-title { flex: 1; text-align: center; }
 .lobby-people-btn { position: relative; display: grid; place-items: center; }
 .lobby-people-btn svg { width: 22px; height: 22px; }
@@ -1649,7 +1654,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   position: fixed;
   top: calc(var(--safe-t) + 10px);
   right: 12px;
-  z-index: 60;
+  z-index: 70;
 }
 .kebab-btn {
   width: 42px; height: 42px;
