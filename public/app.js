@@ -2744,7 +2744,12 @@ function renderActions(g) {
   if (!p) { bar.innerHTML = '<div class="act-prompt"><span class="act-ico">👀</span>You are watching this game</div>'; return; }
 
   if (g.phase === 'over') {
-    bar.innerHTML = actBtn('over', '🏆', 'Results', { primary: true, wide: true }); return;
+    // Results open automatically after the winner announcement. Keep the shortcut
+    // visibly present, but inactive during that pause so an early tap cannot race the
+    // scheduled results sheet.
+    bar.innerHTML = actBtn('over', '🏆', 'Results', {
+      primary: true, wide: true, disabled: celebrating,
+    }); return;
   }
 
   if (g.phase === 'discard') {
@@ -2819,7 +2824,9 @@ function onAction(id) {
     case 'steal': openSteal(g); break;
     case 'players': openPlayers(); break;
     case 'log': openLog(g); break;
-    case 'over': sheet('sheet-over'); break;
+    case 'over':
+      if (!celebrating) { renderOver(g); sheet('sheet-over'); }
+      break;
     default: break;
   }
 }
