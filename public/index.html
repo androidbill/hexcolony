@@ -136,8 +136,15 @@
   <p class="sheet-sub">A shared chat for people browsing and waiting for a game.</p>
   <div class="chat-log" id="lobby-chat-log"></div>
   <div class="chat-send">
-    <input id="lobby-chat-input" class="text-input" type="text" maxlength="140"
-           autocomplete="off" autocapitalize="sentences" placeholder="Say something">
+    <div class="chat-input-wrap">
+      <textarea id="lobby-chat-input" class="text-input" maxlength="2000" rows="1"
+                autocomplete="off" autocapitalize="sentences" placeholder="Message the lobby"></textarea>
+      <div class="chat-mentions" id="lobby-chat-mentions" hidden></div>
+    </div>
+    <div class="chat-emoji-wrap">
+      <button class="chat-emoji" id="lobby-chat-emoji" type="button" aria-label="Add emoji">😊</button>
+      <div class="emoji-picker" id="lobby-chat-emoji-picker" hidden></div>
+    </div>
     <button class="btn btn-go" id="lobby-chat-send">Send</button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
@@ -305,8 +312,15 @@
   <h3 class="sheet-title">Chat</h3>
   <div class="chat-log" id="chat-log"></div>
   <div class="chat-send">
-    <input id="chat-input" class="text-input" type="text" maxlength="140"
-           autocomplete="off" autocapitalize="sentences" placeholder="Say something">
+    <div class="chat-input-wrap">
+      <textarea id="chat-input" class="text-input" maxlength="2000" rows="1"
+                autocomplete="off" autocapitalize="sentences" placeholder="Message the room"></textarea>
+      <div class="chat-mentions" id="chat-mentions" hidden></div>
+    </div>
+    <div class="chat-emoji-wrap">
+      <button class="chat-emoji" id="chat-emoji" type="button" aria-label="Add emoji">😊</button>
+      <div class="emoji-picker" id="chat-emoji-picker" hidden></div>
+    </div>
     <button class="btn btn-go" id="chat-send">Send</button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>

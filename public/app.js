@@ -754,7 +754,7 @@ function startNotifications() {
       unlock();
       sfx.yourTurn();
       buzz([45, 85, 55]);
-      toast(`${from} sent you a bell.`);
+      toast(`${from} sent you a poke.`);
     }
   }, (err) => console.error('notifications', err));
 }
@@ -813,8 +813,8 @@ function drawLobbyChat() {
     const displayName = m.name && m.name !== 'Someone' ? m.name : (liveName || 'Someone');
     return `
     <div class="chat-row${m.by === playerId ? ' mine' : ''}" style="--c:#35c4ff">
-      <span class="chat-who">${esc(displayName)}</span>
-      <span class="chat-text">${esc(maskText(m.text || ''))}</span>
+      <div class="chat-meta"><span class="chat-who">${esc(displayName)}</span><time class="chat-time">${esc(chatTime(m.at))}</time></div>
+      <span class="chat-text">${chatTextMarkup(m.text, 'lobby')}</span>
     </div>`;
   }).join('');
   box.scrollTop = box.scrollHeight;
@@ -968,8 +968,9 @@ $('lobby-chat-people').addEventListener('click', () => {
 });
 $('lobby-chat-send').addEventListener('click', () => { unlock(); sendLobbyChat(); });
 $('lobby-chat-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); sendLobbyChat(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendLobbyChat(); }
 });
+setupChatComposer('lobby-chat-input', 'lobby-chat-mentions', 'lobby-chat-emoji', 'lobby-chat-emoji-picker', 'lobby');
 $('btn-rooms-create').addEventListener('click', () => {
   if (unsubRooms) { unsubRooms(); unsubRooms = null; }
   createRoom();
@@ -2310,13 +2311,110 @@ $('btn-recenter').addEventListener('click', () => { view.resetView(); sfx.tap();
 // whatever the app would have refused. The check on the way out is manners; the mask on
 // the way in is the one that protects the table.
 const CHAT_KEEP = 60;        // how many messages a room shows
-const CHAT_MAX = 140;        // characters in one message
+const CHAT_MAX = 2000;       // characters in one message
 const CHAT_POS_KEY = 'hexcolony_chat_position';
 
 let unsubChat = null;
 let chatLog = [];
 let chatSeenAt = Number(localStorage.getItem('hexcolony_chat_seen') || 0);
 let chatUnread = 0;
+const CHAT_EMOJIS = ['😀', '😄', '😂', '🤣', '😊', '😎', '😍', '🤔', '😭', '😡', '🙌', '👋', '👍', '👎', '❤️', '🔥', '🎉', '✅', '💯', '⚡', '🌊', '🏝️', '🎲', '🏆'];
+
+function chatMentionHandle(name) {
+  return String(name || '').trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 24);
+}
+
+function chatPeople(scope) {
+  if (scope === 'lobby') return lobbyPeople().map((p) => ({ id: p.id, name: p.name || 'Someone' }));
+  return Object.entries(room?.players || {}).map(([id, p]) => ({ id, name: p.name || 'Someone' }));
+}
+
+function chatTime(at) {
+  const ms = stampMs(at);
+  if (ms === null) return 'now';
+  return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(ms);
+}
+
+function chatTextMarkup(text, scope) {
+  const handles = new Set(chatPeople(scope).map((p) => chatMentionHandle(p.name).toLowerCase()).filter(Boolean));
+  const clean = esc(maskText(text || ''));
+  return clean.replace(/(^|[\s])(@[A-Za-z0-9_]{1,24})/g, (all, prefix, mention) => {
+    return handles.has(mention.slice(1).toLowerCase())
+      ? `${prefix}<span class="chat-mention">${mention}</span>`
+      : all;
+  });
+}
+
+function renderChatMentions(input, menu, scope) {
+  const caret = input.selectionStart ?? input.value.length;
+  const before = input.value.slice(0, caret);
+  const match = before.match(/(?:^|\s)@([A-Za-z0-9_]*)$/);
+  if (!match) { menu.hidden = true; return; }
+  const queryText = match[1].toLowerCase();
+  const people = chatPeople(scope)
+    .map((p) => ({ ...p, handle: chatMentionHandle(p.name) }))
+    .filter((p) => p.handle && p.handle.toLowerCase().startsWith(queryText))
+    .slice(0, 8);
+  if (!people.length) { menu.hidden = true; return; }
+  menu.innerHTML = people.map((p) => `
+    <button class="chat-mention-option" type="button" data-chat-handle="${esc(p.handle)}">
+      <b>@${esc(p.handle)}</b><small>${esc(p.name)}</small>
+    </button>`).join('');
+  menu.hidden = false;
+  for (const button of menu.querySelectorAll('[data-chat-handle]')) {
+    button.addEventListener('click', () => {
+      const currentCaret = input.selectionStart ?? input.value.length;
+      const currentBefore = input.value.slice(0, currentCaret);
+      const at = currentBefore.lastIndexOf('@');
+      if (at < 0) return;
+      const handle = button.dataset.chatHandle;
+      input.value = `${currentBefore.slice(0, at)}@${handle} ${input.value.slice(currentCaret)}`;
+      const nextCaret = at + handle.length + 2;
+      input.focus();
+      input.setSelectionRange(nextCaret, nextCaret);
+      menu.hidden = true;
+      input.dispatchEvent(new Event('input'));
+    });
+  }
+}
+
+function setupChatComposer(inputId, mentionsId, emojiId, pickerId, scope) {
+  const input = $(inputId);
+  const mentions = $(mentionsId);
+  const emoji = $(emojiId);
+  const picker = $(pickerId);
+  if (!input || !mentions || !emoji || !picker) return;
+  const resize = () => {
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, 112)}px`;
+    renderChatMentions(input, mentions, scope);
+  };
+  input.addEventListener('input', resize);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape') mentions.hidden = true; });
+  picker.innerHTML = CHAT_EMOJIS.map((item) => `<button type="button" data-emoji="${item}" aria-label="Add ${item}">${item}</button>`).join('');
+  emoji.addEventListener('click', (e) => {
+    e.stopPropagation();
+    picker.hidden = !picker.hidden;
+    mentions.hidden = true;
+    if (!picker.hidden) input.focus();
+  });
+  for (const button of picker.querySelectorAll('[data-emoji]')) {
+    button.addEventListener('click', () => {
+      const start = input.selectionStart ?? input.value.length;
+      const end = input.selectionEnd ?? start;
+      input.value = `${input.value.slice(0, start)}${button.dataset.emoji}${input.value.slice(end)}`.slice(0, CHAT_MAX);
+      const next = start + button.dataset.emoji.length;
+      input.focus();
+      input.setSelectionRange(next, next);
+      picker.hidden = true;
+      input.dispatchEvent(new Event('input'));
+    });
+  }
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest(`#${emojiId}`) && !e.target.closest(`#${pickerId}`)) picker.hidden = true;
+    if (!e.target.closest(`#${inputId}`) && !e.target.closest(`#${mentionsId}`)) mentions.hidden = true;
+  });
+}
 
 function subscribeChat() {
   if (unsubChat) { unsubChat(); unsubChat = null; }
@@ -2430,8 +2528,8 @@ function drawChat() {
     const c = m.by && room?.players?.[m.by] ? colorFor(m.by) : '#6b7a8c';
     // Masked here, on the way in, every time it is drawn.
     return `<div class="chat-row${mine ? ' mine' : ''}" style="--c:${esc(c)}">
-      <span class="chat-who">${esc(m.name || 'Someone')}</span>
-      <span class="chat-text">${esc(maskText(m.text || ''))}</span>
+      <div class="chat-meta"><span class="chat-who">${esc(m.name || 'Someone')}</span><time class="chat-time">${esc(chatTime(m.at))}</time></div>
+      <span class="chat-text">${chatTextMarkup(m.text, 'game')}</span>
     </div>`;
   }).join('');
   box.scrollTop = box.scrollHeight;
@@ -2495,8 +2593,9 @@ makeChatDraggable();
 window.addEventListener('resize', keepChatInView);
 $('chat-send').addEventListener('click', () => { unlock(); sendChat(); });
 $('chat-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') { e.preventDefault(); sendChat(); }
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
+setupChatComposer('chat-input', 'chat-mentions', 'chat-emoji', 'chat-emoji-picker', 'game');
 
 // A continuous loop so the legal-move highlights can pulse and the sea drifts.
 //
