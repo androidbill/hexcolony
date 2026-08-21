@@ -829,7 +829,6 @@ function openLobbyChat() {
   $('lobby-people-list').hidden = true;
   $('lobby-chat-people').setAttribute('aria-expanded', 'false');
   sheet('sheet-lobby-chat');
-  $('lobby-chat-input').focus();
 }
 
 async function sendLobbyChat() {
