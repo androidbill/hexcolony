@@ -636,6 +636,8 @@ let presenceList = [];
 let presenceInterval = null;
 let unsubLobbyChat = null;
 let lobbyChatLog = [];
+let unsubNotifications = null;
+let lobbySelectedPerson = null;
 
 function presenceMode() {
   return room && ['map', 'playing'].includes(room.state) ? 'playing' : 'lobby';
@@ -666,6 +668,7 @@ function subscribePresence() {
   unsubPresence = onSnapshot(collection(db, 'presence'), (snap) => {
     presenceList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderPresence();
+    renderLobbyPeople();
   }, (err) => console.error('presence', err));
   renderPresence();
 }
@@ -680,6 +683,74 @@ function renderPresence() {
   const playing = online.filter((p) => p.mode === 'playing').length;
   const lobby = Math.max(0, online.length - playing);
   box.innerHTML = `<b>Online now: ${online.length}</b><span>Playing: ${playing} · In lobby: ${lobby}</span>`;
+}
+
+function lobbyPeople() {
+  const cutoff = Date.now() - PRESENCE_TTL_MS;
+  return presenceList
+    .filter((p) => p.mode === 'lobby' && (stampMs(p.at) || 0) >= cutoff)
+    .sort((a, b) => (a.id === playerId ? -1 : b.id === playerId ? 1 : String(a.name).localeCompare(String(b.name))));
+}
+
+function renderLobbyPeople() {
+  const list = $('lobby-people-list');
+  const count = $('lobby-chat-count');
+  if (!list || !count) return;
+  const people = lobbyPeople();
+  count.textContent = String(people.length);
+  list.innerHTML = people.length ? people.map((p) => `
+    <div class="lobby-person">
+      <button class="lobby-person-name" data-person="${esc(p.id)}"><b>${esc(p.name || 'Someone')}</b><small>${p.id === playerId ? 'You' : 'Tap for bell'}</small></button>
+      ${lobbySelectedPerson === p.id && p.id !== playerId ? `<button class="lobby-person-bell" data-bell="${esc(p.id)}" aria-label="Notify ${esc(p.name || 'Someone')}">
+        <svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>` : ''}
+    </div>`).join('') : '<span class="hint">Nobody else is waiting right now.</span>';
+  for (const b of list.querySelectorAll('[data-person]')) {
+    b.addEventListener('click', () => {
+      lobbySelectedPerson = lobbySelectedPerson === b.dataset.person ? null : b.dataset.person;
+      renderLobbyPeople();
+    });
+  }
+  for (const b of list.querySelectorAll('[data-bell]')) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      notifyLobbyPerson(b.dataset.bell);
+    });
+  }
+}
+
+async function notifyLobbyPerson(target) {
+  const person = lobbyPeople().find((p) => p.id === target);
+  if (!person || target === playerId) return;
+  try {
+    await addDoc(collection(db, 'notifications', target, 'items'), {
+      from: playerId,
+      name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
+      at: serverTimestamp(),
+    });
+    toast(`Bell sent to ${person.name || 'Someone'}.`);
+  } catch { toast('Could not send the bell.'); }
+}
+
+function startNotifications() {
+  if (!NET_READY || !playerId) return;
+  if (unsubNotifications) unsubNotifications();
+  const q = query(collection(db, 'notifications', playerId, 'items'), orderBy('at', 'desc'), limit(20));
+  let first = true;
+  unsubNotifications = onSnapshot(q, (snap) => {
+    if (first) {
+      first = false;
+      return;
+    }
+    for (const change of snap.docChanges()) {
+      if (change.type !== 'added') continue;
+      const from = change.doc.data()?.name || 'Someone';
+      unlock();
+      sfx.yourTurn();
+      buzz([45, 85, 55]);
+      toast(`${from} sent you a bell.`);
+    }
+  }, (err) => console.error('notifications', err));
 }
 
 function stopLobbyChat() {
@@ -714,6 +785,10 @@ function drawLobbyChat() {
 function openLobbyChat() {
   if (!NET_READY) return toast('Lobby Chat needs a connection.');
   subscribeLobbyChat();
+  lobbySelectedPerson = null;
+  renderLobbyPeople();
+  $('lobby-people-list').hidden = true;
+  $('lobby-chat-people').setAttribute('aria-expanded', 'false');
   sheet('sheet-lobby-chat');
   $('lobby-chat-input').focus();
 }
@@ -845,6 +920,13 @@ $('btn-rooms').addEventListener('click', showRooms);
 $('rooms-back').addEventListener('click', () => { sfx.tap(); leaveRooms(); });
 $('rooms-refresh').addEventListener('click', () => { sfx.tap(); subscribeRoomList(); });
 $('btn-lobby-chat').addEventListener('click', () => { unlock(); sfx.tap(); openLobbyChat(); });
+$('lobby-chat-people').addEventListener('click', () => {
+  const list = $('lobby-people-list');
+  const button = $('lobby-chat-people');
+  list.hidden = !list.hidden;
+  button.setAttribute('aria-expanded', String(!list.hidden));
+  renderLobbyPeople();
+});
 $('lobby-chat-send').addEventListener('click', () => { unlock(); sendLobbyChat(); });
 $('lobby-chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); sendLobbyChat(); }
@@ -1753,6 +1835,7 @@ function exitSolo() {
   keepAwake(false);
   showScreen('screen-home');
   startPresence();
+  startNotifications();
   refreshResume();
 }
 

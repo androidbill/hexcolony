@@ -123,8 +123,16 @@
   </div>
 </section>
 
-<div class="sheet" id="sheet-lobby-chat">
-  <h3 class="sheet-title">Lobby Chat</h3>
+<div class="sheet sheet-full" id="sheet-lobby-chat">
+  <div class="lobby-chat-head">
+    <button class="icon-btn lobby-people-btn" id="lobby-chat-people" aria-label="People in Lobby Chat" aria-expanded="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 19c.5-3 2.5-5 6-5s5.5 2 6 5M16 5.5a2.5 2.5 0 0 1 0 5M17 14c2.3.3 3.6 2 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <span id="lobby-chat-count">0</span>
+    </button>
+    <h3 class="sheet-title">Lobby Chat</h3>
+    <button class="icon-btn" data-close aria-label="Close Lobby Chat">&#10005;</button>
+  </div>
+  <div class="lobby-people-list" id="lobby-people-list" hidden></div>
   <p class="sheet-sub">A shared chat for people browsing and waiting for a game.</p>
   <div class="chat-log" id="lobby-chat-log"></div>
   <div class="chat-send">
