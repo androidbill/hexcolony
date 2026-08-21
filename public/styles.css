@@ -235,14 +235,6 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .icon-btn svg { width: 22px; height: 22px; }
 .icon-btn:active { background: rgba(255, 255, 255, 0.14); }
-.icon-btn .dot {
-  position: absolute; top: 7px; right: 7px;
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--gold);
-  opacity: 0; transition: opacity .2s;
-}
-.icon-btn .dot.on { opacity: 1; }
-
 /* ------------------------------------------------------------ lobby */
 .code-hero {
   text-align: center;
@@ -625,10 +617,17 @@ button { background: none; border: 0; cursor: pointer; }
 }
 
 /* ------------------------------------------------------------ chat */
-/* Opposite the recentre control, so the two float in the board's bottom corners and
-   neither is under the thumb that is trying to place a road. */
-.chat-fab {
+/* Chat and the game log, in the board's bottom-left corner, opposite the recentre
+   control — so nothing floating sits under the thumb that is placing a road.
+   A row rather than two separately positioned buttons: chat is hidden in solo, and a
+   row closes the gap where absolute positions would leave one. */
+.board-fabs {
   position: absolute; left: 12px; bottom: 12px;
+  display: flex; gap: 8px;
+  z-index: 5;
+}
+.board-fab {
+  position: relative;
   width: 44px; height: 44px; border-radius: 50%;
   background: rgba(5, 18, 32, 0.9);
   border: 1px solid var(--line);
@@ -637,10 +636,11 @@ button { background: none; border: 0; cursor: pointer; }
   backdrop-filter: blur(8px);
   z-index: 5;
 }
-.chat-fab svg { width: 22px; height: 22px; }
-.chat-fab:active { background: rgba(5, 18, 32, 1); }
+.board-fab svg { width: 22px; height: 22px; }
+.board-fab:active { background: rgba(5, 18, 32, 1); }
 .chat-dot {
   position: absolute; top: -3px; right: -3px;
+  font-style: normal;
   min-width: 19px; height: 19px; padding: 0 5px;
   border-radius: 999px;
   background: var(--sky); color: var(--sky-ink);
@@ -648,6 +648,9 @@ button { background: none; border: 0; cursor: pointer; }
   line-height: 19px; text-align: center;
   box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
 }
+/* The log's marker carries no number — there is nothing useful to count, since a turn
+   can put half a dozen lines in at once — so it is a plain dot rather than a badge. */
+.log-dot { min-width: 12px; width: 12px; height: 12px; padding: 0; }
 
 .chat-log {
   max-height: 46vh; overflow-y: auto;

@@ -2324,7 +2324,7 @@ function reactToLog(g) {
   lastSeq = Math.max(lastSeq, ...(g.log || []).map((e) => e.i || 0));
   if (first) return; // don't replay the whole game's audio when you open the room
 
-  $('log-dot').classList.add('on');
+  $('log-dot').hidden = false;
   for (const e of entries) {
     switch (e.t) {
       case 'roll': sfx.dice(); view.setRolled(e.roll); break;
@@ -2371,8 +2371,15 @@ function reactToLog(g) {
       case 'trade': sfx.trade(); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
       case 'buyDev': if (e.p === playerId) sfx.card(); break;
-      case 'longest': toast(`${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Longest Road (${e.len}).`); break;
-      case 'army': toast(`${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Largest Army (${e.size}).`); break;
+      // Both awards are two points changing hands, which is the biggest single swing in
+      // the game outside somebody winning — and they used to go past in a toast at the
+      // bottom of the screen. Same card the turn uses, in the taker's own colour.
+      case 'longest':
+        shoutout(`🛣️ ${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Longest Road (${e.len})`, colorFor(e.p));
+        break;
+      case 'army':
+        shoutout(`⚔️ ${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Largest Army (${e.size})`, colorFor(e.p));
+        break;
       case 'turn':
         if (e.p === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }
         break;
@@ -2624,10 +2631,10 @@ function renderActions(g) {
   // disagreed with the number two inches below it would be its own small mystery.
   const devBadge = held;
 
-  if (!p) { bar.innerHTML = actBtn('log', '📜', 'Game log', { wide: true }); return; }
+  if (!p) { bar.innerHTML = '<div class="act-prompt"><span class="act-ico">👀</span>You are watching this game</div>'; return; }
 
   if (g.phase === 'over') {
-    bar.innerHTML = actBtn('over', '🏆', 'Results', { primary: true, wide: true }) + actBtn('log', '📜', 'Log'); return;
+    bar.innerHTML = actBtn('over', '🏆', 'Results', { primary: true, wide: true }); return;
   }
 
   if (g.phase === 'discard') {
@@ -2644,26 +2651,22 @@ function renderActions(g) {
   // is not your turn and offers nothing to press.
   if (!mine || g.phase === 'setup') {
     bar.innerHTML = actBtn('players', '👥', 'Players')
-      + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 })
-      + actBtn('log', '📜', 'Log', { badge: 0 }); return;
+      + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }); return;
   }
 
   if (g.phase === 'robber') {
-    bar.innerHTML = `<div class="act-prompt"><span class="act-ico">🥷</span>Tap a highlighted tile to move the robber</div>`
-      + actBtn('log', '📜', 'Log'); return;
+    bar.innerHTML = `<div class="act-prompt"><span class="act-ico">🥷</span>Tap a highlighted tile to move the robber</div>`; return;
   }
 
   if (g.phase === 'steal' || g.phase === 'take') {
     // A button back into the sheet, in case it was somehow closed.
-    bar.innerHTML = actBtn('steal', '🥷', g.phase === 'take' ? 'Take a card' : 'Rob a player', { primary: true, wide: true })
-      + actBtn('log', '📜', 'Log'); return;
+    bar.innerHTML = actBtn('steal', '🥷', g.phase === 'take' ? 'Take a card' : 'Rob a player', { primary: true, wide: true }); return;
   }
 
   if (g.phase === 'roll') {
     bar.innerHTML =
       actBtn('roll', '🎲', 'Roll', { primary: true, wide: true }) +
-      actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }) +
-      actBtn('log', '📜', 'Log'); return;
+      actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }); return;
   }
 
   // build phase
@@ -3466,7 +3469,7 @@ function openLog(g) {
   // the bottom of a list that is now a hundred and sixty entries long.
   const rows = (g.log || []).slice().reverse().map(logLine).join('');
   $('log-list').innerHTML = rows || '<p class="hint">Nothing yet.</p>';
-  $('log-dot').classList.remove('on');
+  $('log-dot').hidden = true;
   seenLogAt = Date.now();
   sheet('sheet-log');
 }
