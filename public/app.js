@@ -2291,19 +2291,26 @@ function pauseIsActive(p = room?.pause) {
   return serverNow() < started + Number(p.duration || 0) * 1000;
 }
 
+function pauseBlocksGame() {
+  return pauseIsActive() || room?.pause?.status === 'resuming';
+}
+
 /** Time spent paused is removed from every countdown that was already running. */
 function pauseElapsedMs(p = room?.pause) {
-  if (!p || p.status !== 'active') return 0;
+  if (!p || !['active', 'resuming', 'ended'].includes(p.status)) return 0;
   const started = stampMs(p.startedAt);
   if (started === null) return 0;
-  return Math.min(Number(p.duration || 0) * 1000, Math.max(0, serverNow() - started));
+  const finished = stampMs(p.endedAt);
+  const end = finished === null ? serverNow() : finished;
+  const elapsed = Math.max(0, end - started);
+  return p.status === 'active' ? Math.min(Number(p.duration || 0) * 1000, elapsed) : elapsed;
 }
 
 function renderPauseSheet() {
   const p = room?.pause;
   const sub = $('pause-sub');
   const options = $('pause-options');
-  if (!p || (p.status === 'active' && !pauseIsActive(p))) {
+  if (!p || p.status === 'ended' || (p.status === 'active' && !pauseIsActive(p))) {
     sub.textContent = 'Choose how long to pause. Everyone at the table must accept.';
     options.innerHTML = `
       <button class="btn btn-ghost" data-pause-duration="30">30 seconds</button>
@@ -2320,7 +2327,17 @@ function renderPauseSheet() {
     const started = stampMs(p.startedAt);
     const left = started === null ? Number(p.duration || 0) : Math.max(0, Math.ceil((started + Number(p.duration || 0) * 1000 - serverNow()) / 1000));
     sub.textContent = 'The game is paused. Chat is still available.';
-    options.innerHTML = `<div class="pause-status"><strong>${left}s</strong><small>Pause remaining</small></div>`;
+    options.innerHTML = `<div class="pause-status"><strong>${left}s</strong><small>Pause remaining</small></div>`
+      + (p.requestedBy === playerId ? '<button class="btn btn-key" id="pause-resume">Resume game</button>' : '');
+    $('pause-resume')?.addEventListener('click', resumePause);
+    return;
+  }
+
+  if (p.status === 'resuming') {
+    const at = stampMs(p.resumingAt);
+    const left = at === null ? 3 : Math.max(1, Math.ceil((at + 3000 - serverNow()) / 1000));
+    sub.textContent = 'The game is about to resume. Get ready.';
+    options.innerHTML = `<div class="pause-status"><strong>${left}</strong><small>Game resuming…</small></div>`;
     return;
   }
 
@@ -2375,6 +2392,26 @@ async function declinePause() {
   if (!roomRef || room?.pause?.status !== 'pending') return;
   try { await updateDoc(roomRef, { pause: null }); }
   catch { toast('Could not cancel the pause.'); }
+}
+
+async function resumePause() {
+  if (!roomRef || room?.pause?.status !== 'active' || room.pause.requestedBy !== playerId) return;
+  try { await updateDoc(roomRef, { pause: { ...room.pause, status: 'resuming', resumingAt: serverTimestamp() } }); }
+  catch { toast('Could not resume the game.'); }
+}
+
+async function finishPause() {
+  if (!roomRef || !room?.pause) return;
+  const p = room.pause;
+  if (p.status === 'active') {
+    const started = stampMs(p.startedAt);
+    if (started === null || serverNow() < started + Number(p.duration || 0) * 1000) return;
+  } else if (p.status === 'resuming') {
+    const at = stampMs(p.resumingAt);
+    if (at === null || serverNow() < at + 3000) return;
+  } else return;
+  try { await updateDoc(roomRef, { pause: { ...p, status: 'ended', endedAt: serverTimestamp() } }); }
+  catch { /* another player will finish it */ }
 }
 
 function secondsLeft(g) {
@@ -2541,12 +2578,9 @@ function startTimerLoop() {
   if (timerInterval) return;
   timerInterval = setInterval(() => {
     if (!room || room.state !== 'playing') return;
-    if (room.pause?.status === 'active' && !pauseIsActive()) {
-      room = { ...room, pause: null };
-      render();
-      return;
-    }
-    if (pauseIsActive()) {
+    if ((room.pause?.status === 'active' && !pauseIsActive())
+        || room.pause?.status === 'resuming') finishPause();
+    if (pauseBlocksGame()) {
       drawTimer();
       if (openSheet === 'sheet-pause') renderPauseSheet();
       return;
@@ -2934,7 +2968,7 @@ function renderActions(g) {
 
   if (!p) { bar.innerHTML = '<div class="act-prompt"><span class="act-ico">👀</span>You are watching this game</div>'; return; }
 
-  if (g.phase !== 'over' && pauseIsActive()) {
+  if (g.phase !== 'over' && pauseBlocksGame()) {
     bar.innerHTML = '<div class="act-prompt"><span class="act-ico">⏸️</span>Game paused — chat is still available</div>';
     return;
   }
