@@ -2310,6 +2310,10 @@ function renderPauseSheet() {
   const p = room?.pause;
   const sub = $('pause-sub');
   const options = $('pause-options');
+  if (p?.status === 'ended' && openSheet === 'sheet-pause') {
+    closeSheet();
+    return;
+  }
   if (!p || p.status === 'ended' || (p.status === 'active' && !pauseIsActive(p))) {
     sub.textContent = 'Choose how long to pause. Everyone at the table must accept.';
     options.innerHTML = `
