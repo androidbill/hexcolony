@@ -212,10 +212,14 @@
 <!-- ============================== GAME ============================== -->
 <section class="screen" id="screen-game">
   <header class="topbar game-top">
-    <button class="icon-btn" id="game-menu" aria-label="Menu">
-      <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-    </button>
     <div class="score-strip" id="score-strip"></div>
+    <!-- Right-hand kebab, the same three dots the rest of the app uses for a menu.
+         The score strip keeps the width either way: one button leaves, one arrives. -->
+    <button class="icon-btn" id="game-menu" aria-label="Menu" aria-haspopup="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+        <circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/>
+      </svg>
+    </button>
   </header>
 
   <div class="board-wrap">
