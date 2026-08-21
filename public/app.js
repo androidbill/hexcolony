@@ -2300,6 +2300,7 @@ function pauseBlocksGame() {
 /** Time spent paused is removed from every countdown that was already running. */
 function pauseElapsedMs(p = room?.pause) {
   if (!p || !['active', 'resuming', 'ended'].includes(p.status)) return 0;
+  if (p.status === 'ended' && Number.isFinite(p.shiftMs)) return 0;
   const started = stampMs(p.startedAt);
   if (started === null) return 0;
   const finished = stampMs(p.endedAt);
@@ -2424,7 +2425,20 @@ async function finishPause() {
     const at = stampMs(p.resumingAt);
     if (at === null || serverNow() < at + 3000) return;
   } else return;
-  try { await updateDoc(roomRef, { pause: { ...p, status: 'ended', endedAt: serverTimestamp() } }); }
+  const started = stampMs(p.startedAt);
+  const resumeAt = stampMs(p.resumingAt);
+  const fixedEnd = p.status === 'resuming' && resumeAt !== null
+    ? resumeAt + 3000
+    : (started === null ? null : started + Number(p.duration || 0) * 1000);
+  const shiftMs = started === null || fixedEnd === null ? 0 : Math.max(0, fixedEnd - started);
+  const patch = { pause: { ...p, status: 'ended', endedAt: serverTimestamp(), shiftMs } };
+  const turnStart = stampMs(room.turnStartedAt);
+  if (turnStart !== null && shiftMs) patch.turnStartedAt = turnStart + shiftMs;
+  for (const [id, madeValue] of Object.entries(room.tradeDeadlines || {})) {
+    const made = stampMs(madeValue);
+    if (made !== null && shiftMs) patch[`tradeDeadlines.${id}`] = made + shiftMs;
+  }
+  try { await updateDoc(roomRef, patch); }
   catch { /* another player will finish it */ }
 }
 
