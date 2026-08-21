@@ -2098,8 +2098,9 @@ function countUnread() {
 function renderChatButton() {
   const btn = $('btn-chat');
   if (!btn) return;
-  // Chat is available while players choose a map and during the game. Solo has nobody to talk to.
-  btn.hidden = solo || !roomCode || !['map', 'playing'].includes(room?.state);
+  // Chat is available in the lobby, while players choose a map, and during the game.
+  // Solo has nobody to talk to.
+  btn.hidden = solo || !roomCode || !['lobby', 'map', 'playing'].includes(room?.state);
   $('chat-dot').hidden = chatUnread === 0;
   $('chat-dot').textContent = chatUnread > 9 ? '9+' : String(chatUnread);
 }
