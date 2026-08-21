@@ -821,6 +821,9 @@ function drawLobbyChat() {
 
 function openLobbyChat() {
   if (!NET_READY) return toast('Lobby Chat needs a connection.');
+  const name = usableName();
+  if (!name) return;
+  localStorage.setItem('hexcolony_name', name);
   subscribePresence();
   subscribeLobbyChat();
   lobbySelectedPerson = null;
