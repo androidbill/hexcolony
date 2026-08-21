@@ -1060,7 +1060,10 @@ async function leaveRoom(removeSelf = true) {
               const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId });
               if (res.ok) {
                 patch.game = res.game;
-                if (res.game.phase === 'over') patch.state = 'over';
+                if (res.game.phase === 'over') {
+                  patch.state = 'over';
+                  if (!data.endedAt) patch.endedAt = serverTimestamp();
+                }
                 if (res.game.turn.clockRestart) {
                   res.game.turn.clockRestart = false;
                   patch.turnStartedAt = serverTimestamp();
@@ -1515,6 +1518,9 @@ function runBot(pid) {
   }
   if (!res.ok) { console.error('bot could not act at all in phase', g.phase); return; }
   room.game = res.game;
+  // A bot winning is how most solo games end, and this path is not sendLocal — so
+  // without this the game had no end time and the results could not say how long it took.
+  if (res.game.phase === 'over' && !room.endedAt) room.endedAt = Date.now();
   markSoloDeadlines(g, res.game);
   if (res.game.turn.clockRestart) { res.game.turn.clockRestart = false; room.turnStartedAt = Date.now(); }
   saveSolo();
@@ -1529,6 +1535,8 @@ function saveSolo() {
     localStorage.setItem(SOLO_KEY, JSON.stringify({
       players: room.players, order: room.order, game: room.game,
       settings: room.settings, level: room.level, bots: room.bots,
+      // Or a resumed game forgets when it began, and can never say how long it ran.
+      startedAt: room.startedAt || null, endedAt: room.endedAt || null,
     }));
   } catch { /* storage full or blocked — the game still plays, it just won't resume */ }
 }
@@ -1547,6 +1555,7 @@ function enterSolo(saved) {
     code: 'SOLO', hostId: playerId, state: 'playing', solo: true,
     players: saved.players, order: saved.order, game: saved.game,
     settings: saved.settings, level: saved.level, bots: saved.bots,
+    startedAt: saved.startedAt || null, endedAt: saved.endedAt || null,
   };
   boardSeed = null;
   // A resumed game has no start stamp — it was never saved, and holding someone to a
