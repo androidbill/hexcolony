@@ -1952,6 +1952,7 @@ function renderLobby() {
   $('lobby-hint').textContent = isHost()
     ? 'Share the code — players can join until you start.'
     : 'You can change your name and colour on the home screen.';
+  renderChatButton();
 }
 
 // ---------------------------------------------------------------- board plumbing
@@ -2058,6 +2059,7 @@ $('btn-recenter').addEventListener('click', () => { view.resetView(); sfx.tap();
 // the way in is the one that protects the table.
 const CHAT_KEEP = 60;        // how many messages a room shows
 const CHAT_MAX = 140;        // characters in one message
+const CHAT_POS_KEY = 'hexcolony_chat_position';
 
 let unsubChat = null;
 let chatLog = [];
@@ -2100,6 +2102,68 @@ function renderChatButton() {
   btn.hidden = solo || !roomCode || !['map', 'playing'].includes(room?.state);
   $('chat-dot').hidden = chatUnread === 0;
   $('chat-dot').textContent = chatUnread > 9 ? '9+' : String(chatUnread);
+}
+
+function restoreChatPosition() {
+  const btn = $('btn-chat');
+  try {
+    const pos = JSON.parse(localStorage.getItem(CHAT_POS_KEY) || 'null');
+    if (!pos || !Number.isFinite(pos.left) || !Number.isFinite(pos.top)) return;
+    btn.style.left = `${pos.left}px`;
+    btn.style.top = `${pos.top}px`;
+    btn.style.right = 'auto';
+    btn.style.bottom = 'auto';
+  } catch { /* use the default bottom-right position */ }
+}
+
+function keepChatInView() {
+  const btn = $('btn-chat');
+  if (!btn || btn.hidden || !btn.style.left) return;
+  const pad = 8;
+  const maxLeft = Math.max(pad, innerWidth - btn.offsetWidth - pad);
+  const maxTop = Math.max(pad, innerHeight - btn.offsetHeight - pad);
+  const left = Math.min(maxLeft, Math.max(pad, parseFloat(btn.style.left)));
+  const top = Math.min(maxTop, Math.max(pad, parseFloat(btn.style.top)));
+  btn.style.left = `${left}px`;
+  btn.style.top = `${top}px`;
+  localStorage.setItem(CHAT_POS_KEY, JSON.stringify({ left, top }));
+}
+
+function makeChatDraggable() {
+  const btn = $('btn-chat');
+  let drag = null;
+  let moved = false;
+
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 && e.pointerType !== 'touch') return;
+    const rect = btn.getBoundingClientRect();
+    drag = { id: e.pointerId, dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    moved = false;
+    btn.setPointerCapture(e.pointerId);
+  });
+  btn.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const left = e.clientX - drag.dx;
+    const top = e.clientY - drag.dy;
+    if (Math.abs(left - btn.getBoundingClientRect().left) > 3 || Math.abs(top - btn.getBoundingClientRect().top) > 3) moved = true;
+    if (!moved) return;
+    btn.classList.add('dragging');
+    btn.style.left = `${Math.min(innerWidth - btn.offsetWidth - 8, Math.max(8, left))}px`;
+    btn.style.top = `${Math.min(innerHeight - btn.offsetHeight - 8, Math.max(8, top))}px`;
+    btn.style.right = 'auto';
+    btn.style.bottom = 'auto';
+  });
+  btn.addEventListener('pointerup', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    if (moved) {
+      localStorage.setItem(CHAT_POS_KEY, JSON.stringify({ left: parseFloat(btn.style.left), top: parseFloat(btn.style.top) }));
+      btn.dataset.suppressClick = '1';
+    }
+    drag = null;
+    btn.classList.remove('dragging');
+  });
+  btn.addEventListener('pointercancel', () => { drag = null; btn.classList.remove('dragging'); });
+  restoreChatPosition();
 }
 
 function drawChat() {
@@ -2166,7 +2230,16 @@ async function sendChat() {
   }
 }
 
-$('btn-chat').addEventListener('click', () => { unlock(); sfx.tap(); openChat(); });
+$('btn-chat').addEventListener('click', (e) => {
+  if ($('btn-chat').dataset.suppressClick) {
+    delete $('btn-chat').dataset.suppressClick;
+    e.preventDefault();
+    return;
+  }
+  unlock(); sfx.tap(); openChat();
+});
+makeChatDraggable();
+window.addEventListener('resize', keepChatInView);
 $('chat-send').addEventListener('click', () => { unlock(); sendChat(); });
 $('chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); sendChat(); }

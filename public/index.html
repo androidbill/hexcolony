@@ -244,12 +244,6 @@
         <i class="chat-dot log-dot" id="log-dot" hidden></i>
       </button>
     </div>
-    <div class="board-fabs right">
-      <button class="board-fab" id="btn-chat" aria-label="Chat" hidden>
-        <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-5.2A8 8 0 0 1 11 4h2a8 8 0 0 1 8 8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
-        <i class="chat-dot" id="chat-dot" hidden></i>
-      </button>
-    </div>
     <div class="tile-tip" id="tile-tip" hidden></div>
   </div>
 
@@ -263,6 +257,12 @@
     <div class="actions" id="actions"></div>
   </div>
 </section>
+
+<!-- The chat button floats above whichever online-room screen is active. -->
+<button class="board-fab chat-float" id="btn-chat" aria-label="Chat" hidden>
+  <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-5.2A8 8 0 0 1 11 4h2a8 8 0 0 1 8 8Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+  <i class="chat-dot" id="chat-dot" hidden></i>
+</button>
 
 <!-- ============================== SHEETS ============================== -->
 <div class="veil" id="veil"></div>
