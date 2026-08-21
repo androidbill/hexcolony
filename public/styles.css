@@ -622,10 +622,12 @@ button { background: none; border: 0; cursor: pointer; }
    A row rather than two separately positioned buttons: chat is hidden in solo, and a
    row closes the gap where absolute positions would leave one. */
 .board-fabs {
-  position: absolute; left: 12px; bottom: 12px;
+  position: absolute; bottom: 12px;
   display: flex; gap: 8px;
   z-index: 5;
 }
+.board-fabs.left { left: 12px; }
+.board-fabs.right { right: 12px; }
 .board-fab {
   position: relative;
   width: 44px; height: 44px; border-radius: 50%;
@@ -749,19 +751,13 @@ button { background: none; border: 0; cursor: pointer; }
 .sea-cell:active { transform: scale(0.92); }
 .sea-cell.on { box-shadow: 0 0 0 3px var(--gold); }
 
-.recenter {
-  position: absolute; right: 10px; bottom: 10px;
-  width: 38px; height: 38px;
-  border-radius: 12px;
-  background: rgba(5, 18, 32, 0.8);
-  border: 1px solid var(--line);
-  display: grid; place-items: center;
-  color: var(--dim);
-}
-.recenter svg { width: 20px; height: 20px; }
-
+/* What a tile produces, shown when one is tapped. Lifted clear of the buttons along the
+   bottom — it used to sit at the same corner as the left-hand pair and was covered by
+   them — and centred, because it is about the tile under your finger rather than about
+   anything in a corner. */
 .tile-tip {
-  position: absolute; left: 10px; bottom: 10px;
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: 66px;
+  white-space: nowrap; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis;
   background: rgba(5, 18, 32, 0.9);
   border: 1px solid var(--line);
   border-radius: 12px;

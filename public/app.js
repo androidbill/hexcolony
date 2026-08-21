@@ -2665,8 +2665,8 @@ function renderActions(g) {
 
   if (g.phase === 'roll') {
     bar.innerHTML =
-      actBtn('roll', '🎲', 'Roll', { primary: true, wide: true }) +
-      actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }); return;
+      actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }) +
+      actBtn('roll', '🎲', 'Roll', { primary: true, wide: true }); return;
   }
 
   // build phase
