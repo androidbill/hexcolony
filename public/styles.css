@@ -443,6 +443,7 @@ button { background: none; border: 0; cursor: pointer; }
   margin-bottom: 2px;
   flex-wrap: wrap;
 }
+#give-lead { padding-top: 6px; margin-bottom: -2px; }
 .trade-lead {
   align-self: center;
   font-size: 10px; font-weight: 800;

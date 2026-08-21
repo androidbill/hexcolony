@@ -2600,6 +2600,8 @@ $('hand').addEventListener('click', (e) => {
   const have = g.players[playerId]?.res[r] || 0;
   if (!have || (giveSel[r] || 0) >= have) return;
   giveSel[r] = (giveSel[r] || 0) + 1;
+  const rate = R.tradeRate(g, board, playerId, r);
+  if (giveSel[r] === 1 && rate < 4) portHint = { res: r, rate };
   sfx.tap();
   render();
 });
@@ -2928,6 +2930,11 @@ function openPickRes(kind) {
 // the payment works itself out at your own port rates.
 let trading = false;
 let giveSel = {}, wantSel = {};
+// A port worth knowing about, noticed the moment a card carrying one is first tapped.
+// The rate is printed above every card, but a 2:1 is the whole reason to have built on
+// that corner and it is easy to forget you own one — so the first tap says it in words,
+// in the line that is otherwise telling you what to do next.
+let portHint = null;
 // Acceptances already announced, as `offerId:playerId`. An acceptance is not written to
 // the game log — see the note in syncSheets — so nothing else would ever say it happened.
 const notedAccepts = new Set();
@@ -2962,14 +2969,14 @@ function startTrade() {
 
 function stopTrade(quiet = false) {
   trading = false;
-  giveSel = {}; wantSel = {};
+  giveSel = {}; wantSel = {}; portHint = null;
   if (!quiet) render();
 }
 
 /** A different game entirely: forget the basket and every offer already announced. */
 function resetTrade() {
   trading = false;
-  giveSel = {}; wantSel = {};
+  giveSel = {}; wantSel = {}; portHint = null;
   notedAccepts.clear();
   expiredOffers.clear();
   // The tray is only redrawn once there is a game to draw it for, and the rows would
@@ -3079,13 +3086,20 @@ function tradeReadout(g, bank, offer) {
   }
   if (bank.ok) return `Bank: ${bank.note}`;
   if (!giveN) return 'Now tap the cards you will pay with. The rate is above each one.';
+  // Only while it is still teaching something: until there are enough of that card for
+  // one trade at the rate. Past that the player has understood the rate and overshot it,
+  // and what they need to read is the deal they are actually holding.
+  if (portHint && (giveSel[portHint.res] || 0) < portHint.rate) {
+    const name = RES_NAME[portHint.res].toLowerCase();
+    return `You have a ${portHint.rate}:1 on ${name} — ${portHint.rate} buys one card.`;
+  }
   if (offer.ok) return `Offer: ${bundleText(giveSel)} → ${bundleText(wantSel)}`;
   return bank.note;
 }
 
 /** The "what do you need" row: five cards, tap for one more. */
 function renderWantRow(g) {
-  $('trade-want').innerHTML = '<span class="trade-lead">I need</span>' + RESOURCES.map((r) => {
+  $('trade-want').innerHTML = '<span class="trade-lead">I want</span>' + RESOURCES.map((r) => {
     const n = wantSel[r] || 0;
     return pickCell(r, n, resCard(r, {
       size: 'sm', count: n || null, selected: !!n, dim: !n,
@@ -3193,6 +3207,7 @@ function renderTrade(g) {
   const on = trading && canTrade;
 
   $('trade-want').hidden = !on;
+  $('give-lead').hidden = !on;
   $('trade-bar').hidden = !on;
   $('actions').hidden = on;
 
@@ -3237,13 +3252,13 @@ $('trade-bar').addEventListener('click', (e) => {
     // failure partway through left the player halfway into something they had asked for
     // as one thing.
     send({ type: 'bankTrade', give: giveSel, want: wantSel });
-    giveSel = {}; wantSel = {};
+    giveSel = {}; wantSel = {}; portHint = null;
     render();
     return;
   }
   if (!offerPlan(g).ok) return;
   send({ type: 'offerTrade', give: giveSel, want: wantSel });
-  giveSel = {}; wantSel = {};
+  giveSel = {}; wantSel = {}; portHint = null;
   render();
 });
 
