@@ -212,6 +212,33 @@ button { background: none; border: 0; cursor: pointer; }
   box-shadow: 0 4px 0 var(--sky-shade);
 }
 
+/* The launch and room-setup surfaces use one clear blue action language. */
+#screen-home .btn,
+#screen-lobby .btn {
+  background: linear-gradient(180deg, var(--sky) 0%, var(--sky-2) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--sky-ink);
+  box-shadow: 0 5px 0 var(--sky-shade), 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+#screen-home .btn:active,
+#screen-lobby .btn:active { box-shadow: 0 2px 0 var(--sky-shade), 0 6px 14px rgba(0, 0, 0, 0.25); }
+#screen-home .btn .btn-sub,
+#screen-lobby .btn .btn-sub { color: var(--sky-ink); opacity: 0.78; }
+#screen-lobby .icon-btn,
+#screen-lobby .step-b,
+#screen-lobby .seg {
+  background: rgba(53, 196, 255, 0.16);
+  border: 1px solid rgba(53, 196, 255, 0.58);
+  color: var(--sky);
+}
+#screen-lobby .icon-btn:active,
+#screen-lobby .step-b:active { background: rgba(53, 196, 255, 0.3); }
+#screen-lobby .seg.on {
+  background: linear-gradient(180deg, var(--sky) 0%, var(--sky-2) 100%);
+  color: var(--sky-ink);
+  box-shadow: 0 2px 0 var(--sky-shade);
+}
+
 .home-row { display: flex; gap: 10px; }
 .home-row .btn { flex: 1; }
 

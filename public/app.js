@@ -472,14 +472,12 @@ function freshPlayer(name) {
   return { name, colorIdx: null, joinedAt: Date.now() };
 }
 
-$('btn-create').addEventListener('click', createRoom);
-
 async function createRoom() {
   unlock();
   const name = usableName();
   if (!name) return;
   localStorage.setItem('hexcolony_name', name);
-  $('btn-create').disabled = true;
+  $('btn-rooms-create').disabled = true;
   try {
     let code = null;
     for (let i = 0; i < 12; i++) {
@@ -512,7 +510,7 @@ async function createRoom() {
     sfx.join();
     enterRoom(code);
   } finally {
-    $('btn-create').disabled = false;
+    $('btn-rooms-create').disabled = false;
   }
 }
 
@@ -823,6 +821,7 @@ function drawLobbyChat() {
 
 function openLobbyChat() {
   if (!NET_READY) return toast('Lobby Chat needs a connection.');
+  subscribePresence();
   subscribeLobbyChat();
   lobbySelectedPerson = null;
   renderLobbyPeople();
@@ -4897,7 +4896,6 @@ window.HEXCOLONY = {
 
   if (!NET_READY) {
     // No Firebase: solo still plays, so say so rather than letting the buttons fail.
-    $('btn-create').disabled = true;
     $('btn-rooms').disabled = true;
   }
 
