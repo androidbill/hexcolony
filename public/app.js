@@ -2334,6 +2334,10 @@ function renderPauseSheet() {
   }
 
   if (p.status === 'active') {
+    if (p.requestedBy !== playerId && openSheet === 'sheet-pause') {
+      closeSheet();
+      return;
+    }
     const started = stampMs(p.startedAt);
     const left = started === null ? Number(p.duration || 0) : Math.max(0, Math.ceil((started + Number(p.duration || 0) * 1000 - serverNow()) / 1000));
     sub.textContent = 'The game is paused. Chat is still available.';
@@ -2675,6 +2679,7 @@ function render() {
   drawTimer();
   renderScoreStrip(g);
   renderTurnBadge(g);
+  if (pauseBlocksGame()) drawPauseCountdown();
   renderDice(g);
   settlePay(g);
   renderHand(g);
