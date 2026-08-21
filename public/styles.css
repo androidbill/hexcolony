@@ -1381,6 +1381,17 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .menu-item b { font-weight: 700; }
 .menu-item i { font-style: normal; font-size: 12px; color: var(--dim); }
 .menu-item.danger b { color: #ff9fa1; }
+.pause-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pause-status {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: rgba(255, 255, 255, 0.06);
+  text-align: center;
+}
+.pause-status strong { display: block; color: var(--gold); font-size: 19px; }
+.pause-status small { display: block; margin-top: 4px; color: var(--dim); }
+.pause-accepts { margin-top: 10px; color: var(--dim); font-size: 13px; }
 
 .history-summary, .history-list { display: flex; flex-direction: column; gap: 7px; }
 .history-list { margin-top: 18px; }

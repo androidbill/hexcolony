@@ -2284,6 +2284,99 @@ function stampMs(v) {
   return null;
 }
 
+function pauseIsActive(p = room?.pause) {
+  if (!p || p.status !== 'active') return false;
+  const started = stampMs(p.startedAt);
+  if (started === null) return true;
+  return serverNow() < started + Number(p.duration || 0) * 1000;
+}
+
+/** Time spent paused is removed from every countdown that was already running. */
+function pauseElapsedMs(p = room?.pause) {
+  if (!p || p.status !== 'active') return 0;
+  const started = stampMs(p.startedAt);
+  if (started === null) return 0;
+  return Math.min(Number(p.duration || 0) * 1000, Math.max(0, serverNow() - started));
+}
+
+function renderPauseSheet() {
+  const p = room?.pause;
+  const sub = $('pause-sub');
+  const options = $('pause-options');
+  if (!p || (p.status === 'active' && !pauseIsActive(p))) {
+    sub.textContent = 'Choose how long to pause. Everyone at the table must accept.';
+    options.innerHTML = `
+      <button class="btn btn-ghost" data-pause-duration="30">30 seconds</button>
+      <button class="btn btn-ghost" data-pause-duration="60">60 seconds</button>
+      <button class="btn btn-ghost" data-pause-duration="90">90 seconds</button>
+      <button class="btn btn-ghost" data-pause-duration="120">120 seconds</button>`;
+    for (const b of options.querySelectorAll('[data-pause-duration]')) {
+      b.addEventListener('click', () => requestPause(Number(b.dataset.pauseDuration)));
+    }
+    return;
+  }
+
+  if (p.status === 'active') {
+    const started = stampMs(p.startedAt);
+    const left = started === null ? Number(p.duration || 0) : Math.max(0, Math.ceil((started + Number(p.duration || 0) * 1000 - serverNow()) / 1000));
+    sub.textContent = 'The game is paused. Chat is still available.';
+    options.innerHTML = `<div class="pause-status"><strong>${left}s</strong><small>Pause remaining</small></div>`;
+    return;
+  }
+
+  const ids = Object.keys(room.players || {});
+  const accepted = p.accepted || {};
+  const names = ids.map((id) => `${esc(nameFor(id))}${accepted[id] ? ' ✓' : ' …'}`).join(' · ');
+  const waiting = !accepted[playerId];
+  sub.textContent = `${esc(nameFor(p.requestedBy))} requested a ${p.duration}-second pause. Everyone must accept.`;
+  options.innerHTML = `
+    <div class="pause-status"><strong>${Object.keys(accepted).filter((id) => accepted[id]).length}/${ids.length}</strong><small>Players accepted</small></div>
+    <div class="pause-accepts">${names}</div>
+    ${waiting ? '<button class="btn btn-key" id="pause-accept">Accept pause</button>' : '<p class="hint">Waiting for the other players…</p>'}
+    <button class="btn btn-ghost" id="pause-decline">Decline and cancel</button>`;
+  $('pause-accept')?.addEventListener('click', acceptPause);
+  $('pause-decline').addEventListener('click', declinePause);
+}
+
+function openPause() {
+  if (solo) return toast('Pausing is available in shared games.');
+  renderPauseSheet();
+  sheet('sheet-pause');
+}
+
+async function requestPause(duration) {
+  if (!roomRef || solo || room?.state !== 'playing') return;
+  if (room.pause?.status === 'pending' || pauseIsActive()) return toast('A pause is already in progress.');
+  try {
+    await updateDoc(roomRef, {
+      pause: { status: 'pending', duration, requestedBy: playerId, accepted: { [playerId]: true }, requestedAt: serverTimestamp() },
+    });
+    closeSheet();
+  } catch { toast('Could not request a pause.'); }
+}
+
+async function acceptPause() {
+  if (!roomRef || !room?.pause || room.pause.status !== 'pending') return;
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(roomRef);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const p = data.pause;
+      if (!p || p.status !== 'pending') return;
+      const accepted = { ...(p.accepted || {}), [playerId]: true };
+      const all = Object.keys(data.players || {}).every((id) => accepted[id]);
+      tx.update(roomRef, { pause: { ...p, accepted, ...(all ? { status: 'active', startedAt: serverTimestamp() } : {}) } });
+    });
+  } catch { toast('Could not accept the pause.'); }
+}
+
+async function declinePause() {
+  if (!roomRef || room?.pause?.status !== 'pending') return;
+  try { await updateDoc(roomRef, { pause: null }); }
+  catch { toast('Could not cancel the pause.'); }
+}
+
 function secondsLeft(g) {
   // `allowMs` is the whole answer: the engine sets it to 0 for any step that is not on
   // the clock. Listing the timed phases here as well was a second copy of that decision,
@@ -2294,7 +2387,7 @@ function secondsLeft(g) {
   const started = stampMs(room?.turnStartedAt);
   if (started === null) return null;          // the server has not stamped it yet
   if (!clockTrusted()) return null;           // this device cannot be trusted to judge
-  return (started + g.turn.allowMs - serverNow()) / 1000;
+  return (started + g.turn.allowMs - serverNow() + pauseElapsedMs()) / 1000;
 }
 
 function drawTimer() {
@@ -2448,6 +2541,16 @@ function startTimerLoop() {
   if (timerInterval) return;
   timerInterval = setInterval(() => {
     if (!room || room.state !== 'playing') return;
+    if (room.pause?.status === 'active' && !pauseIsActive()) {
+      room = { ...room, pause: null };
+      render();
+      return;
+    }
+    if (pauseIsActive()) {
+      drawTimer();
+      if (openSheet === 'sheet-pause') renderPauseSheet();
+      return;
+    }
     drawTimer();
     drawOfferClocks();
     pulseCountdown();
@@ -2830,6 +2933,11 @@ function renderActions(g) {
   const devBadge = held;
 
   if (!p) { bar.innerHTML = '<div class="act-prompt"><span class="act-ico">👀</span>You are watching this game</div>'; return; }
+
+  if (g.phase !== 'over' && pauseIsActive()) {
+    bar.innerHTML = '<div class="act-prompt"><span class="act-ico">⏸️</span>Game paused — chat is still available</div>';
+    return;
+  }
 
   if (g.phase === 'over') {
     // Results open automatically after the winner announcement. Keep the shortcut
@@ -3489,7 +3597,7 @@ function offerLeft(t) {
   // is tapped, and the clock starts when the server says it started.
   const made = stampMs(room?.tradeDeadlines?.[t?.id]);
   if (made === null || !clockTrusted()) return null;
-  return (made + R.TRADE_SECONDS * 1000 - serverNow()) / 1000;
+  return (made + R.TRADE_SECONDS * 1000 - serverNow() + pauseElapsedMs()) / 1000;
 }
 
 /** The countdown pill, and the marker the ticking loop updates in place. */
@@ -3725,6 +3833,12 @@ function syncSheets(g) {
   const changed = key !== lastPhaseKey;
   lastPhaseKey = key;
 
+  if (room.pause?.status === 'pending' && !['sheet-discard', 'sheet-steal', 'sheet-pause'].includes(openSheet)) {
+    openPause();
+    return;
+  }
+  if (openSheet === 'sheet-pause') renderPauseSheet();
+
   if (g.phase === 'discard' && g.pending.discard[playerId]) {
     if (openSheet !== 'sheet-discard') openDiscard(g);
     return;
@@ -3920,6 +4034,7 @@ $('game-menu').addEventListener('click', () => { sfx.tap(); sheet('sheet-menu');
 $('game-log-btn').addEventListener('click', () => { const g = game(); if (g) openLog(g); });
 $('menu-players').addEventListener('click', openPlayers);
 $('menu-history').addEventListener('click', openHistory);
+$('menu-pause').addEventListener('click', openPause);
 $('menu-how').addEventListener('click', openHow);
 $('menu-settings').addEventListener('click', openSettings);
 $('menu-leave').addEventListener('click', () => { closeSheet(); leaveRoom(true); });

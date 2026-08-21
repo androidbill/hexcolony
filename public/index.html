@@ -327,11 +327,24 @@
   <div class="menu-list">
     <button class="menu-item" id="menu-players"><b>Players</b><i>Scores, cards and awards</i></button>
     <button class="menu-item" id="menu-history"><b>Game history</b><i>Past games and win totals</i></button>
+    <button class="menu-item" id="menu-pause"><b>Pause game</b><i>Everyone must accept</i></button>
     <button class="menu-item" id="menu-how"><b>How to Play</b><i>Costs, rules and the robber</i></button>
     <button class="menu-item" id="menu-settings"><b>Settings</b><i>Sound, haptics, board</i></button>
     <button class="menu-item" id="menu-share"><b>Share</b><i>Send the game to a friend</i></button>
     <button class="menu-item" id="menu-about"><b>About</b><i>Version and credits</i></button>
     <button class="menu-item danger" id="menu-leave"><b>Leave game</b><i>Your buildings stay on the board</i></button>
+  </div>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-pause">
+  <h3 class="sheet-title">Pause game</h3>
+  <p class="sheet-sub" id="pause-sub">Choose how long to pause. Everyone at the table must accept.</p>
+  <div class="pause-options" id="pause-options">
+    <button class="btn btn-ghost" data-pause-duration="30">30 seconds</button>
+    <button class="btn btn-ghost" data-pause-duration="60">60 seconds</button>
+    <button class="btn btn-ghost" data-pause-duration="90">90 seconds</button>
+    <button class="btn btn-ghost" data-pause-duration="120">120 seconds</button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
