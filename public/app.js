@@ -1324,6 +1324,7 @@ function renderMapPreview() {
   $('score-strip').innerHTML = '';
   $('dice-float').hidden = true;
   $('turn-timer').hidden = true;
+  renderChatButton();
   $('hand').innerHTML = `<span class="map-count">Map ${(room.mapIndex ?? 0) + 1}`
     + `${LAYOUT_INFO[room.settings?.layout || 'classic']?.tiles ? ` · ${LAYOUT_INFO[room.settings.layout || 'classic'].tiles} tiles` : ''}</span>`;
 
@@ -2095,8 +2096,8 @@ function countUnread() {
 function renderChatButton() {
   const btn = $('btn-chat');
   if (!btn) return;
-  // Only in a room with other people in it. Solo has nobody to talk to.
-  btn.hidden = solo || !roomCode || room?.state !== 'playing';
+  // Chat is available while players choose a map and during the game. Solo has nobody to talk to.
+  btn.hidden = solo || !roomCode || !['map', 'playing'].includes(room?.state);
   $('chat-dot').hidden = chatUnread === 0;
   $('chat-dot').textContent = chatUnread > 9 ? '9+' : String(chatUnread);
 }

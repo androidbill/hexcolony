@@ -714,7 +714,7 @@ button { background: none; border: 0; cursor: pointer; }
   font-style: normal;
   min-width: 19px; height: 19px; padding: 0 5px;
   border-radius: 999px;
-  background: var(--sky); color: var(--sky-ink);
+  background: var(--danger); color: #fff;
   font-size: 11px; font-weight: 800; font-style: normal;
   line-height: 19px; text-align: center;
   box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
