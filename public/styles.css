@@ -215,6 +215,27 @@ button { background: none; border: 0; cursor: pointer; }
 .home-row { display: flex; gap: 10px; }
 .home-row .btn { flex: 1; }
 
+/* The landing page is a launch surface, not a document. Keep every way into a game
+   visible together on a phone rather than making the player hunt below the fold. */
+#screen-home .home-scroll {
+  overflow: hidden;
+  gap: 10px;
+  padding-top: calc(var(--safe-t) + 10px);
+  padding-bottom: calc(var(--safe-b) + 10px);
+}
+#screen-home .brand-mark { width: 68px; height: 68px; margin-bottom: 3px; }
+#screen-home .wordmark { font-size: 32px; }
+#screen-home .tagline { margin-top: 2px; font-size: 12px; }
+#screen-home .card { padding: 10px; }
+#screen-home .field-label { margin: 0 0 4px; }
+#screen-home .text-input { padding: 9px 12px; }
+#screen-home .btn { padding: 9px 12px; }
+#screen-home .btn-label { font-size: 15px; }
+#screen-home .btn-sub { font-size: 11px; }
+#screen-home .or-split { margin: 7px 0; }
+#screen-home .home-row { gap: 8px; }
+#screen-home .ver { margin-top: 0; padding-top: 0; }
+
 /* ------------------------------------------------------------ topbar */
 .topbar {
   display: flex; align-items: center; gap: 10px;
