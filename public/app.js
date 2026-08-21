@@ -115,6 +115,44 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
+/**
+ * Paper over the whole screen for a few seconds, in the winner's colour and everybody
+ * else's.
+ *
+ * Plain elements with one keyframe each rather than anything drawn: the board canvas is
+ * already redrawing every frame for the waves and the highlights, and putting a second
+ * animation through it would be competing for the same budget on the one device that can
+ * least afford it. Seventy of these cost the compositor almost nothing because every
+ * piece is a transform.
+ */
+const CONFETTI_MS = 4200;
+function confetti(winnerColour) {
+  const box = $('confetti');
+  if (!box) return;
+  // Somebody who has asked for less movement gets the shoutout and no storm.
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+  // The winner's colour twice over, so it is the one you see most, mixed with the rest of
+  // the table rather than a set of colours the game does not otherwise use.
+  const palette = [winnerColour, winnerColour, ...R.PLAYER_COLORS.map((c) => c.hex)];
+  const bits = document.createDocumentFragment();
+  for (let i = 0; i < 70; i++) {
+    const bit = document.createElement('i');
+    bit.className = 'confetti-bit';
+    bit.style.left = `${(Math.random() * 100).toFixed(1)}%`;
+    bit.style.setProperty('--c', palette[Math.floor(Math.random() * palette.length)]);
+    bit.style.setProperty('--spin', `${Math.round(Math.random() * 900 - 450)}deg`);
+    bit.style.setProperty('--drift', `${Math.round(Math.random() * 140 - 70)}px`);
+    bit.style.animationDelay = `${(Math.random() * 0.9).toFixed(2)}s`;
+    bit.style.animationDuration = `${(2.2 + Math.random() * 1.6).toFixed(2)}s`;
+    bits.appendChild(bit);
+  }
+  box.innerHTML = '';
+  box.appendChild(bits);
+  box.hidden = false;
+  clearTimeout(box._t);
+  box._t = setTimeout(() => { box.hidden = true; box.innerHTML = ''; }, CONFETTI_MS);
+}
+
 // Three seconds of somebody's name across the middle of the screen. Six people round a
 // table watching six phones needed one place that said whose go it was without anyone
 // having to read the score strip and work it out.
@@ -2136,6 +2174,10 @@ let timerInterval = null;
 // than four — the loop runs at 250ms.
 let lastBeat = null;
 const COUNTDOWN_FROM = 10;
+// How long the winner has the screen before the scoreboard arrives. Slightly longer than
+// the shoutout, so the card is gone rather than being pushed aside by the sheet.
+const WIN_PAUSE_MS = 3400;
+let celebrating = false;
 
 /** Firestore hands back a Timestamp; solo stores a plain number. */
 function stampMs(v) {
@@ -2428,7 +2470,19 @@ function reactToLog(g) {
       case 'turn':
         if (e.p === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }
         break;
-      case 'win': (e.p === playerId ? sfx.win : sfx.lose)(); break;
+      case 'win':
+        (e.p === playerId ? sfx.win : sfx.lose)();
+        shoutout(`🏆 ${e.p === playerId ? 'You win' : `${nameFor(e.p)} wins`}!`, colorFor(e.p));
+        confetti(colorFor(e.p));
+        // The results are worth reading, but not over the top of the moment they are
+        // about. They follow once the shoutout has had its say.
+        celebrating = true;
+        setTimeout(() => {
+          celebrating = false;
+          const g2 = game();
+          if (g2?.phase === 'over' && openSheet !== 'sheet-over') { renderOver(g2); sheet('sheet-over'); }
+        }, WIN_PAUSE_MS);
+        break;
       default: break;
     }
   }
@@ -3585,7 +3639,10 @@ function syncSheets(g) {
   // every card greyed, until it was closed and opened again.
   if (openSheet === 'sheet-dev' && changed) openDev(g);
 
-  if (g.phase === 'over' && openSheet !== 'sheet-over') { renderOver(g); sheet('sheet-over'); }
+  // Not while the winner is being announced. Opening into a game that is already over —
+  // a reload, or joining late — never sets that flag, so the results are there at once
+  // rather than after a pause for a celebration nobody saw.
+  if (g.phase === 'over' && !celebrating && openSheet !== 'sheet-over') { renderOver(g); sheet('sheet-over'); }
 }
 
 // ---------------------------------------------------------------- game over

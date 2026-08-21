@@ -617,6 +617,33 @@ button { background: none; border: 0; cursor: pointer; }
   flex: 0 0 auto;
 }
 
+/* Falling paper, over everything, touchable by nothing. Above the sheets so it keeps
+   falling past the scoreboard when that arrives, and above the veil so it is not dimmed
+   by it. */
+.confetti {
+  position: fixed; inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 96;
+}
+.confetti-bit {
+  position: absolute; top: -16px;
+  width: 9px; height: 15px;
+  background: var(--c, #fff);
+  border-radius: 1px;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  will-change: transform;
+}
+/* One transform and one opacity, which is all the compositor needs and all it gets —
+   seventy pieces animating anything else would be felt on a phone. */
+@keyframes confetti-fall {
+  0%   { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 1; }
+  85%  { opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0), 105vh, 0) rotate(var(--spin, 360deg)); opacity: 0; }
+}
+
 /* ------------------------------------------------------------ results */
 .over-meta { margin-top: 4px; font-size: 12.5px; color: var(--dim); }
 
