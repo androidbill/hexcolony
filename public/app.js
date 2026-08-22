@@ -233,6 +233,15 @@ function closeSheet() {
   openSheet = null;
   $('veil').classList.remove('show');
 }
+function closeSheetAndRestoreResults() {
+  const closing = openSheet;
+  closeSheet();
+  const g = game();
+  if (closing === 'sheet-chat' && g?.phase === 'over') {
+    renderOver(g);
+    sheet('sheet-over');
+  }
+}
 // Sheets the game is actually waiting on. Tapping the veil used to dismiss these, and
 // because nothing re-renders while it is still your turn there was then no way to get
 // them back — the game simply looked frozen. They now stay put until they are answered.
@@ -243,10 +252,10 @@ const sheetIsMandatory = (id) => MANDATORY_SHEETS.has(id)
   || (id === 'sheet-colour' && needsColour());
 $('veil').addEventListener('click', () => {
   if (sheetIsMandatory(openSheet)) return;
-  closeSheet();
+  closeSheetAndRestoreResults();
 });
 document.addEventListener('click', (e) => {
-  if (e.target.closest('[data-close]') && !sheetIsMandatory(openSheet)) closeSheet();
+  if (e.target.closest('[data-close]') && !sheetIsMandatory(openSheet)) closeSheetAndRestoreResults();
 });
 
 // ---------------------------------------------------------------- state
@@ -3223,7 +3232,10 @@ function reactToLog(g) {
         setTimeout(() => {
           celebrating = false;
           const g2 = game();
-          if (g2?.phase === 'over' && openSheet !== 'sheet-over') { renderOver(g2); sheet('sheet-over'); }
+    if (g2?.phase === 'over' && openSheet !== 'sheet-over' && openSheet !== 'sheet-chat') {
+      renderOver(g2);
+      sheet('sheet-over');
+    }
         }, WIN_PAUSE_MS);
         break;
       default: break;
@@ -3492,10 +3504,10 @@ function renderActions(g) {
 
   if (g.phase === 'over') {
     // Results open automatically after the winner announcement. Keep the shortcut
-    // visibly present, but inactive during that pause so an early tap cannot race the
-    // scheduled results sheet.
+    // visibly present and tappable during that pause so the player can open results
+    // immediately if they want to read them.
     bar.innerHTML = utility() + actBtn('over', '🏆', 'Results', {
-      primary: true, wide: true, disabled: celebrating,
+      primary: true, wide: true,
     }); return;
   }
 
@@ -3571,7 +3583,8 @@ function onAction(id) {
     case 'players': openPlayers(); break;
     case 'log': openLog(g); break;
     case 'over':
-      if (!celebrating) { renderOver(g); sheet('sheet-over'); }
+      renderOver(g);
+      sheet('sheet-over');
       break;
     default: break;
   }
@@ -4515,7 +4528,10 @@ function syncSheets(g) {
   // a reload, or joining late — never sets that flag, so the results are there at once
   // rather than after a pause for a celebration nobody saw.
   if (g.phase === 'over' && !celebrating) {
-    if (openSheet !== 'sheet-over' && openSheet !== 'sheet-rematch') { renderOver(g); sheet('sheet-over'); }
+    if (openSheet !== 'sheet-over' && openSheet !== 'sheet-rematch' && openSheet !== 'sheet-chat') {
+      renderOver(g);
+      sheet('sheet-over');
+    }
     if (rematchNeedsAnswer()) {
       if (openSheet !== 'sheet-rematch') openRematchPrompt();
     } else if (openSheet === 'sheet-rematch') {
