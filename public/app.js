@@ -2535,7 +2535,7 @@ function renderChatButton() {
   if (!btn) return;
   // Chat is available in the lobby, while players choose a map, and during the game.
   // Solo has nobody to talk to.
-  btn.hidden = solo || !roomCode || !['lobby', 'map', 'playing'].includes(room?.state);
+  btn.hidden = solo || !roomCode || !['lobby', 'map', 'playing', 'over'].includes(room?.state);
   $('chat-dot').hidden = chatUnread === 0;
   $('chat-dot').textContent = chatUnread > 9 ? '9+' : String(chatUnread);
 }
