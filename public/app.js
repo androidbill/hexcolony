@@ -3478,7 +3478,7 @@ function renderActions(g) {
   const canBuyDev = !!p && mine && g.phase === 'build'
     && !pauseBlocksGame() && R.whatCanIBuild(g, playerId).dev;
   const utility = () => actBtn('players', '👥', 'Players')
-    + actBtn('dev', '🃏', 'Cards', {
+    + actBtn('dev', '🃏', 'DEV', {
       ready: canBuyDev, badge: devBadge || 0,
     });
 
@@ -4088,7 +4088,7 @@ function renderTrade(g) {
   const held = R.devCount(g.players[playerId]);
   const canBuyDev = R.whatCanIBuild(g, playerId).dev;
   $('actions').innerHTML = actBtn('players', '👥', 'Players')
-    + actBtn('dev', '🃏', 'Cards', {
+    + actBtn('dev', '🃏', 'DEV', {
       ready: canBuyDev, badge: held || 0,
     });
   renderWantRow(g);
