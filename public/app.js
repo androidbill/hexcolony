@@ -3164,7 +3164,9 @@ function reactToLog(g) {
       case 'robber': sfx.robber(); break;
       case 'steal':
         sfx.steal();
-        if (e.p === playerId) toast(`You took a ${e.res} from ${nameFor(e.from)}.`);
+        if (e.p === playerId) {
+          shoutout([{ parts: ['You stole ', { resource: e.res }] }, `from ${nameFor(e.from)}`], colorFor(e.p));
+        }
         else if (e.from === playerId) {
           shoutout([{ parts: [`${nameFor(e.p)} stole `, { resource: e.res }] }, 'from you'], colorFor(e.p));
         }
@@ -3477,7 +3479,7 @@ function renderActions(g) {
     && !pauseBlocksGame() && R.whatCanIBuild(g, playerId).dev;
   const utility = () => actBtn('players', '👥', 'Players')
     + actBtn('dev', '🃏', 'Cards', {
-      disabled: !held && !canBuyDev, ready: canBuyDev, badge: devBadge || 0,
+      ready: canBuyDev, badge: devBadge || 0,
     });
 
   if (!p) { bar.innerHTML = utility(); return; }
@@ -3584,6 +3586,12 @@ const COST_BITS = (cost, have = null) => costRow(cost, have);
 // ---------------------------------------------------------------- dev cards
 function openDev(g) {
   const p = g.players[playerId];
+  if (!p) {
+    $('dev-buy').innerHTML = '<p class="hint">You are watching this game.</p>';
+    $('dev-list').innerHTML = '<p class="hint">Your cards are not available to view.</p>';
+    sheet('sheet-dev');
+    return;
+  }
 
   // Buying sits above the hand rather than under "Build", because a development card is
   // not a building — and this is the sheet people open when they want one. It states the
@@ -4081,7 +4089,7 @@ function renderTrade(g) {
   const canBuyDev = R.whatCanIBuild(g, playerId).dev;
   $('actions').innerHTML = actBtn('players', '👥', 'Players')
     + actBtn('dev', '🃏', 'Cards', {
-      disabled: !held && !canBuyDev, ready: canBuyDev, badge: held || 0,
+      ready: canBuyDev, badge: held || 0,
     });
   renderWantRow(g);
   renderTradeBar(g);

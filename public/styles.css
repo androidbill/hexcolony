@@ -755,7 +755,9 @@ button { background: none; border: 0; cursor: pointer; }
   height: 50px;
   right: 12px;
   bottom: calc(var(--safe-b) + 12px);
-  z-index: 30;
+  /* Keep it above the results sheet and its veil so the table can still chat after
+     somebody wins. Tapping it replaces the sheet with chat as usual. */
+  z-index: 60;
   cursor: grab;
   touch-action: none;
 }
