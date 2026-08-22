@@ -161,7 +161,27 @@ let shoutTimer = null;
 function shoutout(msg, accent) {
   const box = $('shoutout');
   const card = $('shoutout-card');
-  card.textContent = msg;
+  const lines = Array.isArray(msg) ? msg : [msg];
+  card.replaceChildren();
+  for (const content of lines) {
+    const line = document.createElement('span');
+    line.className = 'shoutout-line';
+    if (typeof content === 'string') {
+      line.textContent = content;
+    } else if (content?.parts) {
+      for (const part of content.parts) {
+        if (typeof part === 'string') {
+          line.append(document.createTextNode(part));
+        } else if (part?.resource) {
+          const resource = document.createElement('span');
+          resource.className = 'shoutout-resource';
+          resource.innerHTML = resCard(part.resource, { size: 'xs' });
+          line.append(...resource.childNodes);
+        }
+      }
+    }
+    card.append(line);
+  }
   card.style.setProperty('--c', accent || 'var(--gold)');
   box.hidden = false;
   // Taking the class off and reading a layout property in between is what restarts the
@@ -3079,7 +3099,9 @@ function reactToLog(g) {
       case 'steal':
         sfx.steal();
         if (e.p === playerId) toast(`You took a ${e.res} from ${nameFor(e.from)}.`);
-        else if (e.from === playerId) toast(`${nameFor(e.p)} stole a ${e.res} from you.`);
+        else if (e.from === playerId) {
+          shoutout([{ parts: [`${nameFor(e.p)} stole `, { resource: e.res }] }, 'from you'], colorFor(e.p));
+        }
         break;
       case 'produce':
         if (e.gains?.[playerId]) { sfx.gain(); bumpCards(Object.keys(e.gains[playerId])); }
@@ -3115,10 +3137,10 @@ function reactToLog(g) {
       // the game outside somebody winning — and they used to go past in a toast at the
       // bottom of the screen. Same card the turn uses, in the taker's own colour.
       case 'longest':
-        shoutout(`🛣️ ${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Longest Road (${e.len})`, colorFor(e.p));
+        shoutout([e.p === playerId ? 'You take' : `${nameFor(e.p)} takes`, 'Long Road'], colorFor(e.p));
         break;
       case 'army':
-        shoutout(`⚔️ ${e.p === playerId ? 'You take' : nameFor(e.p) + ' takes'} Largest Army (${e.size})`, colorFor(e.p));
+        shoutout([e.p === playerId ? 'You take' : `${nameFor(e.p)} takes`, 'Large Army'], colorFor(e.p));
         break;
       case 'turn':
         if (e.p === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }

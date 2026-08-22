@@ -1617,9 +1617,16 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   font-size: 22px; font-weight: 800; letter-spacing: 0.2px;
   color: var(--parch);
   text-align: center;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  white-space: normal; overflow: visible;
   opacity: 0;
 }
+.shoutout-line {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 1.1em; white-space: nowrap;
+}
+.shoutout-resource { display: inline-flex; align-items: center; height: 40px; }
+.shoutout-resource .rcard-wrap { transform: scale(0.82); transform-origin: center; }
 .shoutout-card.show { animation: shoutout 3s ease forwards; }
 
 @keyframes shoutout {
