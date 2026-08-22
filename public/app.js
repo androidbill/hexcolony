@@ -3098,6 +3098,9 @@ function render() {
   if (!room) return;
 
   if (room.state === 'lobby') {
+    // A rematch can move everyone here from the results sheet at once. Close only the
+    // results/prompt sheets; an already-open chat should remain available in the lobby.
+    if (openSheet === 'sheet-over' || openSheet === 'sheet-rematch') closeSheet();
     if (!$('screen-lobby').classList.contains('is-active')) showScreen('screen-lobby');
     renderLobby();
     return;
@@ -3402,6 +3405,7 @@ function renderHand(g) {
     const card = resCard(r, {
       count: n || null, dim: !n, size: 'sm', selected: !!take,
       dataset: ` data-res="${r}"`,
+      stack: !trading,
       // A non-breaking space rather than nothing, so a card with no count under it is
       // exactly as tall as one that has: the hand aligns on its bottom edge, and cards
       // of two heights sitting in it look broken.
@@ -3416,7 +3420,7 @@ function renderHand(g) {
       `Offer ${RES_NAME[r]} at ${rate}${take ? ` — ${take} so far` : ''}`, rate);
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
-  }).join('') + devCard({ count: devs || null, dim: !devs, size: 'sm' });
+  }).join('') + (trading ? '' : devCard({ count: devs || null, dim: !devs, size: 'sm' }));
 }
 
 // Tapping your own card is how you overrule the payment the app worked out. One more
@@ -4354,6 +4358,95 @@ function openLog(g) {
   sheet('sheet-log');
 }
 
+function rematchNeedsAnswer() {
+  const request = room?.rematch;
+  return room?.state === 'over'
+    && request
+    && request.requester !== playerId
+    && typeof request.votes?.[playerId] !== 'boolean';
+}
+
+function openRematchPrompt() {
+  const request = room?.rematch;
+  if (!request || request.requester === playerId) return;
+  $('rematch-sub').textContent = `${nameFor(request.requester)} would like to play again.`;
+  sheet('sheet-rematch');
+}
+
+async function requestRematch() {
+  if (solo || !roomRef || !room || room.state !== 'over') return;
+  try {
+    await withTimeout(runTransaction(db, async (tx) => {
+      const snap = await tx.get(roomRef);
+      const data = snap.data();
+      if (!data || data.state !== 'over' || !data.players?.[playerId]) return;
+      if (data.rematch?.requester && data.rematch.requester !== playerId) {
+        throw new Error('A rematch request is already waiting for replies.');
+      }
+      tx.update(roomRef, {
+        rematch: { requester: playerId, votes: { [playerId]: true } },
+      });
+    }), 10000);
+    toast('Rematch request sent.');
+  } catch (err) {
+    toast(err?.message || 'Could not request another game.');
+  }
+}
+
+async function answerRematch(wantsToPlay) {
+  if (solo || !roomRef || !room) return;
+  let outcome = 'waiting';
+  try {
+    await withTimeout(runTransaction(db, async (tx) => {
+      const snap = await tx.get(roomRef);
+      const data = snap.data();
+      const request = data?.rematch;
+      if (!data || data.state !== 'over' || !request || !data.players?.[playerId]) return;
+
+      const votes = { ...(request.votes || {}), [playerId]: wantsToPlay };
+      const ids = Object.keys(data.players);
+      const allVoted = ids.every((pid) => typeof votes[pid] === 'boolean');
+      if (!allVoted) {
+        tx.update(roomRef, { rematch: { ...request, votes } });
+        return;
+      }
+
+      const accepted = ids.filter((pid) => votes[pid] === true);
+      if (accepted.length < 2) {
+        outcome = 'not-enough';
+        tx.update(roomRef, { rematch: null });
+        return;
+      }
+
+      const players = Object.fromEntries(accepted.map((pid) => [pid, data.players[pid]]));
+      const hostId = accepted.includes(data.hostId)
+        ? data.hostId
+        : (accepted.includes(request.requester) ? request.requester : accepted[0]);
+      outcome = 'started';
+      tx.update(roomRef, {
+        state: 'lobby',
+        hostId,
+        players,
+        game: null,
+        order: [],
+        tradeDeadlines: {},
+        startedAt: null,
+        endedAt: null,
+        rematch: null,
+      });
+    }), 10000);
+    closeSheet();
+    if (outcome === 'not-enough') toast('Not enough players accepted the rematch.');
+    else if (outcome === 'waiting') toast(wantsToPlay ? 'You are in for the rematch.' : 'You declined the rematch.');
+    if (outcome !== 'started' && room?.state === 'over') {
+      renderOver(game());
+      sheet('sheet-over');
+    }
+  } catch {
+    toast('Could not save your rematch choice.');
+  }
+}
+
 // ---------------------------------------------------------------- mandatory sheets
 // Some phases stop the game until you act. Those sheets reopen if dismissed; optional
 // ones (a trade offer) stay closed once you've waved them away.
@@ -4398,7 +4491,14 @@ function syncSheets(g) {
   // Not while the winner is being announced. Opening into a game that is already over —
   // a reload, or joining late — never sets that flag, so the results are there at once
   // rather than after a pause for a celebration nobody saw.
-  if (g.phase === 'over' && !celebrating && openSheet !== 'sheet-over') { renderOver(g); sheet('sheet-over'); }
+  if (g.phase === 'over' && !celebrating) {
+    if (openSheet !== 'sheet-over' && openSheet !== 'sheet-rematch') { renderOver(g); sheet('sheet-over'); }
+    if (rematchNeedsAnswer()) {
+      if (openSheet !== 'sheet-rematch') openRematchPrompt();
+    } else if (openSheet === 'sheet-rematch') {
+      closeSheet();
+    }
+  }
 }
 
 // ---------------------------------------------------------------- game over
@@ -4547,6 +4647,22 @@ function renderOver(g) {
       <div class="final-sources">${lines || '<span class="src-none">no points</span>'}</div>
     </div>`;
   }).join('');
+
+  const rematchStatus = $('rematch-status');
+  if (rematchStatus) {
+    const request = room?.rematch;
+    if (!request) {
+      rematchStatus.hidden = true;
+      rematchStatus.textContent = '';
+    } else {
+      const ids = Object.keys(room.players || {});
+      const answered = ids.filter((pid) => typeof request.votes?.[pid] === 'boolean').length;
+      rematchStatus.hidden = false;
+      rematchStatus.textContent = request.requester === playerId
+        ? `Waiting for replies (${answered}/${ids.length})…`
+        : (request.votes?.[playerId] === true ? 'You said yes. Waiting for the others…' : 'You said no.');
+    }
+  }
 }
 
 $('btn-again').addEventListener('click', async () => {
@@ -4556,16 +4672,21 @@ $('btn-again').addEventListener('click', async () => {
     }
     return;
   }
-  if (!isHost()) return toast('Only the host can start a new game.');
+  if (!isHost()) return requestRematch();
   closeSheet();
   try {
-    await updateDoc(roomRef, { state: 'lobby', game: null, order: [], tradeDeadlines: {} });
+    await updateDoc(roomRef, {
+      state: 'lobby', game: null, order: [], tradeDeadlines: {}, rematch: null,
+      startedAt: null, endedAt: null,
+    });
     lastSeq = 0;
     announcedUp = null;
     resetGuess(); resetTrade();
   } catch { toast('Could not reset the room.'); }
 });
 $('btn-home').addEventListener('click', () => leaveRoom(true));
+$('btn-rematch-yes').addEventListener('click', () => answerRematch(true));
+$('btn-rematch-no').addEventListener('click', () => answerRematch(false));
 
 // ---------------------------------------------------------------- menus
 $('game-menu').addEventListener('click', () => { sfx.tap(); sheet('sheet-menu'); });
