@@ -3473,8 +3473,12 @@ function renderActions(g) {
   // The badge matches the tray's count rather than the playable subset; a badge that
   // disagreed with the number two inches below it would be its own small mystery.
   const devBadge = held;
+  const canBuyDev = !!p && mine && g.phase === 'build'
+    && !pauseBlocksGame() && R.whatCanIBuild(g, playerId).dev;
   const utility = () => actBtn('players', '👥', 'Players')
-    + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 });
+    + actBtn('dev', '🃏', 'Cards', {
+      disabled: !held && !canBuyDev, ready: canBuyDev, badge: devBadge || 0,
+    });
 
   if (!p) { bar.innerHTML = utility(); return; }
 
@@ -4074,8 +4078,11 @@ function renderTrade(g) {
   // They do not change the trade selection, and Players/Cards should never disappear
   // just because the current player is deciding what to offer.
   const held = R.devCount(g.players[playerId]);
+  const canBuyDev = R.whatCanIBuild(g, playerId).dev;
   $('actions').innerHTML = actBtn('players', '👥', 'Players')
-    + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: held || 0 });
+    + actBtn('dev', '🃏', 'Cards', {
+      disabled: !held && !canBuyDev, ready: canBuyDev, badge: held || 0,
+    });
   renderWantRow(g);
   renderTradeBar(g);
 }
