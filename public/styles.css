@@ -261,7 +261,8 @@ button { background: none; border: 0; cursor: pointer; }
 #screen-home .btn-sub { font-size: 11px; }
 #screen-home .or-split { margin: 7px 0; }
 #screen-home .home-row { gap: 8px; }
-#screen-home #btn-lobby-chat { margin-top: 8px; }
+#screen-home #btn-lobby-chat { margin-top: 8px; position: relative; }
+#screen-home .lobby-chat-dot { top: -4px; right: -4px; }
 #screen-home .ver { margin-top: 0; padding-top: 0; }
 
 /* ------------------------------------------------------------ topbar */

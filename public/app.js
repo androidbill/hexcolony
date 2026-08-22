@@ -658,6 +658,11 @@ let presenceInterval = null;
 let unsubLobbyChat = null;
 let lobbyChatLog = [];
 let lobbyChatExpiryTimers = new Map();
+const LOBBY_CHAT_SEEN_KEY = 'hexcolony_lobby_chat_seen';
+let lobbyChatSeenAt = Number(localStorage.getItem(LOBBY_CHAT_SEEN_KEY) || Date.now());
+if (!localStorage.getItem(LOBBY_CHAT_SEEN_KEY)) localStorage.setItem(LOBBY_CHAT_SEEN_KEY, String(lobbyChatSeenAt));
+let lobbyChatUnread = 0;
+let lobbyChatPrimed = false;
 let unsubNotifications = null;
 let lobbySelectedPerson = null;
 
@@ -785,6 +790,29 @@ function stopLobbyChat() {
   lobbyChatLog = [];
 }
 
+function renderLobbyChatBadge() {
+  const badge = $('lobby-chat-dot');
+  if (!badge) return;
+  badge.hidden = lobbyChatUnread === 0;
+  badge.textContent = lobbyChatUnread > 9 ? '9+' : String(lobbyChatUnread);
+}
+
+function updateLobbyChatUnread(messages) {
+  lobbyChatUnread = messages.filter((message) => {
+    const sentAt = stampMs(message.at);
+    return message.by !== playerId && sentAt !== null && sentAt > lobbyChatSeenAt;
+  }).length;
+  renderLobbyChatBadge();
+}
+
+function markLobbyChatRead(messages = lobbyChatLog) {
+  const latest = Math.max(lobbyChatSeenAt, ...messages.map((message) => stampMs(message.at) || 0));
+  lobbyChatSeenAt = latest || Date.now();
+  localStorage.setItem(LOBBY_CHAT_SEEN_KEY, String(lobbyChatSeenAt));
+  lobbyChatUnread = 0;
+  renderLobbyChatBadge();
+}
+
 function scheduleLobbyChatExpiry(message) {
   if (lobbyChatExpiryTimers.has(message.id)) return;
   const sentAt = stampMs(message.at);
@@ -816,6 +844,20 @@ function subscribeLobbyChat() {
         return sentAt === null || Date.now() - sentAt < LOBBY_CHAT_LIFETIME_MS;
       })
       .reverse();
+    const chatWasOpen = openSheet === 'sheet-lobby-chat';
+    if (chatWasOpen) markLobbyChatRead(lobbyChatLog);
+    else updateLobbyChatUnread(lobbyChatLog);
+    if (lobbyChatPrimed && !chatWasOpen) {
+      for (const change of snap.docChanges()) {
+        if (change.type !== 'added' || change.doc.data()?.by === playerId) continue;
+        const sender = change.doc.data()?.name || 'Someone';
+        unlock();
+        sfx.yourTurn();
+        buzz([35]);
+        toast(`${sender} sent a message in Lobby Chat.`);
+      }
+    }
+    lobbyChatPrimed = true;
     drawLobbyChat();
   }, (err) => console.error('lobby chat', err));
 }
@@ -846,6 +888,7 @@ function openLobbyChat() {
   localStorage.setItem('hexcolony_name', name);
   subscribePresence();
   subscribeLobbyChat();
+  markLobbyChatRead();
   lobbySelectedPerson = null;
   renderLobbyPeople();
   $('lobby-people-list').hidden = true;
@@ -894,7 +937,6 @@ function showRooms() {
 function leaveRooms() {
   if (unsubRooms) { unsubRooms(); unsubRooms = null; }
   stopPresenceListener();
-  stopLobbyChat();
   roomList = [];
   showScreen('screen-home');
 }
@@ -2340,6 +2382,7 @@ let unsubChat = null;
 let chatLog = [];
 let chatSeenAt = Number(localStorage.getItem('hexcolony_chat_seen') || 0);
 let chatUnread = 0;
+let chatPrimed = false;
 function chatMentionHandle(name) {
   return String(name || '').trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 24);
 }
@@ -2439,6 +2482,7 @@ function setupChatComposer(inputId, mentionsId, emojiId, pickerId, scope) {
 function subscribeChat() {
   if (unsubChat) { unsubChat(); unsubChat = null; }
   if (!roomCode || solo || !NET_READY) return;
+  chatPrimed = false;
   // One orderBy on one field, no filter: served by the automatic index, no composite
   // needed. Newest first so the limit keeps the newest, then flipped for reading.
   const q = query(
@@ -2448,8 +2492,21 @@ function subscribeChat() {
   );
   unsubChat = onSnapshot(q, (snap) => {
     chatLog = snap.docs.map((d) => ({ id: d.id, ...d.data() })).reverse();
-    countUnread();
-    if (openSheet === 'sheet-chat') drawChat();
+    const chatWasOpen = openSheet === 'sheet-chat';
+    if (chatWasOpen) markChatRead();
+    else countUnread();
+    if (chatPrimed && !chatWasOpen) {
+      for (const change of snap.docChanges()) {
+        if (change.type !== 'added' || change.doc.data()?.by === playerId) continue;
+        const sender = change.doc.data()?.name || 'Someone';
+        unlock();
+        sfx.yourTurn();
+        buzz([35]);
+        toast(`${sender} sent a message in game chat.`);
+      }
+    }
+    chatPrimed = true;
+    if (chatWasOpen) drawChat();
     renderChatButton();
   }, (err) => console.error('chat', err));
 }
@@ -2458,11 +2515,19 @@ function stopChat() {
   if (unsubChat) { unsubChat(); unsubChat = null; }
   chatLog = [];
   chatUnread = 0;
+  chatPrimed = false;
 }
 
 /** Anything newer than the last time the sheet was open, and not from this player. */
 function countUnread() {
   chatUnread = chatLog.filter((m) => m.by !== playerId && (stampMs(m.at) || 0) > chatSeenAt).length;
+}
+
+function markChatRead() {
+  const latest = Math.max(chatSeenAt, ...chatLog.map((message) => stampMs(message.at) || 0));
+  chatSeenAt = latest || Date.now();
+  localStorage.setItem('hexcolony_chat_seen', String(chatSeenAt));
+  chatUnread = 0;
 }
 
 function renderChatButton() {
@@ -2556,9 +2621,7 @@ function drawChat() {
 }
 
 function openChat() {
-  chatSeenAt = Date.now();
-  localStorage.setItem('hexcolony_chat_seen', String(chatSeenAt));
-  chatUnread = 0;
+  markChatRead();
   renderChatButton();
   drawChat();
   sheet('sheet-chat');
@@ -4917,6 +4980,7 @@ window.HEXCOLONY = {
   refreshResume();
   startPresence();
   startNotifications();
+  if (NET_READY) subscribeLobbyChat();
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
 
   if (!NET_READY) {
