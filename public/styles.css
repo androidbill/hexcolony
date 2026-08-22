@@ -262,6 +262,7 @@ button { background: none; border: 0; cursor: pointer; }
 #screen-home .or-split { margin: 7px 0; }
 #screen-home .home-row { gap: 8px; }
 #screen-home #btn-lobby-chat { margin-top: 8px; position: relative; }
+#screen-home #btn-solo { margin-top: 8px; }
 #screen-home .lobby-chat-dot { top: -4px; right: -4px; }
 #screen-home .ver { margin-top: 0; padding-top: 0; }
 
@@ -520,11 +521,16 @@ button { background: none; border: 0; cursor: pointer; }
   flex: 0 0 auto;
 }
 .pick-rate {
+  position: relative;
+  z-index: 3;
   font-size: 10px; font-weight: 800;
   letter-spacing: .03em;
   color: var(--gold);
   margin-bottom: 3px;
   line-height: 1;
+  padding: 1px 3px 2px;
+  border-radius: 4px;
+  background: rgba(5, 18, 32, 0.94);
 }
 /* The card you tap is a button again. It was a bare span carrying a data attribute,
    which works for a finger and for nothing else — no keyboard, no screen reader, no

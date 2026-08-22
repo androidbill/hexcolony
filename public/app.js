@@ -3405,7 +3405,7 @@ function renderHand(g) {
     const card = resCard(r, {
       count: n || null, dim: !n, size: 'sm', selected: !!take,
       dataset: ` data-res="${r}"`,
-      stack: !trading,
+      stack: false,
       // A non-breaking space rather than nothing, so a card with no count under it is
       // exactly as tall as one that has: the hand aligns on its bottom edge, and cards
       // of two heights sitting in it look broken.
@@ -3420,7 +3420,7 @@ function renderHand(g) {
       `Offer ${RES_NAME[r]} at ${rate}${take ? ` — ${take} so far` : ''}`, rate);
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
-  }).join('') + (trading ? '' : devCard({ count: devs || null, dim: !devs, size: 'sm' }));
+  }).join('') + (trading ? '' : devCard({ count: devs || null, dim: !devs, size: 'sm', stack: false }));
 }
 
 // Tapping your own card is how you overrule the payment the app worked out. One more
@@ -3473,11 +3473,14 @@ function renderActions(g) {
   // The badge matches the tray's count rather than the playable subset; a badge that
   // disagreed with the number two inches below it would be its own small mystery.
   const devBadge = held;
+  const utility = () => actBtn('players', '👥', 'Players')
+    + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 });
 
-  if (!p) { bar.innerHTML = '<div class="act-prompt"><span class="act-ico">👀</span>You are watching this game</div>'; return; }
+  if (!p) { bar.innerHTML = utility(); return; }
 
   if (g.phase !== 'over' && pauseBlocksGame()) {
-    bar.innerHTML = '<div class="act-prompt"><span class="act-ico">⏸️</span>Game paused — chat is still available</div>';
+    bar.innerHTML = utility()
+      + '<div class="act-prompt"><span class="act-ico">⏸️</span>Game paused — chat is still available</div>';
     return;
   }
 
@@ -3485,16 +3488,15 @@ function renderActions(g) {
     // Results open automatically after the winner announcement. Keep the shortcut
     // visibly present, but inactive during that pause so an early tap cannot race the
     // scheduled results sheet.
-    bar.innerHTML = actBtn('over', '🏆', 'Results', {
+    bar.innerHTML = utility() + actBtn('over', '🏆', 'Results', {
       primary: true, wide: true, disabled: celebrating,
     }); return;
   }
 
   if (g.phase === 'discard') {
-    bar.innerHTML = g.pending.discard[playerId]
+    bar.innerHTML = utility() + (g.pending.discard[playerId]
       ? actBtn('discard', '🗑️', `Discard ${g.pending.discard[playerId]}`, { primary: true, wide: true })
-      : `<div class="act-prompt"><span class="act-ico">⏳</span>Waiting for others to discard</div>`
-        + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }); return;
+      : '<div class="act-prompt"><span class="act-ico">⏳</span>Waiting for others to discard</div>'); return;
   }
 
   // Cards stays in the bar while somebody else is playing. What is in your hand is
@@ -3503,31 +3505,31 @@ function renderActions(g) {
   // are sitting there waiting, was the one time there was no way in. The sheet knows it
   // is not your turn and offers nothing to press.
   if (!mine || g.phase === 'setup') {
-    bar.innerHTML = actBtn('players', '👥', 'Players')
-      + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }); return;
+    bar.innerHTML = utility(); return;
   }
 
   if (g.phase === 'robber') {
-    bar.innerHTML = `<div class="act-prompt"><span class="act-ico">🥷</span>Tap a highlighted tile to move the robber</div>`; return;
+    bar.innerHTML = utility()
+      + '<div class="act-prompt"><span class="act-ico">🥷</span>Tap a highlighted tile to move the robber</div>'; return;
   }
 
   if (g.phase === 'steal' || g.phase === 'take') {
     // A button back into the sheet, in case it was somehow closed.
-    bar.innerHTML = actBtn('steal', '🥷', g.phase === 'take' ? 'Take a card' : 'Rob a player', { primary: true, wide: true }); return;
+    bar.innerHTML = utility()
+      + actBtn('steal', '🥷', g.phase === 'take' ? 'Take a card' : 'Rob a player', { primary: true, wide: true }); return;
   }
 
   if (g.phase === 'roll') {
     bar.innerHTML =
-      actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: devBadge || 0 }) +
+      utility() +
       actBtn('roll', '🎲', 'Roll', { primary: true, wide: true }); return;
   }
 
   // build phase
-  const can = R.whatCanIBuild(g, playerId);
   const mustPlace = g.turn.freeRoads > 0;
   bar.innerHTML =
+    utility() +
     actBtn('trade', '🤝', 'Trade', { disabled: R.handSize(p) === 0 }) +
-    actBtn('dev', '🃏', 'Cards', { disabled: !held && !can.dev, badge: devBadge || 0, ready: can.dev }) +
     actBtn('end', '✔️', 'End turn', { primary: !mustPlace, disabled: mustPlace });
 }
 
@@ -4063,11 +4065,17 @@ function renderTrade(g) {
   $('trade-want').hidden = !on;
   $('give-lead').hidden = !on;
   $('trade-bar').hidden = !on;
-  $('actions').hidden = on;
+  $('actions').hidden = false;
 
   renderAsks(g);
   renderMyOffers(g);
   if (!on) return;
+  // Keep the two information buttons available even while the trade picker is open.
+  // They do not change the trade selection, and Players/Cards should never disappear
+  // just because the current player is deciding what to offer.
+  const held = R.devCount(g.players[playerId]);
+  $('actions').innerHTML = actBtn('players', '👥', 'Players')
+    + actBtn('dev', '🃏', 'Cards', { disabled: !held, badge: held || 0 });
   renderWantRow(g);
   renderTradeBar(g);
 }

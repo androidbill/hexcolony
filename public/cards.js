@@ -47,13 +47,13 @@ export function resCard(res, {
 }
 
 /** The face-down development card: the one card with no tile behind it. */
-export function devCard({ count = null, size = '', dim = false, dataset = '', label = '' } = {}) {
+export function devCard({ count = null, size = '', dim = false, dataset = '', label = '', stack = true } = {}) {
   const cls = ['rcard', 'rcard--dev'];
   if (size) cls.push(`rcard--${size}`);
   if (dim) cls.push('is-dim');
-  const stack = count && count > 1 ? Math.min(count - 1, 3) : 0;
-  const edges = Array.from({ length: stack }, (_, i) =>
-    `<span class="rcard-edge" style="--i:${stack - i}"></span>`).join('');
+  const depth = stack && count && count > 1 ? Math.min(count - 1, 3) : 0;
+  const edges = Array.from({ length: depth }, (_, i) =>
+    `<span class="rcard-edge" style="--i:${depth - i}"></span>`).join('');
   const badge = (count !== null && count !== undefined)
     ? `<span class="rcard-count">${count}</span>` : '';
   const name = label ? `<span class="rcard-label">${label}</span>` : '';
