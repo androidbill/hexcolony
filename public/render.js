@@ -135,8 +135,16 @@ export const SEA_COLORS = [
  * long is going to be reordered again.
  */
 export const SEA_DEFAULT = 'lagoon';
-export const seaAt = (key) => SEA_COLORS.find((c) => c.key === key)
-  || SEA_COLORS.find((c) => c.key === SEA_DEFAULT);
+export const seaAt = (key) => {
+  const preset = SEA_COLORS.find((c) => c.key === key);
+  if (preset) return preset;
+  const match = String(key || '').match(/^custom:(#[0-9a-f]{6})$/i);
+  if (match) {
+    const base = match[1].toLowerCase();
+    return makeSea(key, 'Custom', towards(base, [255, 255, 255], 0.28), towards(base, [0, 0, 0], 0.28));
+  }
+  return SEA_COLORS.find((c) => c.key === SEA_DEFAULT);
+};
 
 // Wave layers drawn over the gradient, drifting in opposite directions so the sea never
 // looks like a repeating pattern. `role` picks the colour out of whichever sea is in use;

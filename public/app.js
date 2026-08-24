@@ -2354,14 +2354,14 @@ function applySea() {
 function drawSeaRow(elId, chosen, onPick) {
   const row = $(elId);
   if (!row) return;
-  const now = seaAt(chosen).key;
-  row.innerHTML = SEA_COLORS.map((c) => `
-    <button class="sea-cell${c.key === now ? ' on' : ''}" data-sea="${esc(c.key)}"
-      style="--a:${c.a};--b:${c.b}" aria-label="${esc(c.name)} sea"
-      title="${esc(c.name)}">${c.key === now ? '✓' : ''}</button>`).join('');
-  for (const b of row.querySelectorAll('[data-sea]')) {
-    b.addEventListener('click', () => onPick(b.dataset.sea));
-  }
+  const current = seaAt(chosen);
+  row.innerHTML = `<label class="sea-wheel-label">
+    <input class="sea-wheel" type="color" value="${esc(current.a)}" aria-label="Choose sea color">
+    <span class="sea-wheel-preview" style="--a:${esc(current.a)};--b:${esc(current.b)}"></span>
+    <span><b>Choose any color</b><small>${esc(current.a.toUpperCase())}</small></span>
+  </label>`;
+  const input = row.querySelector('.sea-wheel');
+  input.addEventListener('input', () => onPick(`custom:${input.value.toLowerCase()}`));
 }
 
 function ensureBoard() {
