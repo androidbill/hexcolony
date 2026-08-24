@@ -1370,6 +1370,7 @@ async function leaveRoom(removeSelf = true) {
   if (unsub) { unsub(); unsub = null; }
   if (unsubPulse) { unsubPulse(); unsubPulse = null; }
   if (healthInterval) { clearInterval(healthInterval); healthInterval = null; }
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 
   if (removeSelf && ref && room) {
     try {
@@ -1682,15 +1683,6 @@ function renderMapPreview() {
       </button>
     </div>`;
 
-  for (const b of document.querySelectorAll('[data-map]')) {
-    b.addEventListener('click', () => {
-      const what = b.dataset.map;
-      if (what === 'next') stepMap(1);
-      else if (what === 'prev') stepMap(-1);
-      else if (what === 'back') backToLobby();
-      else acceptMap();
-    });
-  }
 }
 
 // ---------------------------------------------------------------- solo play
@@ -1955,6 +1947,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
 
 function exitSolo() {
   clearTimeout(soloTimer);
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   solo = false;
   room = null;
   writePresence();
@@ -4995,6 +4988,15 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#kebab-wrap')) closeKebab();
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeKebab(); });
+document.addEventListener('click', (e) => {
+  const mapBtn = e.target.closest('[data-map]');
+  if (!mapBtn) return;
+  const what = mapBtn.dataset.map;
+  if (what === 'next') stepMap(1);
+  else if (what === 'prev') stepMap(-1);
+  else if (what === 'back') backToLobby();
+  else if (what === 'accept') acceptMap();
+});
 
 /**
  * Throw away everything cached and start clean.
