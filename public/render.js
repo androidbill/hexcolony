@@ -282,6 +282,7 @@ export class BoardView {
     this.userScale = 1;                // pinch zoom on top of the fit scale
     this.fitScale = 40;
     this.pulse = 0;
+    this.animatePieces = true;
     this.onPick = null;                // ({ kind, id }) => void
     this._pointers = new Map();
     this._pinch = null;
@@ -1047,7 +1048,7 @@ export class BoardView {
         c.lineWidth = w;
         c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
       };
-      const active = pid === activePid;
+      const active = this.animatePieces && pid === activePid;
       stripe(R * 0.245, EDGE_INK);
       if (active) {
         // Keep the player's colour as the road, then chase a white dash around the
@@ -1100,14 +1101,16 @@ export class BoardView {
       const k = this.buildPop(v);
       if (k > 0) { jumping.push([v, b, k]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, b.p === activePid)
-        : this.drawSettlement(x, y, this.colorOf(b.p), 1, b.p === activePid);
+      const animate = this.animatePieces && b.p === activePid;
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, animate)
+        : this.drawSettlement(x, y, this.colorOf(b.p), 1, animate);
     }
     for (const [v, b, k] of jumping) {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const grow = 1 + k * (BUILD_PEAK - 1);
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, b.p === activePid)
-        : this.drawSettlement(x, y, this.colorOf(b.p), grow, b.p === activePid);
+      const animate = this.animatePieces && b.p === activePid;
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, animate)
+        : this.drawSettlement(x, y, this.colorOf(b.p), grow, animate);
     }
   }
 
