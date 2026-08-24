@@ -1058,12 +1058,15 @@ export class BoardView {
         const dx = x2 - x1, dy = y2 - y1;
         const len = Math.hypot(dx, dy) || 1;
         const nx = -dy / len * half, ny = dx / len * half;
+        const ux = dx / len, uy = dy / len;
         const perimeter = new Path2D();
         perimeter.moveTo(x1 + nx, y1 + ny);
         perimeter.lineTo(x2 + nx, y2 + ny);
-        perimeter.arc(x2, y2, half, Math.atan2(ny, nx), Math.atan2(-ny, -nx));
+        // Explicit quadratic semicircles avoid arc() choosing the long way around,
+        // which can create a distracting full circle at a road tip.
+        perimeter.quadraticCurveTo(x2 + ux * half, y2 + uy * half, x2 - nx, y2 - ny);
         perimeter.lineTo(x1 - nx, y1 - ny);
-        perimeter.arc(x1, y1, half, Math.atan2(-ny, -nx), Math.atan2(ny, nx));
+        perimeter.quadraticCurveTo(x1 - ux * half, y1 - uy * half, x1 + nx, y1 + ny);
         perimeter.closePath();
         const dash = Math.max(6, R * 0.10);
         c.lineCap = 'butt';
