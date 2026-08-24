@@ -3174,6 +3174,19 @@ function reactToLog(g) {
   if (first) return; // don't replay the whole game's audio when you open the room
 
   $('log-dot').hidden = false;
+  /**
+   * Nothing here raises a toast any more.
+   *
+   * Between them these covered a monopoly, a dev card, a trade offer and three different
+   * ways an offer can end, which on a busy turn is a queue of text sliding across the
+   * bottom of the screen describing things that had already happened — over the board,
+   * during somebody else's turn, for a game whose whole state is visible anyway.
+   *
+   * What is worth interrupting for still does. A steal, either award and the win get the
+   * shoutout card, which is centred and in the player's own colour. Everything keeps its
+   * sound. The log button keeps its unread dot, so anything missed is one tap away rather
+   * than gone.
+   */
   for (const e of entries) {
     switch (e.t) {
       case 'roll': sfx.dice(); view.setRolled(e.roll); break;
@@ -3197,34 +3210,12 @@ function reactToLog(g) {
       case 'produce':
         if (e.gains?.[playerId]) { sfx.gain(); bumpCards(Object.keys(e.gains[playerId])); }
         break;
-      case 'mono':
-        toast(e.p === playerId
-          ? `You monopolised ${e.count} ${e.res}.`
-          : `${nameFor(e.p)} monopolised ${e.res} — ${e.count} cards.`);
-        break;
-      case 'playDev': {
-        const name = R.DEV_INFO[e.card]?.name || 'a card';
-        sfx.card();
-        toast(e.p === playerId ? `You played ${name}.` : `${nameFor(e.p)} played ${name}.`);
-        break;
-      }
-      case 'noloot':
-        if (e.p === playerId) toast('Nobody had a card to take.');
-        break;
+      case 'playDev': sfx.card(); break;
       case 'offer':
-        // The strip shows the offer; this is what makes you look down at it. So it has to
-        // stay in step with the strip: an offer you cannot pay for is not shown and is
-        // declined on the spot, and announcing one anyway is worse than saying nothing —
-        // it points at a strip that is not there, about a trade you could not have taken.
-        if (e.p !== playerId && !tradeRejectFrom.has(e.p) && canPay(g, e.want)) {
-          sfx.card(); toast(`${nameFor(e.p)} offers you a trade.`);
-        }
-        break;
-      case 'declined':
-        if (e.p === playerId) toast('Everybody passed on that one.');
-        break;
-      case 'expired':
-        if (e.p === playerId) toast('Your offer ran out of time.');
+        // The chime is what makes you look down at the strip, so it has to agree with it:
+        // an offer you cannot pay for is not shown and is declined on the spot, and a
+        // sound for one would point at something that is not there.
+        if (e.p !== playerId && !tradeRejectFrom.has(e.p) && canPay(g, e.want)) sfx.card();
         break;
       case 'trade': sfx.trade(); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
