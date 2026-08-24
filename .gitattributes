@@ -1,0 +1,17 @@
+# Line endings are decided here rather than by whichever machine happens to commit.
+#
+# app.js and styles.css were once committed from Windows with CRLF while every other
+# source file was LF, and every later edit to them came back as a whole-file diff that
+# buried the real change and conflicted with anything edited elsewhere. Normalising in
+# the repository keeps a diff about what actually changed.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.mp3 binary
+*.wav binary
+*.m4a binary
+*.ogg binary

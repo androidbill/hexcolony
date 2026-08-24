@@ -581,10 +581,7 @@ export class BoardView {
 
   drawWater(t = 0) {
     const c = this.ctx;
-    const g = c.createLinearGradient(0, 0, 0, this.h);
-    g.addColorStop(0, this.sea.a);
-    g.addColorStop(1, this.sea.b);
-    c.fillStyle = g;
+    c.fillStyle = this.waterGrad();
     c.fillRect(0, 0, this.w, this.h);
 
     // The swell drifts. The render loop already runs every frame for the highlight
@@ -612,18 +609,107 @@ export class BoardView {
     c.restore();
   }
 
+  /**
+   * The outline of one tile, as a Path2D that survives between uses.
+   *
+   * Every hexagon used to be walked from scratch at each use, and a tile is used four
+   * times in a single pass of drawHex alone — fill, clip, inside border, outer hairline —
+   * on top of twice more for the coast and twice again when it is highlighted. That is
+   * around two hundred rebuilds a frame for thirty tiles, each one six toScreen calls
+   * handing back a fresh two-element array. Sixty times a second it is the largest source
+   * of garbage in the renderer, and none of it describes anything new: the shape only
+   * moves when the view does.
+   *
+   * So the shapes are kept, and thrown away together the moment the view changes. The key
+   * is the whole transform, which means a pan or a pinch invalidates every path at once
+   * (correctly, and without needing to be told), while a still board — which is what the
+   * board is almost all of the time — rebuilds nothing at all.
+   */
+  /**
+   * What the caches are allowed to outlive: everything that decides where a world point
+   * lands on screen. Anything cached in screen coordinates is keyed on this, so a pan, a
+   * pinch or a resize drops the lot without any of them having to be told separately.
+   */
+  viewEpoch() {
+    const epoch = `${this.cx},${this.cy},${this.ox},${this.oy},${this.scale}`;
+    if (epoch !== this._epoch) {
+      this._epoch = epoch;
+      this._paths = new Map();
+      this._terrainGrads = new Map();
+    }
+    return epoch;
+  }
+
   hexPath(tile, shrink = 1) {
-    const c = this.ctx;
-    c.beginPath();
-    const corners = HEXES[tile.i].corners;
-    corners.forEach((vid, i) => {
-      const v = VERTS[vid];
-      const x = tile.x + (v.x - tile.x) * shrink;
-      const y = tile.y + (v.y - tile.y) * shrink;
-      const [sx, sy] = this.toScreen(x, y);
-      i === 0 ? c.moveTo(sx, sy) : c.lineTo(sx, sy);
-    });
-    c.closePath();
+    this.viewEpoch();
+    const key = `${tile.i}|${shrink}`;
+    let path = this._paths.get(key);
+    if (!path) {
+      path = new Path2D();
+      const corners = HEXES[tile.i].corners;
+      corners.forEach((vid, i) => {
+        const v = VERTS[vid];
+        const x = tile.x + (v.x - tile.x) * shrink;
+        const y = tile.y + (v.y - tile.y) * shrink;
+        const [sx, sy] = this.toScreen(x, y);
+        i === 0 ? path.moveTo(sx, sy) : path.lineTo(sx, sy);
+      });
+      path.closePath();
+      this._paths.set(key, path);
+    }
+    return path;
+  }
+
+  /**
+   * The two gradients every tile is painted with, kept rather than rebuilt.
+   *
+   * Both were being constructed per tile per frame — sixty objects a frame on the big
+   * board, each parsing its colour stops afresh — to describe a picture that had not
+   * changed. Neither depends on anything that moves between frames: the terrain ramp is
+   * the terrain's two colours over the tile's height, and the vignette is the same wash on
+   * every tile of a given size.
+   *
+   * A canvas gradient carries its own coordinates, which is what decides how each is
+   * cached. The terrain ramp is built where the tile is, so it is keyed on that and
+   * dropped whenever the view moves. The vignette is filled through a translate to the
+   * tile centre, so its shape is the same wherever it lands and its size is the whole key.
+   */
+  terrainGrad(terrain, cx, cy, R) {
+    this.viewEpoch();
+    const key = `${terrain}|${cx}|${cy}`;
+    let g = this._terrainGrads.get(key);
+    if (!g) {
+      const st = TERRAIN_STYLE[terrain];
+      g = this.ctx.createLinearGradient(cx, cy - R, cx, cy + R);
+      g.addColorStop(0, st.a);
+      g.addColorStop(1, st.b);
+      this._terrainGrads.set(key, g);
+    }
+    return g;
+  }
+
+  vignetteGrad(R) {
+    if (!this._vignette || this._vignetteR !== R) {
+      const g = this.ctx.createRadialGradient(0, 0, R * 0.16, 0, 0, R);
+      g.addColorStop(0, 'rgba(10, 20, 32, 0.32)');
+      g.addColorStop(0.55, 'rgba(10, 20, 32, 0.06)');
+      g.addColorStop(1, 'rgba(10, 20, 32, 0.22)');
+      this._vignette = g;
+      this._vignetteR = R;
+    }
+    return this._vignette;
+  }
+
+  waterGrad() {
+    const key = `${this.h}|${this.sea.a}|${this.sea.b}`;
+    if (this._waterKey !== key) {
+      const g = this.ctx.createLinearGradient(0, 0, 0, this.h);
+      g.addColorStop(0, this.sea.a);
+      g.addColorStop(1, this.sea.b);
+      this._water = g;
+      this._waterKey = key;
+    }
+    return this._water;
   }
 
   /** A soft sand halo around the whole island so the land reads as one landmass. */
@@ -636,7 +722,7 @@ export class BoardView {
     c.lineJoin = 'round';
     for (const w of [0.30, 0.16]) {
       c.lineWidth = this.scale * w;
-      for (const tile of this.board.tiles) { this.hexPath(tile, 1.04); c.stroke(); }
+      for (const tile of this.board.tiles) c.stroke(this.hexPath(tile, 1.04));
     }
     c.restore();
   }
@@ -647,37 +733,34 @@ export class BoardView {
     const [cx, cy] = this.toScreen(tile.x, tile.y);
     const R = this.scale;
 
+    // One shape, used four times over: the flat fill, the mask the art sits inside, the
+    // inside border and the outer hairline are all this same hexagon.
+    const path = this.hexPath(tile, 0.985);
+
     // The flat colour goes down first either way: it is what shows through the
     // gaps if an illustration has transparent corners, and it is the whole tile
     // when there is no illustration.
-    this.hexPath(tile, 0.985);
-    const g = c.createLinearGradient(cx, cy - R, cx, cy + R);
-    g.addColorStop(0, st.a);
-    g.addColorStop(1, st.b);
-    c.fillStyle = g;
-    c.fill();
+    c.fillStyle = this.terrainGrad(tile.terrain, cx, cy, R);
+    c.fill(path);
 
     const art = artImages[tile.terrain];
     c.save();
-    this.hexPath(tile, 0.985);
-    c.clip();
+    c.clip(path);
     if (art && art.naturalWidth) this.drawTerrainArt(art, cx, cy, R);
     else this.drawTerrainMotif(tile, cx, cy, R, st);
 
     // Still inside the clip, which is what makes this an inside border: the stroke is
     // drawn at twice its intended width and the outer half is clipped away, leaving a
     // band that hugs the edge exactly instead of straddling it.
-    this.hexPath(tile, 0.985);
     c.strokeStyle = TERRAIN_EDGE[tile.terrain] || st.a;
     c.lineWidth = Math.max(2, R * 0.15);
     c.globalAlpha = 0.9;
-    c.stroke();
+    c.stroke(path);
     c.restore();
 
-    this.hexPath(tile, 0.985);
     c.strokeStyle = 'rgba(12, 24, 36, 0.45)';
     c.lineWidth = Math.max(1, R * 0.035);
-    c.stroke();
+    c.stroke(path);
 
     if (tile.num && tile.num !== this.zoom?.num) this.drawToken(tile, cx, cy, R);
   }
@@ -705,12 +788,11 @@ export class BoardView {
     c.drawImage(img, cx - w / 2, cy - h / 2, w, h);
 
     // Darken the middle a little so the cream token and its number stay legible.
-    const vg = c.createRadialGradient(cx, cy, R * 0.16, cx, cy, R);
-    vg.addColorStop(0, 'rgba(10, 20, 32, 0.32)');
-    vg.addColorStop(0.55, 'rgba(10, 20, 32, 0.06)');
-    vg.addColorStop(1, 'rgba(10, 20, 32, 0.22)');
-    c.fillStyle = vg;
-    c.fillRect(cx - R * 1.1, cy - R * 1.1, R * 2.2, R * 2.2);
+    c.save();
+    c.translate(cx, cy);
+    c.fillStyle = this.vignetteGrad(R);
+    c.fillRect(-R * 1.1, -R * 1.1, R * 2.2, R * 2.2);
+    c.restore();
   }
 
   /** Each terrain gets a cheap procedural texture: trees, rows, tufts, stalks, peaks. */
@@ -1072,26 +1154,25 @@ export class BoardView {
       const [cx, cy] = this.toScreen(tile.x, tile.y);
       const R = this.scale;
 
+      const path = this.hexPath(tile, 0.985);
       c.save();
-      this.hexPath(tile, 0.985);
-      c.clip();
-      // Brightest at the rim, so the illustration underneath still shows through.
+      c.clip(path);
+      // Brightest at the rim, so the illustration underneath still shows through. This one
+      // is rebuilt each frame on purpose: its stops carry the payout's own fade.
       const glow = c.createRadialGradient(cx, cy, R * 0.1, cx, cy, R);
       glow.addColorStop(0, `rgba(255, 248, 214, ${0.06 * level * beat})`);
       glow.addColorStop(1, `rgba(255, 236, 150, ${0.52 * level * beat})`);
       c.fillStyle = glow;
       c.fillRect(cx - R * 1.2, cy - R * 1.2, R * 2.4, R * 2.4);
 
-      this.hexPath(tile, 0.985);
       c.strokeStyle = `rgba(255, 255, 255, ${0.95 * level})`;
       c.lineWidth = Math.max(3, R * 0.22);
-      c.stroke();
+      c.stroke(path);
       c.restore();
 
-      this.hexPath(tile, 0.985);
       c.strokeStyle = `rgba(255, 214, 92, ${0.9 * level * beat})`;
       c.lineWidth = Math.max(2, R * 0.07);
-      c.stroke();
+      c.stroke(path);
     }
   }
 
@@ -1206,14 +1287,13 @@ export class BoardView {
     const c = this.ctx;
     for (const i of list) {
       const tile = this.board.tiles[i];
-      this.hexPath(tile, 0.9);
+      const path = this.hexPath(tile, 0.9);
       c.fillStyle = `rgba(255,255,255,${0.10 + this.pulse * 0.13})`;
-      c.fill();
-      this.hexPath(tile, 0.9);
+      c.fill(path);
       c.strokeStyle = `rgba(255,255,255,${0.5 + this.pulse * 0.35})`;
       c.lineWidth = Math.max(1.5, this.scale * 0.045);
       c.setLineDash([this.scale * 0.15, this.scale * 0.12]);
-      c.stroke();
+      c.stroke(path);
       c.setLineDash([]);
     }
   }

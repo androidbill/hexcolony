@@ -77,10 +77,15 @@ body {
 }
 
 button, input { font: inherit; color: inherit; }
+/* No will-change here. It was added to "prime the GPU" for the :active scale, but this
+   selector is every button in the app — a hundred in the markup before the dynamic ones —
+   and will-change promotes each to its own compositor layer permanently, hidden sheets
+   included. That is a standing GPU-memory cost on the device that can least afford it, on
+   a screen whose one job is a canvas, in exchange for a transform the compositor already
+   handles. The tap highlight stays: it removes the grey flash and costs nothing. */
 button {
   background: none; border: 0; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  will-change: transform;
 }
 
 /* ------------------------------------------------------------ screens */
@@ -183,7 +188,7 @@ button {
   transition: transform .12s, filter .15s, opacity .15s;
   width: 100%;
 }
-.btn:active { transform: scale(0.975) translateZ(0); }
+.btn:active { transform: scale(0.975); }
 .btn:disabled { opacity: 0.45; pointer-events: none; }
 
 .btn-key {
