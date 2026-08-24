@@ -4359,7 +4359,8 @@ function renderAsks(g) {
   // before it will record a yes. And an offer you cannot pay for is only worth a look
   // rather than the full ten seconds — see ASK_SHOW_SECONDS.
   const waiting = (me ? (g.trades || []) : [])
-    .filter((t) => t.from !== playerId && !t.replies[playerId])
+    .filter((t) => t.from !== playerId && !t.replies[playerId]
+      && !tradeRejectFrom.has(t.from))
     .map((t) => ({ t, able: Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n) }))
     .filter(({ t, able }) => {
       const left = askLeft(t, able);
