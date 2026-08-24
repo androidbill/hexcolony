@@ -1652,7 +1652,10 @@ function renderMapPreview() {
   badge.textContent = host ? 'Choose a map' : `${nameFor(room.hostId)} is choosing a map`;
   badge.classList.toggle('mine', host);
 
+  // Emptied for the map picker. The seat key goes with it, or the strip would still
+  // believe it holds these players and skip rebuilding when the game starts.
   $('score-strip').innerHTML = '';
+  delete $('score-strip').dataset.seats;
   $('dice-float').hidden = true;
   $('turn-timer').hidden = true;
   renderChatButton();
@@ -3312,11 +3315,54 @@ function bumpCards(list) {
   }
 }
 
+/**
+ * The score strip, updated in place rather than rebuilt.
+ *
+ * The chips carry a transition — the gold ring, the lift and the fade that mark whose turn
+ * it is — and none of it was ever seen. Rewriting the strip's innerHTML throws the buttons
+ * away and builds new ones, and a brand-new element has no previous value to move from, so
+ * every change arrived already finished. The turn indicator snapped between players
+ * instead of easing across, which is the one moment on the bar anybody is watching.
+ *
+ * So the buttons are kept and their contents written over. The strip is only rebuilt when
+ * the seats themselves change, which outside of somebody leaving is once a game.
+ */
 function renderScoreStrip(g) {
   const up = R.currentPid(g);
-  $('score-strip').classList.toggle('tight', g.seats.length > 2);
-  $('score-strip').innerHTML = g.seats.map((pid) => {
+  const strip = $('score-strip');
+  strip.classList.toggle('tight', g.seats.length > 2);
+
+  // Rebuilt only when the row of players is not the row already on screen.
+  const seatKey = g.seats.join(',');
+  if (strip.dataset.seats !== seatKey) {
+    strip.dataset.seats = seatKey;
+    strip.innerHTML = g.seats.map(() => '<button class="chip" data-pcard>'
+      + '<span class="chip-name"></span>'
+      + '<span class="chip-vp"></span>'
+      + '<span class="chip-cards"></span>'
+      + '<span class="chip-awards"></span>'
+      + '</button>').join('');
+  }
+
+  g.seats.forEach((pid, i) => {
+    const el = strip.children[i];
+    if (!el) return;
     const p = g.players[pid];
+
+    // Only written when different: assigning an identical value to style or textContent is
+    // cheap, but it is not free, and this runs on every message the room sends.
+    const c = colorFor(pid), ink = inkFor(pid);
+    if (el.style.getPropertyValue('--c') !== c) el.style.setProperty('--c', c);
+    if (el.style.getPropertyValue('--ink') !== ink) el.style.setProperty('--ink', ink);
+
+    const name = nameFor(pid);
+    const vp = String(R.publicVP(g, pid));
+    const cards = `${R.handSize(p)}🂠`;
+    const [nameEl, vpEl, cardsEl, awardsEl] = el.children;
+    if (nameEl.textContent !== name) nameEl.textContent = name;
+    if (vpEl.textContent !== vp) vpEl.textContent = vp;
+    if (cardsEl.textContent !== cards) cardsEl.textContent = cards;
+
     // One badge each rather than two emoji run together, so each can say what it is.
     const crowns = [
       g.award.road === pid ? `<span class="chip-crown" title="Longest Road (${g.award.roadLen})"`
@@ -3324,13 +3370,10 @@ function renderScoreStrip(g) {
       g.award.army === pid ? `<span class="chip-crown" title="Largest Army (${g.award.armySize})"`
         + ` aria-label="Largest Army">⚔️</span>` : '',
     ].join('');
-    return `<button class="chip${pid === up ? ' up' : ''}" style="--c:${esc(colorFor(pid))};--ink:${esc(inkFor(pid))}" data-pcard>
-      <span class="chip-name">${esc(nameFor(pid))}</span>
-      <span class="chip-vp">${R.publicVP(g, pid)}</span>
-      <span class="chip-cards">${R.handSize(p)}🂠</span>
-      ${crowns}
-    </button>`;
-  }).join('');
+    if (awardsEl.innerHTML !== crowns) awardsEl.innerHTML = crowns;
+
+    el.classList.toggle('up', pid === up);
+  });
 }
 
 function turnText(g) {

@@ -1103,6 +1103,10 @@ button {
   flex: 0 0 auto;
 }
 .chip-crown + .chip-crown { margin-left: 2px; }
+/* The awards live in their own span so the chip can be updated in place, but they should
+   sit in the chip's flex row exactly as they did when they were written straight into it —
+   and an empty wrapper must not leave a gap behind on a chip that has won nothing. */
+.chip-awards { display: contents; }
 
 /* More players still use the same readable two-column rhythm. */
 .score-strip.tight { gap: 4px; }
