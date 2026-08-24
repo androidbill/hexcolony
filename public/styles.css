@@ -687,6 +687,17 @@ button {
 }
 .tray-float > *:not([hidden]) { pointer-events: auto; }
 
+/* The whole of trading lives in one centred column, the floating offers and the picker
+   in the tray alike. Each of these was a full-width row, which is the right answer on a
+   phone and looks abandoned on a desktop: a short sentence and two buttons stretched
+   across a 1400px window. The cap is wider than any phone, so none of this binds there. */
+#trade-want, #give-lead, #trade-give-bin, #trade-bar {
+  width: 100%;
+  max-width: 520px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .trade-asks { max-height: 34vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 /* Reading over open water rather than over the tray's own panel, so each one needs to
    carry its own weight against a moving background. */
@@ -1954,4 +1965,22 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   .tray { padding-left: 18px; padding-right: 18px; }
   .hand { gap: 8px; }
   .rcard { width: 58px; height: 78px; }
+
+  /* Everything the game puts in front of you sits in one centred column.
+     Full width is the right answer on a phone and an odd one on a desktop: measured at
+     1440px the action bar was 1404px and the score strip 1370px, so four buttons and four
+     name chips were being stretched across the whole window with nothing else in it. The
+     board keeps the full width — it is a picture and it fits itself — and everything you
+     read or press is gathered back into the middle, under the same cap the sheets have
+     always used. None of this exists below 720px, so the phone is untouched. */
+  .actions,
+  .hand { max-width: 560px; margin-left: auto; margin-right: auto; }
+
+  /* The kebab comes out of the flow so the chips centre on the window rather than on
+     what is left of it once the button has taken its 40px — otherwise the strip sits
+     half a button to the left of centre, which is exactly the sort of near-miss that
+     looks like a mistake rather than a layout. */
+  .game-top { position: relative; }
+  .game-top #game-menu { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+  .score-strip { max-width: 640px; margin-left: auto; margin-right: auto; }
 }
