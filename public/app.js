@@ -29,6 +29,7 @@ import * as R from './rules.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
+const LOBBY_IDLE_TTL_MS = 30 * 60 * 1000;
 const CHAT_EMOJIS = ['😀', '😄', '😂', '🤣', '😊', '😎', '😍', '🤔', '😭', '😡', '🙌', '👋', '👍', '👎', '❤️', '🔥', '🎉', '✅', '💯', '⚡', '🌊', '🏝️', '🎲', '🏆'];
 
 // Firestore promises can hang forever on a bad mobile connection — never let a UI flow
@@ -500,6 +501,7 @@ function makeCode() { return WORD_CODES[Math.floor(Math.random() * WORD_CODES.le
 
 function roomIsStale(data) {
   if (!data) return true;
+  if (data.state === 'lobby' && data.createdAt && Date.now() - data.createdAt > LOBBY_IDLE_TTL_MS) return true;
   const expires = typeof data.expiresAt?.toMillis === 'function'
     ? data.expiresAt.toMillis()
     : (data.createdAt || 0) + ROOM_TTL_MS;
@@ -1037,8 +1039,9 @@ function renderRoomList() {
   }
   // A connection handoff can leave several successful create attempts behind.
   // For this device, keep only the newest room it hosts and remove older duplicates.
+  const myName = usableName();
   const owned = roomList
-    .filter((r) => !roomIsStale(r) && r.hostId === playerId && r.players?.[playerId])
+    .filter((r) => !roomIsStale(r) && (r.hostId === playerId || r.players?.[r.hostId]?.name === myName))
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   for (const duplicate of owned.slice(1)) {
     deleteDoc(doc(db, 'rooms', duplicate.code)).catch(() => {});
