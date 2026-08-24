@@ -1071,7 +1071,7 @@ export class BoardView {
         const dash = Math.max(6, R * 0.10);
         c.lineCap = 'butt';
         c.setLineDash([dash, dash]);
-        c.lineDashOffset = -this.now / 32;
+        c.lineDashOffset = -this.now / 40;
         c.lineWidth = Math.max(3, R * 0.035);
         c.strokeStyle = '#ffffff';
         c.stroke(perimeter);
@@ -1158,7 +1158,7 @@ export class BoardView {
       c.stroke(path);
       const dash = Math.max(6, this.scale * 0.1);
       c.setLineDash([dash, dash]);
-      c.lineDashOffset = -this.now / 24;
+      c.lineDashOffset = -this.now / 40;
       c.lineWidth = 7;
       c.strokeStyle = '#ffffff';
       c.stroke(path);
