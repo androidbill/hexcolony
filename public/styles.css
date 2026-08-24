@@ -1030,10 +1030,10 @@ button { background: none; border: 0; cursor: pointer; }
   gap: 4px;
 }
 .trade-filter-float {
-  position: fixed;
-  right: 12px;
-  bottom: calc(var(--safe-b) + 70px);
-  z-index: 60;
+  position: absolute;
+  left: 12px;
+  bottom: 68px;
+  z-index: 5;
 }
 .trade-filter-float svg { width: 24px; height: 24px; color: #fff; }
 .trade-filter-list { display: flex; flex-direction: column; gap: 7px; }
