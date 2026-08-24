@@ -2351,17 +2351,56 @@ function applySea() {
  * into an array, and reordering that array repainted everybody's pieces. A list of
  * twenty-seven is going to be reordered again.
  */
+const seaPickers = new Map();
 function drawSeaRow(elId, chosen, onPick) {
   const row = $(elId);
   if (!row) return;
   const current = seaAt(chosen);
-  row.innerHTML = `<label class="sea-wheel-label">
-    <input class="sea-wheel" type="color" value="${esc(current.a)}" aria-label="Choose sea color">
-    <span class="sea-wheel-preview" style="--a:${esc(current.a)};--b:${esc(current.b)}"></span>
-    <span><b>Choose any color</b><small>${esc(current.a.toUpperCase())}</small></span>
-  </label>`;
-  const input = row.querySelector('.sea-wheel');
-  input.addEventListener('input', () => onPick(`custom:${input.value.toLowerCase()}`));
+  let mount = row.querySelector('.sea-iro');
+  if (!mount) {
+    row.innerHTML = `<div class="sea-wheel-label">
+      <div class="sea-iro" aria-label="Choose sea color"></div>
+      <div class="sea-wheel-preview" style="--a:${esc(current.a)};--b:${esc(current.b)}"></div>
+      <span><b>Choose any color</b><small class="sea-hex"></small></span>
+    </div>`;
+    mount = row.querySelector('.sea-iro');
+  }
+  const custom = String(chosen || '').match(/^custom:(#[0-9a-f]{6})$/i);
+  const value = (custom ? custom[1] : current.a).toUpperCase();
+  let picker = seaPickers.get(elId);
+  if (!picker && typeof iro !== 'undefined') {
+    picker = new iro.ColorPicker(mount, {
+      width: 210,
+      color: value,
+      borderWidth: 1,
+      borderColor: '#25415f',
+      layout: [
+        { component: iro.ui.Wheel },
+        { component: iro.ui.Slider, options: { sliderType: 'value' } },
+      ],
+    });
+    picker.on('color:change', (color) => {
+      const hex = color.hexString.toLowerCase();
+      const preview = row.querySelector('.sea-wheel-preview');
+      const readout = row.querySelector('.sea-hex');
+      const generated = seaAt(`custom:${hex}`);
+      if (preview) { preview.style.setProperty('--a', generated.a); preview.style.setProperty('--b', generated.b); }
+      if (readout) readout.textContent = hex.toUpperCase();
+      if (!picker._hexcolonySyncing) onPick(`custom:${hex}`);
+    });
+    seaPickers.set(elId, picker);
+  }
+  if (picker) {
+    if (picker.color.hexString.toUpperCase() !== value) {
+      picker._hexcolonySyncing = true;
+      picker.color.set(value);
+      picker._hexcolonySyncing = false;
+    }
+    const preview = row.querySelector('.sea-wheel-preview');
+    const readout = row.querySelector('.sea-hex');
+    if (preview) { preview.style.setProperty('--a', current.a); preview.style.setProperty('--b', current.b); }
+    if (readout) readout.textContent = value;
+  }
 }
 
 function ensureBoard() {

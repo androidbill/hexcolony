@@ -1032,23 +1032,18 @@ button {
 
 /* ------------------------------------------------------------ sea picker */
 .sea-wheel-label {
-  display: flex; align-items: center; gap: 11px;
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
   width: 100%; padding: 10px 11px; border-radius: var(--r);
   background: rgba(255, 255, 255, .06); border: 1px solid var(--line);
   cursor: pointer;
 }
-.sea-wheel {
-  width: 58px; height: 58px; padding: 0; border: 0; border-radius: 50%;
-  background: none; overflow: hidden; cursor: pointer;
-}
-.sea-wheel::-webkit-color-swatch-wrapper { padding: 0; }
-.sea-wheel::-webkit-color-swatch { border: 3px solid var(--parch); border-radius: 50%; }
+.sea-iro { min-height: 236px; display: flex; justify-content: center; }
 .sea-wheel-preview {
-  width: 78px; height: 42px; flex: 0 0 auto; border-radius: 11px;
+  width: 100%; height: 36px; flex: 0 0 auto; border-radius: 11px;
   background: linear-gradient(180deg, var(--a), var(--b));
   border: 1px solid rgba(255, 255, 255, .35);
 }
-.sea-wheel-label b, .sea-wheel-label small { display: block; }
+.sea-wheel-label b, .sea-wheel-label small { display: block; text-align: center; }
 .sea-wheel-label small { margin-top: 2px; color: var(--dim); font-size: 11px; letter-spacing: .06em; }
 
 /* What a tile produces, shown when one is tapped. Lifted clear of the buttons along the
