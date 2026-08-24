@@ -673,7 +673,13 @@ button {
 .tray-float {
   position: absolute;
   left: 10px; right: 10px; bottom: 100%;
-  margin-bottom: 8px;
+  /* Capped and centred rather than stretched edge to edge.
+     A phone is narrower than the cap, so this changes nothing there — it is the desktop
+     that needed it, where an offer ran the full width of the window with one short
+     sentence stranded at the far left of it. `margin: auto` against both `left` and
+     `right` is what centres an absolutely positioned box once its width is limited. */
+  max-width: 520px;
+  margin: 0 auto 8px;
   z-index: 4;
   display: flex; flex-direction: column; gap: 6px;
   /* Empty most of the time, and must not swallow taps on the board when it is. */
@@ -700,6 +706,7 @@ button {
    on a narrow phone without any of that. */
 .ask-line {
   display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: center; text-align: center;
   gap: 5px;
   font-size: 13px; font-weight: 600; line-height: 1.35;
   color: var(--text);
@@ -737,7 +744,7 @@ button {
    that tipped "…in exchange for a [card]" onto a second row — the sentence fits in about
    308px of a 345px strip, and the pill and its gap are 35 of them. Down here it is also
    nearer what it actually governs: how long is left to press one of these. */
-.ask-go { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 8px; }
+.ask-go { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 7px; margin-top: 8px; }
 .ask-go .offer-clock { flex: 0 0 auto; }
 .ask-go .btn { flex: 1 1 0; min-width: 0; padding: 9px 8px; font-size: 13px; }
 
@@ -756,7 +763,7 @@ button {
   padding: 9px 10px;
   margin-bottom: 8px;
 }
-.my-offer-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.my-offer-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; }
 .my-offer-top .offer-cards { display: flex; gap: 3px; flex-wrap: wrap; min-width: 0; }
 .swap-arrow { color: var(--gold); font-size: 15px; }
 .offer-drop {
