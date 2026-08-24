@@ -65,12 +65,20 @@ export const LEVELS = {
   },
 };
 
-const BOT_NAMES = ['Astrid', 'Bjorn', 'Cora', 'Dag', 'Eira', 'Finn', 'Greta', 'Hakon'];
+const BOT_NAMES = [
+  'Astrid', 'Bjorn', 'Cora', 'Dag', 'Eira', 'Finn', 'Greta', 'Hakon',
+  'Iris', 'Johan', 'Kira', 'Lars', 'Mira', 'Nils', 'Orla', 'Pavel',
+  'Quinn', 'Runa', 'Soren', 'Talia', 'Uma', 'Vera', 'Wren', 'Yara',
+];
 
 /** Seat descriptors for `count` bots, in colours the human has not taken. */
-export function makeBots(count, level, avoidColour = 0) {
+export function makeBots(count, level, avoidColour = 0, avoidNames = [], reuseNames = null) {
   const picked = [];
-  const names = BOT_NAMES.slice();
+  const blocked = new Set(avoidNames || []);
+  const names = (reuseNames?.length ? reuseNames : BOT_NAMES.filter((name) => !blocked.has(name))).slice();
+  // There are more names than the maximum table size, but keep a safe fallback if a
+  // future table grows beyond the unused pool.
+  if (names.length < count) names.push(...BOT_NAMES.filter((name) => !names.includes(name)));
   let colour = 0;
   for (let i = 0; i < count; i++) {
     if (colour === avoidColour) colour++;

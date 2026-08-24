@@ -1909,10 +1909,17 @@ function enterSolo(saved) {
   return true;
 }
 
-function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7) {
+const LAST_BOT_NAMES_KEY = 'hexcolony_last_bot_names';
+function lastBotNames() {
+  try { return JSON.parse(localStorage.getItem(LAST_BOT_NAMES_KEY) || '[]'); } catch { return []; }
+}
+
+function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7, reuseBotNames = null) {
   const name = usableName();
   if (!name) return false;
-  const bots = makeBots(botCount, level, myColorIdx);
+  const bots = makeBots(botCount, level, myColorIdx,
+    reuseBotNames ? [] : lastBotNames(), reuseBotNames);
+  localStorage.setItem(LAST_BOT_NAMES_KEY, JSON.stringify(bots.map((b) => b.name)));
   const players = {
     [playerId]: { name, colorIdx: myColorIdx, joinedAt: Date.now() },
   };
@@ -4876,7 +4883,10 @@ function renderOver(g) {
 
 $('btn-again').addEventListener('click', async () => {
   if (solo) {
-    if (startSolo(room.level, room.bots, room.settings.targetVP, room.settings.layout, room.settings.useRobber)) {
+    const reuseBotNames = Object.values(room.players || {})
+      .filter((p) => p.bot).map((p) => p.name);
+    if (startSolo(room.level, room.bots, room.settings.targetVP, room.settings.layout,
+      room.settings.useRobber, room.settings.discardLimit, reuseBotNames)) {
       closeSheet();
     }
     return;
