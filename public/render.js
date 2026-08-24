@@ -1092,11 +1092,18 @@ export class BoardView {
 
     c.save();
     c.translate(x, y);
+    if (spin) {
+      // Rotate around the building's screen-space centre before applying the
+      // local artwork transform, keeping the board corner fixed.
+      const centreY = -(spec.box.h * 0.28) * k;
+      c.translate(0, centreY);
+      c.rotate(this.now / 900);
+      c.translate(0, -centreY);
+    }
     c.scale(k, k);
     // Bottom-centre of the drawing on the corner, nudged down so it sits on the
     // junction instead of floating above it.
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
-    if (spin) { c.translate(0, -spec.box.h * 0.28); c.rotate(this.now / 900); c.translate(0, spec.box.h * 0.28); }
 
     const path = spec.path;
     c.shadowColor = 'rgba(0, 0, 0, 0.5)';
