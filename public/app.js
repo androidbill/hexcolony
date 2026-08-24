@@ -1035,6 +1035,14 @@ function renderRoomList() {
       deleteDoc(doc(db, 'rooms', r.code)).catch(() => {});
     }
   }
+  // A connection handoff can leave several successful create attempts behind.
+  // For this device, keep only the newest room it hosts and remove older duplicates.
+  const owned = roomList
+    .filter((r) => !roomIsStale(r) && r.hostId === playerId && r.players?.[playerId])
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  for (const duplicate of owned.slice(1)) {
+    deleteDoc(doc(db, 'rooms', duplicate.code)).catch(() => {});
+  }
 
   const open = roomList
     .filter((r) => !roomIsStale(r) && Object.keys(r.players || {}).length > 0)
