@@ -1051,16 +1051,27 @@ export class BoardView {
       const active = pid === activePid;
       stripe(R * 0.245, EDGE_INK);
       if (active) {
-        // The player's colour is the full thick outline; moving white dashes replace
-        // portions of it so the outline itself reads as a chasing zebra pattern.
+        // Keep the player's colour as the road, then chase a white dash around the
+        // complete capsule perimeter (both sides and the rounded tips).
         stripe(R * 0.215, this.colorOf(pid));
+        const half = R * 0.215 / 2;
+        const dx = x2 - x1, dy = y2 - y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len * half, ny = dx / len * half;
+        const perimeter = new Path2D();
+        perimeter.moveTo(x1 + nx, y1 + ny);
+        perimeter.lineTo(x2 + nx, y2 + ny);
+        perimeter.arc(x2, y2, half, Math.atan2(ny, nx), Math.atan2(-ny, -nx));
+        perimeter.lineTo(x1 - nx, y1 - ny);
+        perimeter.arc(x1, y1, half, Math.atan2(-ny, -nx), Math.atan2(ny, nx));
+        perimeter.closePath();
         const dash = Math.max(6, R * 0.10);
-        // Flat dash ends prevent the short road segment from looking like it flashes
-        // at its rounded endpoints as the pattern advances.
         c.lineCap = 'butt';
         c.setLineDash([dash, dash]);
         c.lineDashOffset = -this.now / 32;
-        stripe(R * 0.215, '#ffffff');
+        c.lineWidth = Math.max(3, R * 0.035);
+        c.strokeStyle = '#ffffff';
+        c.stroke(perimeter);
         c.setLineDash([]);
         c.lineDashOffset = 0;
         c.lineCap = 'round';
