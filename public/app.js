@@ -4195,20 +4195,11 @@ function renderTrade(g) {
   $('give-lead').hidden = !on;
   $('trade-give-bin').hidden = !on;
   $('trade-bar').hidden = !on;
-  $('actions').hidden = false;
+  $('actions').hidden = on;
 
   renderAsks(g);
   renderMyOffers(g);
   if (!on) return;
-  // Keep the two information buttons available even while the trade picker is open.
-  // They do not change the trade selection, and Players/Cards should never disappear
-  // just because the current player is deciding what to offer.
-  const held = R.devCount(g.players[playerId]);
-  const canBuyDev = R.whatCanIBuild(g, playerId).dev;
-  $('actions').innerHTML = actBtn('players', '👥', 'Players')
-    + actBtn('dev', '🃏', 'DEV', {
-      ready: canBuyDev, badge: held || 0,
-    });
   renderWantRow(g);
   renderGiveBin();
   renderTradeBar(g);
