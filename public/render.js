@@ -282,9 +282,6 @@ export class BoardView {
     this.userScale = 1;                // pinch zoom on top of the fit scale
     this.fitScale = 40;
     this.pulse = 0;
-    this.animatePieces = true;
-    this.connectedPerimeterEnabled = true;
-    this.pieceGroups = null;
     this.onPick = null;                // ({ kind, id }) => void
     this._pointers = new Map();
     this._pinch = null;
@@ -303,77 +300,6 @@ export class BoardView {
 
   setBoard(board) { this.board = board; this.built.clear(); this.fit(); }
   setGame(game) { this.game = game; }
-  /** Group a player's touching roads and buildings so each connected group shares one chase. */
-  connectedPiecePhases() {
-    const g = this.game;
-    if (!g) return new Map();
-    const parent = new Map();
-    const find = (x) => { if (!parent.has(x)) parent.set(x, x); if (parent.get(x) !== x) parent.set(x, find(parent.get(x))); return parent.get(x); };
-    const join = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
-    const at = new Map();
-    for (const [eid, pid] of Object.entries(g.roads || {})) {
-      const e = EDGES[eid]; if (!e) continue;
-      const key = `r:${eid}`; find(key);
-      for (const v of [e.a, e.b]) { const k = `${pid}:${v}`; if (at.has(k)) join(key, at.get(k)); else at.set(k, key); }
-    }
-    for (const [vid, b] of Object.entries(g.bldg || {})) {
-      const key = `b:${vid}`; find(key); const k = `${b.p}:${vid}`;
-      if (at.has(k)) join(key, at.get(k)); else at.set(k, key);
-    }
-    const phase = new Map(), roots = new Map();
-    for (const key of parent.keys()) { const root = find(key); if (!roots.has(root)) roots.set(root, roots.size * 90); phase.set(key, roots.get(root)); }
-    return phase;
-  }
-
-  drawConnectedPerimeters() {
-    if (!this.game || !this.animatePieces || !this.connectedPerimeterEnabled) return;
-    const pid = this.game.seats?.[this.game.turn?.seat];
-    if (!pid) return;
-    const groups = new Map();
-    const add = (key, points) => {
-      const root = this.connectedPiecePhases();
-      const phase = root.get(key);
-      const id = `${pid}:${phase ?? key}`;
-      if (!groups.has(id)) groups.set(id, []);
-      groups.get(id).push(...points);
-    };
-    const R = this.scale;
-    for (const [eid, owner] of Object.entries(this.game.roads || {})) {
-      if (owner !== pid) continue;
-      const e = EDGES[eid]; if (!e) continue;
-      const [aX, aY] = this.toScreen(VERTS[e.a].x, VERTS[e.a].y);
-      const [bX, bY] = this.toScreen(VERTS[e.b].x, VERTS[e.b].y);
-      const dx = bX - aX, dy = bY - aY, len = Math.hypot(dx, dy) || 1;
-      const nx = -dy / len * R * .16, ny = dx / len * R * .16;
-      add(`r:${eid}`, [[aX + nx, aY + ny], [aX - nx, aY - ny], [bX + nx, bY + ny], [bX - nx, bY - ny]]);
-    }
-    for (const [vid, b] of Object.entries(this.game.bldg || {})) {
-      if (b.p !== pid) continue;
-      const [x, y] = this.toScreen(VERTS[vid].x, VERTS[vid].y);
-      const r = R * (b.t === 'c' ? .42 : .36);
-      add(`b:${vid}`, Array.from({ length: 8 }, (_, i) => {
-        const a = i * Math.PI / 4; return [x + Math.cos(a) * r, y + Math.sin(a) * r];
-      }));
-    }
-    const hull = (pts) => {
-      const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-      const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
-      const lo = []; for (const q of p) { while (lo.length > 1 && cross(lo[lo.length - 2], lo.at(-1), q) <= 0) lo.pop(); lo.push(q); }
-      const hi = []; for (const q of [...p].reverse()) { while (hi.length > 1 && cross(hi[hi.length - 2], hi.at(-1), q) <= 0) hi.pop(); hi.push(q); }
-      return lo.slice(0, -1).concat(hi.slice(0, -1));
-    };
-    const c = this.ctx;
-    for (const pts of groups.values()) {
-      const path = hull(pts); if (path.length < 3) continue;
-      c.beginPath(); c.moveTo(path[0][0], path[0][1]);
-      for (const [x, y] of path.slice(1)) c.lineTo(x, y); c.closePath();
-      c.lineJoin = 'round'; c.lineCap = 'round'; c.lineWidth = Math.max(5, R * .09);
-      c.strokeStyle = this.colorOf(pid); c.stroke();
-      c.setLineDash([Math.max(6, R * .075), Math.max(6, R * .075)]);
-      c.lineDashOffset = -this.now / 40; c.strokeStyle = '#fff'; c.stroke();
-      c.setLineDash([]); c.lineDashOffset = 0;
-    }
-  }
   setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [], cities: [] }; }
   setSea(key) { this.sea = seaAt(key); }
   /** `{ hexes, spots: [{ v, colour, city }], until }`, or null for nothing to show. */
@@ -655,9 +581,9 @@ export class BoardView {
     this.drawEdgeHighlights();
     if (paying) this.drawPayingSpots(paying);
     this.drawBuildings();
-    this.drawConnectedPerimeters();
     this.drawRobber();
     this.drawVertexHighlights();
+    this.drawCityHighlights();
     if (this.zoom) this.drawRolledTokens(this.zoom.k);
   }
 
@@ -1104,8 +1030,6 @@ export class BoardView {
     if (!this.game) return;
     const c = this.ctx;
     const R = this.scale;
-    const phases = this.connectedPiecePhases();
-    const activePid = this.game.seats?.[this.game.turn?.seat];
     for (const [eid, pid] of Object.entries(this.game.roads)) {
       const e = EDGES[eid];
       const [ax, ay] = this.toScreen(VERTS[e.a].x, VERTS[e.a].y);
@@ -1123,44 +1047,9 @@ export class BoardView {
         c.lineWidth = w;
         c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
       };
-      const active = this.animatePieces && !this.connectedPerimeterEnabled && pid === activePid;
       stripe(R * 0.245, EDGE_INK);
-      if (active) {
-        // Keep the player's colour as the road, then chase a white dash around the
-        // complete capsule perimeter (both sides and the rounded tips).
-        stripe(R * 0.215, this.colorOf(pid));
-        const half = R * 0.215 / 2;
-        const dx = x2 - x1, dy = y2 - y1;
-        const len = Math.hypot(dx, dy) || 1;
-        const nx = -dy / len * half, ny = dx / len * half;
-        const ux = dx / len, uy = dy / len;
-        const perimeter = new Path2D();
-        perimeter.moveTo(x1 + nx, y1 + ny);
-        perimeter.lineTo(x2 + nx, y2 + ny);
-        // Explicit quadratic semicircles avoid arc() choosing the long way around,
-        // which can create a distracting full circle at a road tip.
-        perimeter.quadraticCurveTo(x2 + ux * half, y2 + uy * half, x2 - nx, y2 - ny);
-        perimeter.lineTo(x1 - nx, y1 - ny);
-        perimeter.quadraticCurveTo(x1 - ux * half, y1 - uy * half, x1 + nx, y1 + ny);
-        perimeter.closePath();
-        // The capsule perimeter makes equal numeric dashes look longer than the
-        // house's compact outline, so use the visual equivalent here.
-        const dash = Math.max(6, R * 0.075);
-        c.lineCap = 'butt';
-        c.setLineDash([dash, dash]);
-        c.lineDashOffset = -(this.now + (phases.get(`r:${eid}`) || 0)) / 40;
-        c.lineWidth = Math.max(3, R * 0.035);
-        c.strokeStyle = '#ffffff';
-        c.stroke(perimeter);
-        c.setLineDash([]);
-        c.lineDashOffset = 0;
-        c.lineCap = 'round';
-      } else {
-        stripe(R * 0.215, OUTLINE);
-      }
+      stripe(R * 0.215, OUTLINE);
       stripe(R * 0.125, this.colorOf(pid));
-      c.shadowColor = 'transparent';
-      c.shadowBlur = 0;
     }
   }
 
@@ -1170,25 +1059,17 @@ export class BoardView {
     // that at nearly twice size a neighbour would otherwise paint over the very piece the
     // jump is pointing at.
     const jumping = [];
-    const activePid = this.game.seats?.[this.game.turn?.seat];
-    const phases = this.connectedPiecePhases();
     for (const [vid, b] of Object.entries(this.game.bldg)) {
       const v = Number(vid);
       const k = this.buildPop(v);
       if (k > 0) { jumping.push([v, b, k]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
-      const animate = this.animatePieces && !this.connectedPerimeterEnabled && b.p === activePid;
-      this.piecePhase = phases.get(`b:${vid}`) || 0;
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, animate)
-        : this.drawSettlement(x, y, this.colorOf(b.p), 1, animate);
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p)) : this.drawSettlement(x, y, this.colorOf(b.p));
     }
     for (const [v, b, k] of jumping) {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const grow = 1 + k * (BUILD_PEAK - 1);
-      const animate = this.animatePieces && !this.connectedPerimeterEnabled && b.p === activePid;
-      this.piecePhase = phases.get(`b:${v}`) || 0;
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, animate)
-        : this.drawSettlement(x, y, this.colorOf(b.p), grow, animate);
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow) : this.drawSettlement(x, y, this.colorOf(b.p), grow);
     }
   }
 
@@ -1199,7 +1080,7 @@ export class BoardView {
    * Stand a piece on a corner, sized by height so a city reads as wider than a house
    * rather than merely taller.
    */
-  drawPiece(kind, x, y, color, height, animate = false) {
+  drawPiece(kind, x, y, color, height) {
     const spec = PIECES[kind];
     if (!spec) return;
     const c = this.ctx;
@@ -1226,38 +1107,14 @@ export class BoardView {
     c.lineWidth = 11;
     c.strokeStyle = EDGE_INK;
     c.stroke(path);
-    c.shadowColor = 'transparent';
-    c.shadowBlur = 0;
-    if (!animate) {
-      c.lineWidth = 7;
-      c.strokeStyle = OUTLINE;
-      c.stroke(path);
-    } else {
-      // Keep the thick player-colour outline visible continuously, with a moving
-      // white dash overlay that chases around the shape.
-      c.lineWidth = 7;
-      c.strokeStyle = color;
-      c.stroke(path);
-      // Connected roads use the same visual dash length so the chase does not
-      // change rhythm when it reaches a house or city.
-      const dash = Math.max(6, this.scale * 0.075);
-      c.lineCap = 'butt';
-      c.lineJoin = 'miter';
-      c.setLineDash([dash, dash]);
-      c.lineDashOffset = -(this.now + (this.piecePhase || 0)) / 40;
-      c.lineWidth = 7;
-      c.strokeStyle = '#ffffff';
-      c.stroke(path);
-      c.setLineDash([]);
-      c.lineDashOffset = 0;
-      c.lineCap = 'round';
-      c.lineJoin = 'round';
-    }
+    c.lineWidth = 7;
+    c.strokeStyle = OUTLINE;
+    c.stroke(path);
     c.restore();
   }
 
-  drawSettlement(x, y, color, grow = 1, animate = false) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow, animate); }
-  drawCity(x, y, color, grow = 1, animate = false) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow, animate); }
+  drawSettlement(x, y, color, grow = 1) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow); }
+  drawCity(x, y, color, grow = 1) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow); }
 
   drawRobber() {
     if (!this.game) return;

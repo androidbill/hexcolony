@@ -547,7 +547,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, animatePieces: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
+      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
       players: { [playerId]: freshPlayer(name) },
       order: [],
       game: null,
@@ -632,7 +632,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, animatePieces: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
+        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
         players: { [playerId]: freshPlayer(name) },
         order: [],
         game: null,
@@ -2205,12 +2205,6 @@ for (const b of document.querySelectorAll('[data-robber]')) {
   });
 }
 
-for (const b of document.querySelectorAll('[data-piece-animation]')) {
-  b.addEventListener('click', () => {
-    if (setSetting({ 'settings.animatePieces': b.dataset.pieceAnimation === 'on' })) sfx.tap();
-  });
-}
-
 /**
  * Change a room setting from the lobby.
  *
@@ -2315,11 +2309,6 @@ function renderLobby() {
   for (const b of document.querySelectorAll('[data-set="discard"]')) b.disabled = !useRobber;
   const discardRow = $('set-discard').closest('.opt-row');
   if (discardRow) discardRow.style.opacity = useRobber ? '' : '0.4';
-
-  const animatePieces = s.animatePieces !== false;
-  for (const b of document.querySelectorAll('[data-piece-animation]')) {
-    b.classList.toggle('on', (b.dataset.pieceAnimation === 'on') === animatePieces);
-  }
 
   const layout = s.layout || 'classic';
   for (const b of document.querySelectorAll('[data-layout]')) {
@@ -3223,7 +3212,6 @@ function render() {
   }
 
   view.setGame(g);
-  view.animatePieces = room.settings?.animatePieces !== false;
   // Whatever ended the moment you were in — the timer running out, a 7, someone
   // leaving — the pending "tap the board" is over with it. Clearing it here covers
   // every route out of your turn instead of each one having to remember.
@@ -5098,7 +5086,6 @@ function openSettings() {
 function togState(key) {
   if (key === 'sound') return soundEnabled();
   if (key === 'haptics') return localStorage.getItem('hexcolony_haptics') !== 'off';
-  if (key === 'pieces') return room?.settings?.animatePieces !== false;
   return localStorage.getItem('hexcolony_awake') === 'on';
 }
 function syncToggles() {
@@ -5112,9 +5099,6 @@ for (const t of document.querySelectorAll('[data-tog]')) {
     const now = !togState(key);
     if (key === 'sound') { setSound(now); if (now) { unlock(); sfx.tap(); } }
     else if (key === 'haptics') { localStorage.setItem('hexcolony_haptics', now ? 'on' : 'off'); if (now) buzz(40); }
-    else if (key === 'pieces') {
-      if (setSetting({ 'settings.animatePieces': now })) sfx.tap();
-    }
     else { localStorage.setItem('hexcolony_awake', now ? 'on' : 'off'); keepAwake(now); }
     syncToggles();
   });
