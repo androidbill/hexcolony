@@ -1050,12 +1050,23 @@ export class BoardView {
       };
       const active = pid === activePid;
       if (active) {
-        c.shadowColor = `rgba(255, 255, 255, ${0.18 + this.pulse * 0.28})`;
-        c.shadowBlur = 3 + this.pulse * 5;
+        c.shadowColor = `rgba(255, 214, 92, ${0.42 + this.pulse * 0.45})`;
+        c.shadowBlur = 8 + this.pulse * 12;
+        stripe(R * (0.27 + this.pulse * 0.025), `rgba(255, 214, 92, ${0.48 + this.pulse * 0.35})`);
       }
       stripe(R * 0.245, EDGE_INK);
       stripe(R * (0.215 + (active ? this.pulse * 0.018 : 0)), OUTLINE);
       stripe(R * 0.125, this.colorOf(pid));
+      if (active) {
+        // Marching dashes make the active player's network readable at a glance: the
+        // outline chases along each road instead of merely breathing brighter and dimmer.
+        const dash = Math.max(4, R * 0.08);
+        c.setLineDash([dash, dash]);
+        c.lineDashOffset = -this.now / 42;
+        stripe(R * 0.27, `rgba(255, 255, 255, ${0.72 + this.pulse * 0.28})`);
+        c.setLineDash([]);
+        c.lineDashOffset = 0;
+      }
       c.shadowColor = 'transparent';
       c.shadowBlur = 0;
     }
@@ -1105,6 +1116,14 @@ export class BoardView {
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
 
     const path = spec.path;
+    if (animate) {
+      c.shadowColor = `rgba(255, 214, 92, ${0.45 + this.pulse * 0.4})`;
+      c.shadowBlur = 10 + this.pulse * 13;
+      c.lineJoin = 'round';
+      c.lineWidth = 15 + this.pulse * 3;
+      c.strokeStyle = `rgba(255, 214, 92, ${0.46 + this.pulse * 0.34})`;
+      c.stroke(path);
+    }
     c.shadowColor = 'rgba(0, 0, 0, 0.5)';
     c.shadowBlur = 7;
     c.shadowOffsetY = 3;
@@ -1118,11 +1137,21 @@ export class BoardView {
     c.lineWidth = 11;
     c.strokeStyle = EDGE_INK;
     c.stroke(path);
-    c.shadowColor = animate ? `rgba(255, 255, 255, ${0.16 + this.pulse * 0.26})` : 'transparent';
-    c.shadowBlur = animate ? 3 + this.pulse * 5 : 0;
+    c.shadowColor = animate ? `rgba(255, 255, 255, ${0.3 + this.pulse * 0.35})` : 'transparent';
+    c.shadowBlur = animate ? 6 + this.pulse * 9 : 0;
     c.lineWidth = animate ? 7 + this.pulse * 1.4 : 7;
     c.strokeStyle = OUTLINE;
     c.stroke(path);
+    if (animate) {
+      const dash = Math.max(5, this.scale * 0.09);
+      c.setLineDash([dash, dash]);
+      c.lineDashOffset = -this.now / 42;
+      c.lineWidth = 8 + this.pulse * 1.6;
+      c.strokeStyle = `rgba(255, 255, 255, ${0.78 + this.pulse * 0.22})`;
+      c.stroke(path);
+      c.setLineDash([]);
+      c.lineDashOffset = 0;
+    }
     c.restore();
   }
 
