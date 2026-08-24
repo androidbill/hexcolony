@@ -736,7 +736,7 @@ function renderPresence() {
 function lobbyPeople() {
   const cutoff = Date.now() - PRESENCE_TTL_MS;
   return presenceList
-    .filter((p) => p.mode === 'lobby' && (stampMs(p.at) || 0) >= cutoff)
+    .filter((p) => (stampMs(p.at) || 0) >= cutoff)
     .sort((a, b) => (a.id === playerId ? -1 : b.id === playerId ? 1 : String(a.name).localeCompare(String(b.name))));
 }
 
@@ -748,11 +748,11 @@ function renderLobbyPeople() {
   count.textContent = String(people.length);
   list.innerHTML = people.length ? people.map((p) => `
     <div class="lobby-person">
-      <button class="lobby-person-name" data-person="${esc(p.id)}"><b>${esc(p.name || 'Someone')}</b><small>${p.id === playerId ? 'You' : 'Tap for bell'}</small></button>
+      <button class="lobby-person-name" data-person="${esc(p.id)}"><b>${esc(p.name || 'Someone')}</b><small>${p.id === playerId ? 'You · ' : ''}${p.mode === 'playing' ? 'In a game' : 'In lobby'}</small></button>
       ${lobbySelectedPerson === p.id && p.id !== playerId ? `<button class="lobby-person-bell" data-bell="${esc(p.id)}" aria-label="Notify ${esc(p.name || 'Someone')}">
         <svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>` : ''}
-    </div>`).join('') : '<span class="hint">Nobody else is waiting right now.</span>';
+    </div>`).join('') : '<span class="hint">Nobody is online right now.</span>';
   for (const b of list.querySelectorAll('[data-person]')) {
     b.addEventListener('click', () => {
       lobbySelectedPerson = lobbySelectedPerson === b.dataset.person ? null : b.dataset.person;
