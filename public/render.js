@@ -1051,14 +1051,13 @@ export class BoardView {
       const active = pid === activePid;
       stripe(R * 0.245, EDGE_INK);
       if (active) {
-        // Two offset dashed passes create a continuous player-colour/white zebra border.
-        // The dash offset is the only animation: no glow or pulsing competes with it.
-        const dash = Math.max(4, R * 0.08);
+        // The player's colour is the full thick outline; moving white dashes replace
+        // portions of it so the outline itself reads as a chasing zebra pattern.
+        stripe(R * 0.215, this.colorOf(pid));
+        const dash = Math.max(5, R * 0.09);
         c.setLineDash([dash, dash]);
-        c.lineDashOffset = -this.now / 42;
-        stripe(R * 0.27, this.colorOf(pid));
-        c.lineDashOffset += dash;
-        stripe(R * 0.27, '#ffffff');
+        c.lineDashOffset = -this.now / 24;
+        stripe(R * 0.215, '#ffffff');
         c.setLineDash([]);
         c.lineDashOffset = 0;
       } else {
@@ -1134,13 +1133,15 @@ export class BoardView {
       c.strokeStyle = OUTLINE;
       c.stroke(path);
     } else {
-      const dash = Math.max(5, this.scale * 0.09);
-      c.setLineDash([dash, dash]);
-      c.lineDashOffset = -this.now / 42;
-      c.lineWidth = 8;
+      // Keep the thick player-colour outline visible continuously, with a moving
+      // white dash overlay that chases around the shape.
+      c.lineWidth = 7;
       c.strokeStyle = color;
       c.stroke(path);
-      c.lineDashOffset += dash;
+      const dash = Math.max(6, this.scale * 0.1);
+      c.setLineDash([dash, dash]);
+      c.lineDashOffset = -this.now / 24;
+      c.lineWidth = 7;
       c.strokeStyle = '#ffffff';
       c.stroke(path);
       c.setLineDash([]);
