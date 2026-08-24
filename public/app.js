@@ -1453,6 +1453,7 @@ async function leaveRoom(removeSelf = true) {
   const wasPlaying = room?.state === 'playing' && game();
   const ref = roomRef;
   const others = Object.keys(room?.players || {}).filter((id) => id !== playerId);
+  const isHost = room?.hostId === playerId;
 
   if (unsub) { unsub(); unsub = null; }
   if (unsubPulse) { unsubPulse(); unsubPulse = null; }
@@ -1461,8 +1462,9 @@ async function leaveRoom(removeSelf = true) {
 
   if (removeSelf && ref && room) {
     try {
-      if (!others.length) {
-        // Last one out closes the room and its heartbeat, freeing the code.
+      if (!others.length || isHost) {
+        // The creator owns the table: leaving shuts it down for everyone and frees
+        // the code immediately, rather than transferring a room that can linger.
         await deleteDoc(ref);
         if (pulseRef) deleteDoc(pulseRef).catch(() => {});
       } else {
