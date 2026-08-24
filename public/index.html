@@ -24,7 +24,13 @@
 <meta property="og:image:width" content="512">
 <meta property="og:image:height" content="512">
 <meta name="twitter:card" content="summary">
-<link rel="stylesheet" href="styles.css">
+<!-- The ?v= is what stops a new build running against the last build's stylesheet.
+     GitHub Pages serves these with max-age=600, and neither file is fetched by
+     anything that would notice it had changed, so a refresh inside that window can
+     leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
+     either of these drifts from APP_VERSION, because remembering to bump them by
+     hand is exactly the kind of thing that gets forgotten. -->
+<link rel="stylesheet" href="styles.css?v=2026.08.24.21">
 </head>
 <body>
 
@@ -676,6 +682,6 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script type="module" src="app.js"></script>
+<script type="module" src="app.js?v=2026.08.24.21"></script>
 </body>
 </html>

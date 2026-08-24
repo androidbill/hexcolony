@@ -13,6 +13,8 @@ import { makeBoard, RESOURCES, HEXES, VERTS, EDGES, LAYOUT_INFO, layoutInfo,
   useLayout, TOPO, DYNAMIC_MIN, DYNAMIC_MAX, isRed, hexNeighbours } from '../public/board.js';
 import * as R from '../public/rules.js';
 import { botMove } from '../public/bot.js';
+import { APP_VERSION } from '../public/version.js';
+import { readFileSync } from 'node:fs';
 
 let passed = 0;
 const failures = [];
@@ -902,6 +904,17 @@ check('a dynamic island is the same island on every device', () => {
   eq(JSON.stringify(a.tiles), JSON.stringify(b.tiles), 'same seed gave two islands');
   const c = makeBoard(31338, 'random', 'dynamic');
   assert(JSON.stringify(a.tiles) !== JSON.stringify(c.tiles), 'two seeds gave one island');
+});
+
+check('the shipped page asks for this build of the CSS and the JS', () => {
+  // index.html pins styles.css and app.js with ?v=. If one of those drifts from
+  // APP_VERSION, a refresh inside GitHub Pages' ten-minute cache window can leave new
+  // JavaScript being laid out by the previous build's stylesheet — which is not a
+  // failure anything else would catch, because both files load and neither complains.
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  const pinned = [...html.matchAll(/(?:href|src)="(styles\.css|app\.js)\?v=([^"]+)"/g)];
+  eq(pinned.length, 2, 'styles.css and app.js should both carry a ?v=');
+  for (const [, file, v] of pinned) eq(v, APP_VERSION, `${file} is pinned to the wrong build`);
 });
 
 check('the same seed always gives the same island', () => {

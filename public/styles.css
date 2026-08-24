@@ -1292,7 +1292,13 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 
 .actions { display: flex; gap: 7px; }
 .act {
+  /* Equal shares, always. `flex: 1` alone is not enough: a flex item's automatic minimum
+     size stops it shrinking below its own content, so once the bar is tighter than the
+     four labels need, they stop sharing and each keeps whatever its own word happens to
+     measure — "Players" wide, "DEV" narrow. Measured, they part company below about
+     240px. `min-width: 0` removes that floor so the split stays even at any width. */
   flex: 1;
+  min-width: 0;
   border-radius: 13px;
   padding: 11px 5px;
   background: rgba(255, 255, 255, 0.07);
