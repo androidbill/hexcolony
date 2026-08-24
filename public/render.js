@@ -1049,6 +1049,7 @@ export class BoardView {
         c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
       };
       const active = pid === activePid;
+      stripe(R * 0.245, EDGE_INK);
       if (active) {
         // Two offset dashed passes create a continuous player-colour/white zebra border.
         // The dash offset is the only animation: no glow or pulsing competes with it.
@@ -1060,9 +1061,9 @@ export class BoardView {
         stripe(R * 0.27, '#ffffff');
         c.setLineDash([]);
         c.lineDashOffset = 0;
+      } else {
+        stripe(R * 0.215, OUTLINE);
       }
-      stripe(R * 0.245, EDGE_INK);
-      stripe(R * (0.215 + (active ? this.pulse * 0.018 : 0)), OUTLINE);
       stripe(R * 0.125, this.colorOf(pid));
       c.shadowColor = 'transparent';
       c.shadowBlur = 0;
@@ -1128,10 +1129,11 @@ export class BoardView {
     c.stroke(path);
     c.shadowColor = 'transparent';
     c.shadowBlur = 0;
-    c.lineWidth = 7;
-    c.strokeStyle = OUTLINE;
-    c.stroke(path);
-    if (animate) {
+    if (!animate) {
+      c.lineWidth = 7;
+      c.strokeStyle = OUTLINE;
+      c.stroke(path);
+    } else {
       const dash = Math.max(5, this.scale * 0.09);
       c.setLineDash([dash, dash]);
       c.lineDashOffset = -this.now / 42;
