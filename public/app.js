@@ -3212,6 +3212,7 @@ function render() {
   }
 
   view.setGame(g);
+  view.spinPieces = localStorage.getItem('hexcolony_spin_pieces') === 'on';
   // Whatever ended the moment you were in — the timer running out, a 7, someone
   // leaving — the pending "tap the board" is over with it. Clearing it here covers
   // every route out of your turn instead of each one having to remember.
@@ -5086,6 +5087,7 @@ function openSettings() {
 function togState(key) {
   if (key === 'sound') return soundEnabled();
   if (key === 'haptics') return localStorage.getItem('hexcolony_haptics') !== 'off';
+  if (key === 'spin') return localStorage.getItem('hexcolony_spin_pieces') === 'on';
   return localStorage.getItem('hexcolony_awake') === 'on';
 }
 function syncToggles() {
@@ -5099,6 +5101,7 @@ for (const t of document.querySelectorAll('[data-tog]')) {
     const now = !togState(key);
     if (key === 'sound') { setSound(now); if (now) { unlock(); sfx.tap(); } }
     else if (key === 'haptics') { localStorage.setItem('hexcolony_haptics', now ? 'on' : 'off'); if (now) buzz(40); }
+    else if (key === 'spin') { localStorage.setItem('hexcolony_spin_pieces', now ? 'on' : 'off'); view.spinPieces = now; }
     else { localStorage.setItem('hexcolony_awake', now ? 'on' : 'off'); keepAwake(now); }
     syncToggles();
   });

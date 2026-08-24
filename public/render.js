@@ -269,6 +269,7 @@ export class BoardView {
     this.ctx = canvas.getContext('2d');
     this.board = null;
     this.game = null;
+    this.spinPieces = false;
     this.highlights = { verts: [], edges: [], hexes: [], cities: [] };
     this.payout = null;                // what the last roll paid, and to whom
     this.rolled = null;                // the number the dice just showed, and when
@@ -1059,17 +1060,20 @@ export class BoardView {
     // that at nearly twice size a neighbour would otherwise paint over the very piece the
     // jump is pointing at.
     const jumping = [];
+    const activePid = this.game.seats?.[this.game.turn?.seat];
     for (const [vid, b] of Object.entries(this.game.bldg)) {
       const v = Number(vid);
       const k = this.buildPop(v);
       if (k > 0) { jumping.push([v, b, k]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p)) : this.drawSettlement(x, y, this.colorOf(b.p));
+      const spin = this.spinPieces && b.p === activePid;
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, spin) : this.drawSettlement(x, y, this.colorOf(b.p), 1, spin);
     }
     for (const [v, b, k] of jumping) {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const grow = 1 + k * (BUILD_PEAK - 1);
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow) : this.drawSettlement(x, y, this.colorOf(b.p), grow);
+      const spin = this.spinPieces && b.p === activePid;
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, spin) : this.drawSettlement(x, y, this.colorOf(b.p), grow, spin);
     }
   }
 
@@ -1080,7 +1084,7 @@ export class BoardView {
    * Stand a piece on a corner, sized by height so a city reads as wider than a house
    * rather than merely taller.
    */
-  drawPiece(kind, x, y, color, height) {
+  drawPiece(kind, x, y, color, height, spin = false) {
     const spec = PIECES[kind];
     if (!spec) return;
     const c = this.ctx;
@@ -1092,6 +1096,7 @@ export class BoardView {
     // Bottom-centre of the drawing on the corner, nudged down so it sits on the
     // junction instead of floating above it.
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
+    if (spin) { c.translate(0, -spec.box.h * 0.28); c.rotate(this.now / 900); c.translate(0, spec.box.h * 0.28); }
 
     const path = spec.path;
     c.shadowColor = 'rgba(0, 0, 0, 0.5)';
@@ -1113,8 +1118,8 @@ export class BoardView {
     c.restore();
   }
 
-  drawSettlement(x, y, color, grow = 1) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow); }
-  drawCity(x, y, color, grow = 1) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow); }
+  drawSettlement(x, y, color, grow = 1, spin = false) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow, spin); }
+  drawCity(x, y, color, grow = 1, spin = false) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow, spin); }
 
   drawRobber() {
     if (!this.game) return;
