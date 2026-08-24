@@ -154,11 +154,11 @@ function confetti(winnerColour) {
   box._t = setTimeout(() => { box.hidden = true; box.innerHTML = ''; }, CONFETTI_MS);
 }
 
-// Three seconds of somebody's name across the middle of the screen. Six people round a
+// A short announcement of somebody's name across the middle of the screen. Six people round a
 // table watching six phones needed one place that said whose go it was without anyone
 // having to read the score strip and work it out.
 let shoutTimer = null;
-function shoutout(msg, accent) {
+function shoutout(msg, accent, duration = 3000) {
   const box = $('shoutout');
   const card = $('shoutout-card');
   const lines = Array.isArray(msg) ? msg : [msg];
@@ -191,7 +191,7 @@ function shoutout(msg, accent) {
   void card.offsetWidth;
   card.classList.add('show');
   clearTimeout(shoutTimer);
-  shoutTimer = setTimeout(() => { card.classList.remove('show'); box.hidden = true; }, 3000);
+  shoutTimer = setTimeout(() => { card.classList.remove('show'); box.hidden = true; }, duration);
 }
 
 /**
@@ -3288,7 +3288,7 @@ function announceTurn(g) {
   // that did not. A game still on its first placement is the exception: that turn is
   // news to everyone watching it start.
   if (first && !(g.phase === 'setup' && (g.setup?.at ?? 0) === 0)) return;
-  shoutout(`${nameFor(up)}'s turn`, colorFor(up));
+  shoutout(`${nameFor(up)}'s turn`, colorFor(up), 2000);
 }
 
 function bumpCards(list) {
@@ -4073,7 +4073,7 @@ function renderWantRow(g) {
   $('trade-want').innerHTML = '<span class="trade-lead">I want</span>' + RESOURCES.map((r) => {
     const n = wantSel[r] || 0;
     return pickCell(r, n, resCard(r, {
-      size: 'sm', count: n || null, selected: !!n, dim: !n,
+      size: 'sm', count: n || null, selected: !!n,
       label: `bank ${g.bank[r] || 0}`,
     }), 'data-want', `Ask for ${RES_NAME[r]}${n ? ` — ${n} so far` : ''}`);
   }).join('');
