@@ -1009,8 +1009,10 @@ function renderRoomList() {
 
   if (!open.length) {
     $('room-list').innerHTML = '';
-    $('rooms-hint').textContent = 'No open rooms right now. Create one, and anybody looking '
-      + 'at this screen will see it appear.';
+    // "Create one" used to point at a button on this screen. It lives on the way in now,
+    // so the sentence has to say where it went rather than at thin air.
+    $('rooms-hint').textContent = 'No open rooms right now. Go back and create one, and '
+      + 'anybody looking at this screen will see it appear.';
     return;
   }
   $('rooms-hint').textContent = open.length === 1

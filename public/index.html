@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.24.21">
+<link rel="stylesheet" href="styles.css?v=2026.08.24.22">
 </head>
 <body>
 
@@ -64,6 +64,11 @@
     </div>
 
     <div class="card" id="online-panel">
+      <button class="btn btn-key" id="btn-rooms-create">
+        <span class="btn-label">Create a Room</span>
+        <span class="btn-sub">Open a table and let people join</span>
+      </button>
+
       <button class="btn btn-ghost" id="btn-rooms">
         <span class="btn-label">Browse Rooms</span>
         <span class="btn-sub">See who is waiting for players</span>
@@ -112,13 +117,6 @@
     <div class="presence-summary" id="presence-summary">
       <b>Online now: —</b><span>Playing: — · In lobby: —</span>
     </div>
-    <button class="btn btn-key" id="btn-rooms-create">
-      <span class="btn-label">Create a Room</span>
-      <span class="btn-sub">Open a table and let people join</span>
-    </button>
-
-    <div class="or-split"><span>or join one below</span></div>
-
     <div class="room-list" id="room-list"></div>
     <p class="hint" id="rooms-hint"></p>
   </div>
@@ -682,6 +680,6 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script type="module" src="app.js?v=2026.08.24.21"></script>
+<script type="module" src="app.js?v=2026.08.24.22"></script>
 </body>
 </html>
