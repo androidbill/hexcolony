@@ -2193,12 +2193,6 @@ for (const b of document.querySelectorAll('[data-set]')) {
   });
 }
 
-for (const b of document.querySelectorAll('[data-board]')) {
-  b.addEventListener('click', () => {
-    if (setSetting({ 'settings.boardMode': b.dataset.board })) sfx.tap();
-  });
-}
-
 for (const b of document.querySelectorAll('[data-timer]')) {
   b.addEventListener('click', () => {
     if (setSetting({ 'settings.turnSeconds': Number(b.dataset.timer) })) sfx.tap();
@@ -2242,11 +2236,7 @@ function pickSea(key) {
 for (const b of document.querySelectorAll('[data-layout]')) {
   b.addEventListener('click', () => {
     const layout = b.dataset.layout;
-    const patch = { 'settings.layout': layout };
-    // The fixed "Standard" arrangement only exists for the 19-tile island, so choosing
-    // the expansion also drops back to a shuffled board rather than silently ignoring it.
-    if (layout === 'expansion') patch['settings.boardMode'] = 'random';
-    if (setSetting(patch)) sfx.tap();
+    if (setSetting({ 'settings.layout': layout })) sfx.tap();
   });
 }
 
@@ -2330,12 +2320,6 @@ function renderLobby() {
   drawSeaRow('sea-row', sea, pickSea);
   $('sea-blurb').textContent = `${seaAt(sea).name} — the water around the island`;
   applySea();
-  for (const b of document.querySelectorAll('[data-board]')) {
-    b.classList.toggle('on', b.dataset.board === (s.boardMode || 'random'));
-    // A fixed arrangement is only defined for the classic island.
-    b.disabled = layout !== 'classic' && b.dataset.board === 'classic';
-    b.style.opacity = b.disabled ? '0.4' : '';
-  }
 
   const enough = ids.length >= 2;
   // Starting with somebody still grey would seat them in a colour they never chose, and
