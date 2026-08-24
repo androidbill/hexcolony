@@ -158,7 +158,7 @@ function confetti(winnerColour) {
 // table watching six phones needed one place that said whose go it was without anyone
 // having to read the score strip and work it out.
 let shoutTimer = null;
-function shoutout(msg, accent, duration = 3000) {
+function shoutout(msg, accent, duration = 2000) {
   const box = $('shoutout');
   const card = $('shoutout-card');
   const lines = Array.isArray(msg) ? msg : [msg];
