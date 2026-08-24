@@ -3958,6 +3958,10 @@ function stopTrade(quiet = false) {
 function resetTrade() {
   trading = false;
   giveSel = {}; wantSel = {}; portHint = null;
+  // Rejection choices belong to one game only. A fresh room or round starts with every
+  // player allowed to trade, rather than carrying a previous table's choices over.
+  tradeRejectFrom.clear();
+  localStorage.removeItem(TRADE_REJECT_KEY);
   notedAccepts.clear();
   expiredOffers.clear();
   autoDeclined.clear();
