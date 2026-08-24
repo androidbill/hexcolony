@@ -283,6 +283,7 @@ export class BoardView {
     this.fitScale = 40;
     this.pulse = 0;
     this.animatePieces = true;
+    this.pieceGroups = null;
     this.onPick = null;                // ({ kind, id }) => void
     this._pointers = new Map();
     this._pinch = null;
@@ -301,6 +302,27 @@ export class BoardView {
 
   setBoard(board) { this.board = board; this.built.clear(); this.fit(); }
   setGame(game) { this.game = game; }
+  /** Group a player's touching roads and buildings so each connected group shares one chase. */
+  connectedPiecePhases() {
+    const g = this.game;
+    if (!g) return new Map();
+    const parent = new Map();
+    const find = (x) => { if (!parent.has(x)) parent.set(x, x); if (parent.get(x) !== x) parent.set(x, find(parent.get(x))); return parent.get(x); };
+    const join = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(ra, rb); };
+    const at = new Map();
+    for (const [eid, pid] of Object.entries(g.roads || {})) {
+      const e = EDGES[eid]; if (!e) continue;
+      const key = `r:${eid}`; find(key);
+      for (const v of [e.a, e.b]) { const k = `${pid}:${v}`; if (at.has(k)) join(key, at.get(k)); else at.set(k, key); }
+    }
+    for (const [vid, b] of Object.entries(g.bldg || {})) {
+      const key = `b:${vid}`; find(key); const k = `${b.p}:${vid}`;
+      if (at.has(k)) join(key, at.get(k)); else at.set(k, key);
+    }
+    const phase = new Map(), roots = new Map();
+    for (const key of parent.keys()) { const root = find(key); if (!roots.has(root)) roots.set(root, roots.size * 90); phase.set(key, roots.get(root)); }
+    return phase;
+  }
   setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [], cities: [] }; }
   setSea(key) { this.sea = seaAt(key); }
   /** `{ hexes, spots: [{ v, colour, city }], until }`, or null for nothing to show. */
@@ -1030,6 +1052,7 @@ export class BoardView {
     if (!this.game) return;
     const c = this.ctx;
     const R = this.scale;
+    const phases = this.connectedPiecePhases();
     const activePid = this.game.seats?.[this.game.turn?.seat];
     for (const [eid, pid] of Object.entries(this.game.roads)) {
       const e = EDGES[eid];
@@ -1073,7 +1096,7 @@ export class BoardView {
         const dash = Math.max(6, R * 0.075);
         c.lineCap = 'butt';
         c.setLineDash([dash, dash]);
-        c.lineDashOffset = -this.now / 40;
+        c.lineDashOffset = -(this.now + (phases.get(`r:${eid}`) || 0)) / 40;
         c.lineWidth = Math.max(3, R * 0.035);
         c.strokeStyle = '#ffffff';
         c.stroke(perimeter);
@@ -1096,12 +1119,14 @@ export class BoardView {
     // jump is pointing at.
     const jumping = [];
     const activePid = this.game.seats?.[this.game.turn?.seat];
+    const phases = this.connectedPiecePhases();
     for (const [vid, b] of Object.entries(this.game.bldg)) {
       const v = Number(vid);
       const k = this.buildPop(v);
       if (k > 0) { jumping.push([v, b, k]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const animate = this.animatePieces && b.p === activePid;
+      this.piecePhase = phases.get(`b:${vid}`) || 0;
       b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, animate)
         : this.drawSettlement(x, y, this.colorOf(b.p), 1, animate);
     }
@@ -1109,6 +1134,7 @@ export class BoardView {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const grow = 1 + k * (BUILD_PEAK - 1);
       const animate = this.animatePieces && b.p === activePid;
+      this.piecePhase = phases.get(`b:${v}`) || 0;
       b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, animate)
         : this.drawSettlement(x, y, this.colorOf(b.p), grow, animate);
     }
@@ -1164,7 +1190,7 @@ export class BoardView {
       c.lineCap = 'butt';
       c.lineJoin = 'miter';
       c.setLineDash([dash, dash]);
-      c.lineDashOffset = -this.now / 40;
+      c.lineDashOffset = -(this.now + (this.piecePhase || 0)) / 40;
       c.lineWidth = 7;
       c.strokeStyle = '#ffffff';
       c.stroke(path);
