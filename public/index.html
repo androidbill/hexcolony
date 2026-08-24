@@ -218,6 +218,24 @@
         </div>
       </div>
 
+      <div class="opt-row col" id="discard-timer-row">
+        <span class="opt-l">Time to discard<em>How long everybody gets to choose after a 7</em></span>
+        <div class="seg-row">
+          <button class="seg on" data-dtimer="30">30s</button>
+          <button class="seg" data-dtimer="45">45s</button>
+          <button class="seg" data-dtimer="60">60s</button>
+        </div>
+      </div>
+
+      <div class="opt-row col" id="discard-timer-row">
+        <span class="opt-l">Time to discard<em>How long everybody gets to choose after a 7</em></span>
+        <div class="seg-row">
+          <button class="seg on" data-dtimer="30">30s</button>
+          <button class="seg" data-dtimer="45">45s</button>
+          <button class="seg" data-dtimer="60">60s</button>
+        </div>
+      </div>
+
       <div class="opt-row col">
         <span class="opt-l">Sea<em id="sea-blurb">The water around the island</em></span>
         <div class="sea-row" id="sea-row"></div>
@@ -322,11 +340,18 @@
 </div>
 
 <div class="sheet" id="sheet-discard">
-  <h3 class="sheet-title">The robber takes his cut</h3>
-  <p class="sheet-sub" id="discard-sub">Choose cards to discard.</p>
-  <div class="res-picker" id="discard-picker"></div>
+  <div class="discard-head">
+    <h3 class="sheet-title" id="discard-title">You need to discard 4 cards</h3>
+    <div class="discard-clock" id="discard-clock"><span id="discard-secs">30</span></div>
+  </div>
+
+  <div class="discard-bin" id="discard-bin"></div>
+
+  <div class="field-label">Your hand <em id="discard-hint">tap a card to move it up</em></div>
+  <div class="discard-hand" id="discard-hand"></div>
+
   <div class="sheet-actions">
-    <button class="btn btn-key" id="btn-discard"><span class="btn-label">Discard</span></button>
+    <button class="btn btn-key" id="btn-discard"><span class="btn-label">OK</span></button>
   </div>
 </div>
 
@@ -421,6 +446,24 @@
     <div class="seg-row">
       <button class="seg on" data-solo-robber="on">Robber</button>
       <button class="seg" data-solo-robber="off">No robber</button>
+    </div>
+  </div>
+
+  <div class="opt-row col" id="solo-discard-timer-row">
+    <span class="opt-l">Time to discard<em>How long you get to choose after a 7</em></span>
+    <div class="seg-row">
+      <button class="seg on" data-solo-dtimer="30">30s</button>
+      <button class="seg" data-solo-dtimer="45">45s</button>
+      <button class="seg" data-solo-dtimer="60">60s</button>
+    </div>
+  </div>
+
+  <div class="opt-row col" id="solo-discard-timer-row">
+    <span class="opt-l">Time to discard<em>How long you get to choose after a 7</em></span>
+    <div class="seg-row">
+      <button class="seg on" data-solo-dtimer="30">30s</button>
+      <button class="seg" data-solo-dtimer="45">45s</button>
+      <button class="seg" data-solo-dtimer="60">60s</button>
     </div>
   </div>
 

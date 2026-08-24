@@ -86,6 +86,82 @@ check('a timed game keeps its allowance after setup', () => {
   eq(g.turn.allowMs, R.ROLL_SECONDS * 1000, 'roll allowance');
 });
 
+// ---------------------------------------------------------------- the discard clock
+
+/**
+ * Dice that always come up seven.
+ *
+ * applyMove takes each die as 1 + floor(rng() * 6), so 0.4 is a three and 0.55 is a four.
+ * Worth spelling out: the first attempt at this used two values that made ten, and every
+ * test below then quietly checked the wrong branch of the roll.
+ */
+const sevens = () => { let k = 0; return () => (k++ % 2 === 0 ? 0.4 : 0.55); };
+
+/** A game at the roll, with everybody holding enough to owe a discard. */
+function sevenState(opts = {}) {
+  let g = autoSetup(newG(opts));
+  for (const pid of SEATS) for (const r of RESOURCES) g.players[pid].res[r] = 3;
+  g.phase = 'roll';
+  g.turn.rolled = false;
+  return { g, me: R.currentPid(g) };
+}
+
+check('a seven starts the discard clock, not the turn clock', () => {
+  const { g, me } = sevenState({ turnSeconds: 15, discardSeconds: 45 });
+  const res = R.applyMove(g, me, { type: 'roll' }, sevens());
+  assert(res.ok, `roll refused: ${res.error}`);
+  eq(res.game.phase, 'discard', 'phase after a seven');
+  eq(res.game.turn.allowMs, 45000, 'the allowance while discarding');
+  assert(res.game.turn.clockRestart, 'the discard clock needs its own start stamp');
+});
+
+check('the discard clock runs even with the turn timer off', () => {
+  // A discard blocks the whole table, so it is timed whatever the game is set to —
+  // the same call as the opening placement.
+  const { g, me } = sevenState({ turnSeconds: 0, discardSeconds: 30 });
+  const res = R.applyMove(g, me, { type: 'roll' }, sevens());
+  assert(res.ok, `roll refused: ${res.error}`);
+  eq(res.game.phase, 'discard', 'phase');
+  eq(res.game.turn.allowMs, 30000, 'allowance in an untimed game');
+});
+
+check('the turn gets a whole allowance back once the discards are done', () => {
+  const { g, me } = sevenState({ turnSeconds: 30, discardSeconds: 60 });
+  let after = R.applyMove(g, me, { type: 'roll' }, sevens()).game;
+  eq(after.turn.allowMs, 60000, 'discarding');
+
+  let guard = 0;
+  while (after.phase === 'discard') {
+    const step = R.applyMove(after, SEATS[0], { type: 'timeout' }, rngFrom(guard + 1));
+    assert(step.ok, `forced discard refused: ${step.error}`);
+    after = step.game;
+    assert(guard++ < 10, 'the discards never cleared');
+  }
+  // The roller was only ever waiting, so none of that time was theirs to lose.
+  eq(after.phase, 'robber', 'phase once everybody has discarded');
+  eq(after.turn.allowMs, 30000, 'the turn allowance afterwards');
+});
+
+check('the discard length is a choice, and a bad one is ignored', () => {
+  for (const secs of R.DISCARD_OPTIONS) {
+    const g = R.newGame(SEATS, { seed: 1, layout: 'classic', discardSeconds: secs }, rngFrom(2));
+    eq(g.discardSeconds, secs, `discardSeconds ${secs}`);
+  }
+  const bad = R.newGame(SEATS, { seed: 1, layout: 'classic', discardSeconds: 12 }, rngFrom(2));
+  eq(bad.discardSeconds, R.DISCARD_SECONDS, 'an option that is not on the list');
+  const none = R.newGame(SEATS, { seed: 1, layout: 'classic' }, rngFrom(2));
+  eq(none.discardSeconds, R.DISCARD_SECONDS, 'no choice made');
+});
+
+check('a game from before the discard clock existed still gets one', () => {
+  const { g, me } = sevenState({ turnSeconds: 15 });
+  delete g.discardSeconds;                       // as an in-flight room would arrive
+  const res = R.applyMove(g, me, { type: 'roll' }, sevens());
+  assert(res.ok, `roll refused: ${res.error}`);
+  eq(res.game.discardSeconds, R.DISCARD_SECONDS, 'the default filled in');
+  eq(res.game.turn.allowMs, R.DISCARD_SECONDS * 1000, 'allowance');
+});
+
 // ---------------------------------------------------------------- running out of time
 
 check('a whole opening can be played by the clock alone', () => {

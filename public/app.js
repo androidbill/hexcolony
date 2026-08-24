@@ -531,7 +531,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: SEA_DEFAULT },
+      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
       players: { [playerId]: freshPlayer(name) },
       order: [],
       game: null,
@@ -616,7 +616,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, sea: SEA_DEFAULT },
+        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
         players: { [playerId]: freshPlayer(name) },
         order: [],
         game: null,
@@ -1917,7 +1917,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   const order = shuffle([playerId, ...bots.map((b) => b.id)]);
   const settings = {
     targetVP, discardLimit, boardMode: 'random', layout, useRobber,
-    turnSeconds: soloTurnSeconds, sea: soloSea,
+    turnSeconds: soloTurnSeconds, sea: soloSea, discardSeconds: soloDiscardSeconds,
   };
 
   // Straight to the map picker: solo has a host too, and it is you.
@@ -1974,6 +1974,7 @@ let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
 let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
 let soloSea = localStorage.getItem('hexcolony_solo_sea') || SEA_DEFAULT;
+let soloDiscardSeconds = Number(localStorage.getItem('hexcolony_solo_dtimer')) || R.DISCARD_SECONDS;
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
@@ -2011,8 +2012,20 @@ function drawSoloSheet() {
   // because there the host is changing settings other people are watching — here nobody
   // else is looking, so it can simply go.
   $('solo-discard-row').hidden = !soloRobber;
+  $('solo-discard-timer-row').hidden = !soloRobber;
+  for (const b of document.querySelectorAll('[data-solo-dtimer]')) {
+    b.classList.toggle('on', Number(b.dataset.soloDtimer) === soloDiscardSeconds);
+  }
 }
 
+for (const b of document.querySelectorAll('[data-solo-dtimer]')) {
+  b.addEventListener('click', () => {
+    soloDiscardSeconds = Number(b.dataset.soloDtimer);
+    localStorage.setItem('hexcolony_solo_dtimer', String(soloDiscardSeconds));
+    sfx.tap();
+    drawSoloSheet();
+  });
+}
 for (const b of document.querySelectorAll('[data-solo-timer]')) {
   b.addEventListener('click', () => {
     soloTurnSeconds = Number(b.dataset.soloTimer);
@@ -2132,6 +2145,12 @@ for (const b of document.querySelectorAll('[data-timer]')) {
   });
 }
 
+for (const b of document.querySelectorAll('[data-dtimer]')) {
+  b.addEventListener('click', () => {
+    if (setSetting({ 'settings.discardSeconds': Number(b.dataset.dtimer) })) sfx.tap();
+  });
+}
+
 for (const b of document.querySelectorAll('[data-robber]')) {
   b.addEventListener('click', () => {
     if (setSetting({ 'settings.useRobber': b.dataset.robber === 'on' })) sfx.tap();
@@ -2235,6 +2254,13 @@ function renderLobby() {
     ? `${turnSeconds}s to act, ${R.ROLL_SECONDS}s to roll. Doing something adds 10s.`
     : 'No limit — take as long as you like.';
 
+  // Only spent when a seven can make somebody discard, so it follows the robber setting.
+  const discardSeconds = R.DISCARD_OPTIONS.includes(s.discardSeconds)
+    ? s.discardSeconds : R.DISCARD_SECONDS;
+  for (const b of document.querySelectorAll('[data-dtimer]')) {
+    b.classList.toggle('on', Number(b.dataset.dtimer) === discardSeconds);
+  }
+
   const useRobber = s.useRobber !== false;
   for (const b of document.querySelectorAll('[data-robber]')) {
     b.classList.toggle('on', (b.dataset.robber === 'on') === useRobber);
@@ -2244,6 +2270,7 @@ function renderLobby() {
     : 'No discard, no robber — just take a card from any player.';
   // The discard limit has nothing to govern once the robber is off.
   for (const b of document.querySelectorAll('[data-set="discard"]')) b.disabled = !useRobber;
+  $('discard-timer-row').hidden = !useRobber;
   const discardRow = $('set-discard').closest('.opt-row');
   if (discardRow) discardRow.style.opacity = useRobber ? '' : '0.4';
 
@@ -2909,12 +2936,29 @@ function drawTimer() {
     return;
   }
   const left = secondsLeft(g);
-  if (left === null) { el.hidden = true; return; }
+  if (left === null) { el.hidden = true; drawDiscardClock(null); return; }
   const mine = R.isTurn(g, playerId);
   const secs = Math.max(0, Math.ceil(left));
   el.hidden = false;
   $('timer-secs').textContent = String(secs);
   el.classList.toggle('mine', mine);
+  el.classList.toggle('urgent', secs <= 5);
+  drawDiscardClock(secs);
+}
+
+/**
+ * The same countdown, repeated inside the discard sheet.
+ *
+ * The sheet covers the board, so the clock on the board is behind it — and this is the
+ * one moment where the clock is counting down on several people at once and everybody
+ * needs to see it. Same number, read from the same place; not a second timer.
+ */
+function drawDiscardClock(secs) {
+  const el = $('discard-clock');
+  if (!el) return;
+  if (secs === null) { el.hidden = true; return; }
+  el.hidden = false;
+  $('discard-secs').textContent = String(secs);
   el.classList.toggle('urgent', secs <= 5);
 }
 
@@ -3697,39 +3741,84 @@ function resPicker(elId, counts, opts = {}) {
   }).join('');
 }
 
+/**
+ * The discard, as moving cards rather than working a set of counters.
+ *
+ * Two areas: a red bin for what you are giving up, and your hand below it. Tapping a card
+ * in the hand sends it up; tapping one in the bin sends it back. That is the whole
+ * interaction, and it is reversible one card at a time, which is what the plus-and-minus
+ * grid never quite was — with that you had to work out which counter you had over-clicked.
+ *
+ * Cards are drawn individually rather than stacked with a count, because "tap a card to
+ * move it" only reads as that if there is a card there to tap.
+ */
+let discardChosen = {};
+
 function openDiscard(g) {
-  const owed = g.pending.discard[playerId] || 0;
-  const chosen = {};
-  const draw = () => {
-    const total = Object.values(chosen).reduce((a, b) => a + b, 0);
-    $('discard-sub').textContent = `Rolled a 7 — choose ${owed} card${owed > 1 ? 's' : ''} to lose. (${total}/${owed})`;
-    resPicker('discard-picker', chosen);
-    $('btn-discard').disabled = total !== owed;
-    for (const b of document.querySelectorAll('#discard-picker [data-pm]')) {
-      b.addEventListener('click', () => {
-        const r = b.dataset.r;
-        const p = g.players[playerId];
-        if (b.dataset.pm === '+') {
-          if ((chosen[r] || 0) >= (p.res[r] || 0)) return;
-          if (Object.values(chosen).reduce((a, c) => a + c, 0) >= owed) return;
-          chosen[r] = (chosen[r] || 0) + 1;
-        } else {
-          if (!chosen[r]) return;
-          chosen[r] -= 1;
-          if (!chosen[r]) delete chosen[r];
-        }
-        sfx.tap();
-        draw();
-      });
-    }
-  };
-  draw();
-  $('btn-discard').onclick = () => {
-    closeSheet();
-    send({ type: 'discard', res: chosen });
-  };
+  discardChosen = {};
+  drawDiscard(g);
   sheet('sheet-discard');
 }
+
+function drawDiscard(g) {
+  const owed = g.pending.discard[playerId] || 0;
+  const held = g.players[playerId]?.res || {};
+  const staged = Object.values(discardChosen).reduce((a, b) => a + b, 0);
+
+  $('discard-title').textContent = `You need to discard ${owed} card${owed === 1 ? '' : 's'}`;
+
+  // One button per card, in each place, so a tap always means exactly one card.
+  const cards = (counts, where) => RESOURCES.flatMap((r) =>
+    Array.from({ length: counts[r] || 0 }, (_, i) => `
+      <button class="discard-card" data-move="${where}:${r}" data-k="${r}${i}"
+        aria-label="${where === 'bin' ? `Take back ${RES_NAME[r]}` : `Discard ${RES_NAME[r]}`}">
+        ${resCard(r, { size: 'sm' })}
+      </button>`)).join('');
+
+  const bin = $('discard-bin');
+  bin.classList.toggle('empty', !staged);
+  bin.innerHTML = staged
+    ? cards(discardChosen, 'bin')
+    : `<span class="discard-bin-hint">Tap ${owed} card${owed === 1 ? '' : 's'} below and they
+        will appear here. Tap one here to put it back.</span>`;
+
+  const remaining = {};
+  for (const r of RESOURCES) remaining[r] = (held[r] || 0) - (discardChosen[r] || 0);
+  const hand = $('discard-hand');
+  hand.classList.toggle('done', staged >= owed);
+  hand.innerHTML = cards(remaining, 'hand');
+
+  $('discard-hint').textContent = staged >= owed
+    ? 'that is enough — tap OK'
+    : `${owed - staged} more`;
+  $('btn-discard').disabled = staged !== owed;
+
+  for (const b of document.querySelectorAll('#sheet-discard [data-move]')) {
+    b.addEventListener('click', () => {
+      const [where, r] = b.dataset.move.split(':');
+      if (where === 'hand') {
+        if (staged >= owed) return;
+        if ((discardChosen[r] || 0) >= (held[r] || 0)) return;
+        discardChosen[r] = (discardChosen[r] || 0) + 1;
+      } else {
+        if (!discardChosen[r]) return;
+        discardChosen[r] -= 1;
+        if (!discardChosen[r]) delete discardChosen[r];
+      }
+      sfx.tap();
+      drawDiscard(g);
+    });
+  }
+}
+
+$('btn-discard').addEventListener('click', () => {
+  const g = game();
+  if (!g) return;
+  const owed = g.pending.discard[playerId] || 0;
+  if (Object.values(discardChosen).reduce((a, b) => a + b, 0) !== owed) return;
+  closeSheet();
+  send({ type: 'discard', res: discardChosen });
+});
 
 function openPickRes(kind) {
   const g = game();

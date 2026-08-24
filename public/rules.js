@@ -37,6 +37,16 @@ export const ROLL_SECONDS = 10;                    // fixed: rolling is not a de
 // the others to look at while they wait. Ninety seconds is long enough to think about an
 // opening and short enough that a phone that went to sleep does not end the evening.
 export const SETUP_SECONDS = 90;
+
+// Discarding after a seven gets its own allowance, and gets it whether or not the game is
+// using a turn timer at all.
+//
+// It is not the turn's time being spent. Everyone who is over the limit discards at once,
+// nobody can do anything until they have all finished, and the player whose turn it is
+// gets a fresh allowance afterwards — so this is the one clock that is running for
+// several people at the same time, and the only one whose expiry does not end a turn.
+export const DISCARD_OPTIONS = [30, 45, 60];
+export const DISCARD_SECONDS = 30;
 export const ACTION_BONUS_MS = 10000;              // earned by actually doing something
 export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expansion
 
@@ -246,6 +256,8 @@ export function newGame(seats, settings, rng = Math.random) {
     phase: 'setup',
     setup: { order, at: 0, need: 's', lastV: null },
     turnSeconds: TURN_OPTIONS.includes(settings.turnSeconds) ? settings.turnSeconds : 0,
+    discardSeconds: DISCARD_OPTIONS.includes(settings.discardSeconds)
+      ? settings.discardSeconds : DISCARD_SECONDS,
     turn: {
       seat: order[0], dice: null, rolled: false, playedDev: false, num: 0, freeRoads: 0,
       // The first player is already on the clock as the board appears.
@@ -788,6 +800,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
   // Rather than carry the old shape around, the list simply starts empty: a live offer is
   // lost across that one deploy and can be made again, which costs nothing.
   if (!Array.isArray(g.trades)) { g.trades = []; g.tradeIds = g.tradeIds || 0; }
+  if (!DISCARD_OPTIONS.includes(g.discardSeconds)) g.discardSeconds = DISCARD_SECONDS;
   const events = [];
   // Rebuilding the board here is also what switches the shared topology to this
   // game's layout, so every rules helper below reads the right island.
@@ -873,14 +886,18 @@ export function applyMove(state, pid, move, rng = Math.random) {
         if (Object.keys(owed).length) {
           g.pending.discard = owed;
           g.phase = 'discard';
-        } else {
-          afterSeven(g, events, rng);
+          // The turn's clock stops here and the discard's starts. Whoever is over the
+          // limit is choosing at their own pace; the roller is only waiting, and gets a
+          // whole allowance back once the table is done — see afterSeven.
+          startClock(g, g.discardSeconds || DISCARD_SECONDS, true);
+          return ok();
         }
+        afterSeven(g, events, rng);
       } else {
         produce(g, board, roll, events);
         g.phase = 'build';
       }
-      // Whatever the roll led to, the acting allowance starts now.
+      // Whatever else the roll led to, the acting allowance starts now.
       startClock(g, g.turnSeconds);
       return ok();
     }

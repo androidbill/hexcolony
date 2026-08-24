@@ -482,6 +482,50 @@ button { background: none; border: 0; cursor: pointer; }
   min-width: 30px; width: auto; padding: 0 8px;
 }
 
+/* ------------------------------------------------------------ discarding */
+.discard-head { display: flex; align-items: flex-start; gap: 10px; }
+.discard-head .sheet-title { flex: 1; margin-bottom: 2px; }
+.discard-clock {
+  flex: 0 0 auto;
+  min-width: 40px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 15px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.discard-clock.urgent {
+  border-color: var(--danger); color: #ff9fa1;
+  animation: timer-tick 1s steps(2) infinite;
+}
+
+/* What you are about to lose. Red, because it is the one area on screen where tapping
+   costs you something, and it holds its height whether full or empty so the cards below
+   never shift under your finger between taps. */
+.discard-bin {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  align-content: flex-start;
+  min-height: 104px;
+  margin: 10px 0 14px;
+  padding: 9px;
+  border: 2px solid var(--danger);
+  border-radius: var(--r);
+  background: rgba(229, 72, 77, 0.09);
+}
+.discard-bin.empty {
+  align-content: center; justify-content: center;
+  border-style: dashed;
+}
+.discard-bin-hint { color: var(--dim); font-size: 12px; text-align: center; padding: 0 12px; }
+
+.discard-hand { display: flex; flex-wrap: wrap; gap: 6px; min-height: 52px; }
+/* Full: the hand is no longer the thing to tap, so it stops asking to be. */
+.discard-hand.done { opacity: 0.4; pointer-events: none; }
+
+.discard-card { padding: 0; background: none; border: 0; line-height: 0; }
+.discard-card:active { transform: scale(0.9); }
+
 /* ------------------------------------------------------------ trading */
 /* The rate under each card it prices. Gold whenever a port has beaten the standard 4:1,
    which is the only reason this number is ever anything else. */
