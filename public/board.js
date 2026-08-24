@@ -328,7 +328,7 @@ export const LAYOUT_INFO = {
   },
   star: {
     key: 'star',
-    label: 'Star',
+    label: 'Beetle',
     tiles: 41,
     blurb: '41 tiles in a six-pointed island. Long coast, narrow waist, room for six.',
     terrain: { forest: 8, pasture: 8, fields: 8, hills: 7, mountains: 7, desert: 3 },
@@ -351,7 +351,7 @@ export const LAYOUT_INFO = {
   },
   newfoundland: {
     key: 'newfoundland',
-    label: 'Newfoundland',
+    label: 'Island',
     tiles: 52,
     blurb: '52 tiles shaped like the island. The Avalon is one tile from the mainland.',
     terrain: { forest: 10, pasture: 10, fields: 10, hills: 9, mountains: 9, desert: 4 },
