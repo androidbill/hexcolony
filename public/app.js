@@ -5098,6 +5098,7 @@ function openSettings() {
 function togState(key) {
   if (key === 'sound') return soundEnabled();
   if (key === 'haptics') return localStorage.getItem('hexcolony_haptics') !== 'off';
+  if (key === 'pieces') return room?.settings?.animatePieces !== false;
   return localStorage.getItem('hexcolony_awake') === 'on';
 }
 function syncToggles() {
@@ -5111,6 +5112,9 @@ for (const t of document.querySelectorAll('[data-tog]')) {
     const now = !togState(key);
     if (key === 'sound') { setSound(now); if (now) { unlock(); sfx.tap(); } }
     else if (key === 'haptics') { localStorage.setItem('hexcolony_haptics', now ? 'on' : 'off'); if (now) buzz(40); }
+    else if (key === 'pieces') {
+      if (setSetting({ 'settings.animatePieces': now })) sfx.tap();
+    }
     else { localStorage.setItem('hexcolony_awake', now ? 'on' : 'off'); keepAwake(now); }
     syncToggles();
   });
