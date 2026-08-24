@@ -1054,12 +1054,16 @@ export class BoardView {
         // The player's colour is the full thick outline; moving white dashes replace
         // portions of it so the outline itself reads as a chasing zebra pattern.
         stripe(R * 0.215, this.colorOf(pid));
-        const dash = Math.max(5, R * 0.09);
+        const dash = Math.max(8, R * 0.14);
+        // Flat dash ends prevent the short road segment from looking like it flashes
+        // at its rounded endpoints as the pattern advances.
+        c.lineCap = 'butt';
         c.setLineDash([dash, dash]);
-        c.lineDashOffset = -this.now / 24;
+        c.lineDashOffset = -this.now / 50;
         stripe(R * 0.215, '#ffffff');
         c.setLineDash([]);
         c.lineDashOffset = 0;
+        c.lineCap = 'round';
       } else {
         stripe(R * 0.215, OUTLINE);
       }
