@@ -583,7 +583,6 @@ export class BoardView {
     this.drawBuildings();
     this.drawRobber();
     this.drawVertexHighlights();
-    this.drawCityHighlights();
     if (this.zoom) this.drawRolledTokens(this.zoom.k);
   }
 
