@@ -9,7 +9,8 @@
 // Two halves: targeted checks for the awkward cases, and a soak that plays complete
 // games with the real bots while asserting the invariants that must never break.
 
-import { makeBoard, RESOURCES, HEXES, VERTS, EDGES, LAYOUT_INFO } from '../public/board.js';
+import { makeBoard, RESOURCES, HEXES, VERTS, EDGES, LAYOUT_INFO, layoutInfo,
+  useLayout, TOPO, DYNAMIC_MIN, DYNAMIC_MAX, isRed, hexNeighbours } from '../public/board.js';
 import * as R from '../public/rules.js';
 import { botMove } from '../public/bot.js';
 
@@ -854,15 +855,53 @@ check('expansion, six players, robber off', () => {
 
 // ---------------------------------------------------------------- board sanity
 
-check('both islands are the shape they claim to be', () => {
-  for (const [name, info] of Object.entries(LAYOUT_INFO)) {
+check('every island is the shape it claims to be', () => {
+  for (const name of Object.keys(LAYOUT_INFO)) {
     const b = makeBoard(4242, 'random', name);
+    // Asked with the seed, because a dynamic island has no size until one grows it.
+    const info = layoutInfo(name, 4242);
     eq(b.tiles.length, info.tiles, `${name} tile count`);
     eq(b.ports.length, info.ports, `${name} port count`);
     const numbered = b.tiles.filter((t) => t.num).length;
     const deserts = b.tiles.filter((t) => t.terrain === 'desert').length;
     eq(numbered + deserts, info.tiles, `${name} tokens plus deserts`);
   }
+});
+
+check('a dynamic island is playable whatever the seed grows', () => {
+  for (let seed = 1; seed <= 60; seed++) {
+    const b = makeBoard(seed, 'random', 'dynamic');
+    const n = b.tiles.length;
+    assert(n >= DYNAMIC_MIN && n <= DYNAMIC_MAX, `seed ${seed} grew ${n} tiles`);
+
+    // One coastline. A lake or a second piece leaves the port walk going round the same
+    // ring twice, which shows up as two ports on one edge.
+    eq(new Set(b.ports.map((p) => p.edge)).size, b.ports.length, `seed ${seed} repeated a port edge`);
+
+    // Every tile reachable from every other, so no settlement is stranded off the island.
+    const seen = new Set([0]); const stack = [0];
+    while (stack.length) {
+      for (const nb of hexNeighbours(stack.pop())) if (!seen.has(nb)) { seen.add(nb); stack.push(nb); }
+    }
+    eq(seen.size, n, `seed ${seed} is not one island`);
+
+    // The rule the token deal exists to keep.
+    for (const t of b.tiles) {
+      if (!isRed(t.num)) continue;
+      for (const nb of hexNeighbours(t.i)) {
+        assert(!isRed(b.tiles[nb].num), `seed ${seed} put ${t.num} next to ${b.tiles[nb].num}`);
+      }
+    }
+  }
+});
+
+check('a dynamic island is the same island on every device', () => {
+  const a = makeBoard(31337, 'random', 'dynamic');
+  useLayout('classic');                       // shunt the shared topology elsewhere
+  const b = makeBoard(31337, 'random', 'dynamic');
+  eq(JSON.stringify(a.tiles), JSON.stringify(b.tiles), 'same seed gave two islands');
+  const c = makeBoard(31338, 'random', 'dynamic');
+  assert(JSON.stringify(a.tiles) !== JSON.stringify(c.tiles), 'two seeds gave one island');
 });
 
 check('the same seed always gives the same island', () => {

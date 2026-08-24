@@ -9,7 +9,7 @@
 // The engine is deliberately strict — it re-validates everything, because the client
 // that sends a move is the same untrusted device that drew the buttons.
 
-import { HEXES, VERTS, EDGES, RESOURCES, makeBoard, hexNeighbours, LAYOUT_INFO, pips } from './board.js';
+import { HEXES, VERTS, EDGES, RESOURCES, makeBoard, hexNeighbours, LAYOUT_INFO, layoutInfo, pips } from './board.js';
 
 export const COSTS = {
   road:       { wood: 1, brick: 1 },
@@ -215,7 +215,9 @@ export function newGame(seats, settings, rng = Math.random) {
   // An accepted map hands its seed in; without one the board is rolled fresh.
   const seed = Number.isFinite(settings.seed) ? settings.seed : Math.floor(rng() * 2 ** 31);
   const layout = LAYOUT_INFO[settings.layout] ? settings.layout : 'classic';
-  const info = LAYOUT_INFO[layout];
+  // Read with the seed: a dynamic island's bank and deck are sized to a board that does
+  // not exist until that seed grows it.
+  const info = layoutInfo(layout, seed);
   const players = {};
   for (const pid of seats) {
     players[pid] = {

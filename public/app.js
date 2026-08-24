@@ -21,7 +21,7 @@ import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { findBadWord, maskText } from './clean.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
-import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO } from './board.js';
+import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO, layoutInfo } from './board.js';
 import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS, SEA_DEFAULT, seaAt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
@@ -1017,7 +1017,8 @@ function renderRoomList() {
     const host = r.players?.[r.hostId]?.name || players[0]?.name || 'Someone';
     const s = r.settings || {};
     const bits = [
-      LAYOUT_INFO[s.layout || 'classic']?.tiles ? `${LAYOUT_INFO[s.layout || 'classic'].tiles} tiles` : 'Classic',
+      LAYOUT_INFO[s.layout || 'classic']?.dynamic ? 'dynamic board'
+        : `${LAYOUT_INFO[s.layout || 'classic']?.tiles || 19} tiles`,
       `${s.targetVP || 10} points`,
       s.turnSeconds ? `${s.turnSeconds}s turns` : 'no timer',
       s.useRobber === false ? 'no robber' : 'robber',
@@ -1659,8 +1660,12 @@ function renderMapPreview() {
   $('dice-float').hidden = true;
   $('turn-timer').hidden = true;
   renderChatButton();
+  // The seed is in hand here, which is the only place a dynamic board's size is knowable
+  // before the game starts — so this row reports the island actually on screen.
+  const mapLayout = room.settings?.layout || 'classic';
+  const mapTiles = layoutInfo(mapLayout, room.mapSeeds?.[room.mapIndex ?? 0])?.tiles;
   $('hand').innerHTML = `<span class="map-count">Map ${(room.mapIndex ?? 0) + 1}`
-    + `${LAYOUT_INFO[room.settings?.layout || 'classic']?.tiles ? ` · ${LAYOUT_INFO[room.settings.layout || 'classic'].tiles} tiles` : ''}</span>`;
+    + `${mapTiles ? ` · ${mapTiles} tiles` : ''}</span>`;
 
   if (!host) {
     $('actions').innerHTML =

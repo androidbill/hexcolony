@@ -118,6 +118,160 @@ const NEWFOUNDLAND_ROWS = [
   [[5, 3], [9, 3]],         // bay, then the Avalon
 ];
 
+// ---------------------------------------------------------------- the dynamic island
+export const DYNAMIC_MIN = 30;
+export const DYNAMIC_MAX = 104;
+
+const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
+const ckey = (q, r) => `${q},${r}`;
+
+/**
+ * An island grown from one tile rather than drawn, different for every seed.
+ *
+ * Growth keeps it in one piece for free: every tile added touches one already there. What
+ * growth does not give you is a shape worth playing on — picking uniformly from the tiles
+ * on the edge produces something spindly and full of dead ends, because a lone tile poking
+ * out has as much chance of being extended as the broad side of the island does.
+ *
+ * So a candidate's weight is how many neighbours it already has, raised to a power that
+ * varies per seed. Near 1 the island comes out ragged and many-armed; near 4 it fills in
+ * to something close to round. Rolling that exponent per seed rather than fixing it is
+ * most of why two dynamic boards feel like different places.
+ *
+ * Then any lake is filled in. A shape with water enclosed inside it has two coastlines,
+ * and the coast walk that spaces the ports only follows one — it would go round the outer
+ * ring twice over and leave most of the shore without a harbour. Filling is better than
+ * rejecting: a lake means the growth reached round and closed on itself, which is a
+ * perfectly good island once the middle is land.
+ */
+function dynamicCoords(seed) {
+  // Its own stream, so the shape cannot shift the terrain and token deals that follow.
+  const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const target = DYNAMIC_MIN + Math.floor(rng() * (DYNAMIC_MAX - DYNAMIC_MIN + 1));
+  const bias = 1 + rng() * 3;
+
+  const have = new Set([ckey(0, 0)]);
+  const coords = [{ q: 0, r: 0 }];
+  const cand = new Map();
+  const offer = (q, r) => {
+    for (const [dq, dr] of DIRS) {
+      const nq = q + dq, nr = r + dr, k = ckey(nq, nr);
+      if (have.has(k)) continue;
+      const c = cand.get(k);
+      if (c) c.n += 1; else cand.set(k, { q: nq, r: nr, n: 1 });
+    }
+  };
+  offer(0, 0);
+
+  while (coords.length < target && cand.size) {
+    const list = [...cand.values()];
+    let total = 0;
+    for (const c of list) total += c.n ** bias;
+    let x = rng() * total;
+    let pick = list[list.length - 1];
+    for (const c of list) { x -= c.n ** bias; if (x <= 0) { pick = c; break; } }
+    cand.delete(ckey(pick.q, pick.r));
+    have.add(ckey(pick.q, pick.r));
+    coords.push({ q: pick.q, r: pick.r });
+    offer(pick.q, pick.r);
+  }
+
+  // Fill anything the growth wrapped around: flood the empty cells from outside the
+  // bounding box, and whatever the flood never reaches is a lake.
+  const qs = coords.map((c) => c.q), rs = coords.map((c) => c.r);
+  const lo = { q: Math.min(...qs) - 1, r: Math.min(...rs) - 1 };
+  const hi = { q: Math.max(...qs) + 1, r: Math.max(...rs) + 1 };
+  const outside = new Set([ckey(lo.q, lo.r)]);
+  const stack = [[lo.q, lo.r]];
+  while (stack.length) {
+    const [q, r] = stack.pop();
+    for (const [dq, dr] of DIRS) {
+      const nq = q + dq, nr = r + dr, k = ckey(nq, nr);
+      if (nq < lo.q || nq > hi.q || nr < lo.r || nr > hi.r) continue;
+      if (have.has(k) || outside.has(k)) continue;
+      outside.add(k); stack.push([nq, nr]);
+    }
+  }
+  for (let q = lo.q; q <= hi.q; q++) {
+    for (let r = lo.r; r <= hi.r; r++) {
+      if (!have.has(ckey(q, r)) && !outside.has(ckey(q, r))) coords.push({ q, r });
+    }
+  }
+  return coords;
+}
+
+// Built per seed and kept, because the rules engine rebuilds the board on every move.
+const dynamicTopos = new Map();
+function dynamicTopo(seed) {
+  let t = dynamicTopos.get(seed);
+  if (!t) {
+    t = buildTopology(dynamicCoords(seed));
+    if (dynamicTopos.size > 16) dynamicTopos.clear();
+    dynamicTopos.set(seed, t);
+  }
+  return t;
+}
+
+/**
+ * The bags and decks for an island of a size nobody wrote down in advance.
+ *
+ * Every ratio here is read off the four fixed boards rather than invented: one desert per
+ * thirteen tiles, five terrains in near-equal share with the three commonest taking the
+ * remainder, and 2 and 12 half as common as every other number, which is what the printed
+ * board does and what keeps the extremes rare.
+ */
+function dynamicInfo(tiles) {
+  const desert = Math.max(1, Math.round(tiles / 13));
+  const land = tiles - desert;
+
+  const order = ['forest', 'pasture', 'fields', 'hills', 'mountains'];
+  const base = Math.floor(land / 5), extra = land - base * 5;
+  const terrain = { desert };
+  order.forEach((t, i) => { terrain[t] = base + (i < extra ? 1 : 0); });
+
+  const middle = [3, 4, 5, 6, 8, 9, 10, 11];
+  const c = Math.max(1, Math.round((land + 2) / 10));
+  const tokens = { 2: Math.max(1, c - 1), 12: Math.max(1, c - 1) };
+  for (const n of middle) tokens[n] = c;
+
+  // Trim or pad to exactly the number of land tiles. 6 and 8 move last: they have to be
+  // placed without touching, and every extra red makes that harder.
+  const nudge = [5, 9, 4, 10, 3, 11, 2, 12, 6, 8];
+  let total = Object.values(tokens).reduce((a, b) => a + b, 0);
+  for (let i = 0; total !== land && i < 5000; i++) {
+    const n = nudge[i % nudge.length];
+    if (total > land) { if (tokens[n] > 1) { tokens[n] -= 1; total -= 1; } }
+    else { tokens[n] += 1; total += 1; }
+  }
+
+  return {
+    key: 'dynamic',
+    label: 'Dynamic',
+    tiles,
+    blurb: `${tiles} tiles, drawn fresh for this game.`,
+    terrain,
+    tokens,
+    ports: Math.max(6, Math.round(tiles / 3.3)),
+    bank: Math.round(19 + (tiles - 19) * 0.4),
+    dev: {
+      knight: Math.round(tiles * 0.62),
+      vp: Math.round(tiles * 0.15),
+      road: Math.max(2, Math.round(tiles * 0.10)),
+      plenty: Math.max(2, Math.round(tiles * 0.10)),
+      mono: Math.max(2, Math.round(tiles * 0.06)),
+    },
+  };
+}
+
+/**
+ * What a layout is made of. Fixed boards answer from the table; the dynamic one has to be
+ * grown first, because its size is not known until its seed is.
+ */
+export function layoutInfo(layout, seed) {
+  if (layout === 'dynamic' && Number.isFinite(seed)) return dynamicInfo(dynamicTopo(seed).hexes.length);
+  return LAYOUT_INFO[layout] || LAYOUT_INFO.classic;
+}
+
 function planCoords({ firstRow, counts }) {
   const out = [];
   counts.forEach((n, i) => {
@@ -171,6 +325,15 @@ export const LAYOUT_INFO = {
     ports: 14,
     bank: 28,
     dev: { knight: 26, vp: 7, road: 4, plenty: 4, mono: 3 },
+  },
+  // No sizes here: a dynamic board's are decided by its seed, so anything that needs them
+  // has to ask layoutInfo(layout, seed) rather than read them off this table.
+  dynamic: {
+    key: 'dynamic',
+    label: 'Dynamic',
+    tiles: null,
+    dynamic: true,
+    blurb: `A different island every game, anywhere from ${DYNAMIC_MIN} to ${DYNAMIC_MAX} tiles.`,
   },
   newfoundland: {
     key: 'newfoundland',
@@ -325,8 +488,21 @@ export let HEXES = TOPO.hexes;
 export let VERTS = TOPO.vertices;
 export let EDGES = TOPO.edges;
 
-/** Point the module at a board size. Returns the key actually used. */
-export function useLayout(name) {
+/**
+ * Point the module at a board. Returns the key actually used.
+ *
+ * The dynamic board is the one that needs a seed: its shape is grown from it, so there is
+ * no single topology to switch to the way there is for the fixed islands.
+ */
+export function useLayout(name, seed) {
+  if (name === 'dynamic' && Number.isFinite(seed)) {
+    LAYOUT = 'dynamic';
+    TOPO = dynamicTopo(seed);
+    HEXES = TOPO.hexes;
+    VERTS = TOPO.vertices;
+    EDGES = TOPO.edges;
+    return 'dynamic';
+  }
   const key = TOPOS[name] ? name : 'classic';
   LAYOUT = key;
   TOPO = TOPOS[key];
@@ -481,7 +657,7 @@ export function makeBoard(seed, mode = 'random', layout = 'classic') {
   // Switching the shared topology is a side effect callers rely on, so that still runs.
   const cacheKey = `${seed}|${mode}|${layout}`;
   const hit = boardCache.get(cacheKey);
-  if (hit) { useLayout(hit.layout); return hit; }
+  if (hit) { useLayout(hit.layout, seed); return hit; }
 
   const built = buildBoard(seed, mode, layout);
   // The map picker walks through boards one seed at a time; only a handful are ever
@@ -492,8 +668,8 @@ export function makeBoard(seed, mode = 'random', layout = 'classic') {
 }
 
 function buildBoard(seed, mode, layout) {
-  const key = useLayout(layout);
-  const info = LAYOUT_INFO[key];
+  const key = useLayout(layout, seed);
+  const info = layoutInfo(key, seed);
   const rng = mulberry32(seed);
 
   let terrain, numbers;
@@ -530,19 +706,28 @@ function buildBoard(seed, mode, layout) {
 }
 
 // ---------------------------------------------------------------- spatial helpers
-// One per layout, worked out once. The renderer asks for this while clamping a pan,
-// which is to say on every frame of every drag.
-const extentCache = {};
+/**
+ * How far the island reaches, which is what the view is scaled to fit.
+ *
+ * Worked out once and kept on the topology itself. It used to be cached under the layout's
+ * NAME, which is the same thing for the fixed islands and quietly wrong for the dynamic
+ * one: every seed grows a different shape under the one name 'dynamic', so the second
+ * board of a session was drawn to the first board's extent — a big island fitted to a
+ * small one's box, hanging off every edge of the screen. Hanging it on the topology object
+ * means a new shape cannot borrow an old shape's measurements.
+ *
+ * The renderer asks for this while clamping a pan, which is to say on every frame of
+ * every drag, so it does want to be cached.
+ */
 export function boardExtent() {
-  const hit = extentCache[LAYOUT];
-  if (hit) return hit;
+  if (TOPO.extent) return TOPO.extent;
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
   for (const v of VERTS) {
     minX = Math.min(minX, v.x); maxX = Math.max(maxX, v.x);
     minY = Math.min(minY, v.y); maxY = Math.max(maxY, v.y);
   }
-  extentCache[LAYOUT] = { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
-  return extentCache[LAYOUT];
+  TOPO.extent = { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY };
+  return TOPO.extent;
 }
 
 // The outward direction of a coastal edge, used to float the port badge off the shore.
