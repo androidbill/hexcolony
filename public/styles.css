@@ -63,6 +63,7 @@ button, input, select, textarea, a,
 html, body {
   margin: 0; padding: 0;
   height: 100%;
+  background: var(--sea-1);
   overscroll-behavior: none;
 }
 
@@ -80,7 +81,10 @@ button { background: none; border: 0; cursor: pointer; }
 /* ------------------------------------------------------------ screens */
 .screen {
   position: fixed; inset: 0;
-  height: var(--app-height);
+  /* `innerHeight` can stop above the home-indicator area in an installed iPhone app.
+     Fixed inset edges are the full viewport, so let them determine the height and use
+     the measured value only as a floor. */
+  min-height: var(--app-height);
   display: none;
   flex-direction: column;
 }
