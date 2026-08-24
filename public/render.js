@@ -1095,8 +1095,10 @@ export class BoardView {
     if (animate) {
       // Rotate after positioning so the piece spins in place instead of moving away
       // from its board corner and covering the placement highlight.
-      const cx = spec.box.x + spec.box.w / 2;
-      const cy = spec.box.y + spec.box.h / 2;
+      // The placement translation above puts the path centre at x=0 and y=-.28h.
+      // Rotate around that transformed centre, not the source SVG centre.
+      const cx = 0;
+      const cy = -spec.box.h * 0.28;
       c.translate(cx, cy);
       c.rotate(this.now / 900);
       c.translate(-cx, -cy);
