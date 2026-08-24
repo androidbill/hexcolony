@@ -388,6 +388,9 @@ button {
 
 .seg-row { display: flex; gap: 6px; background: rgba(0, 0, 0, 0.28); padding: 4px; border-radius: 13px; }
 .seg-row.wide { margin-bottom: 12px; }
+/* Four boards will not sit in one row on a phone — "Newfoundland · 52" needs more width
+   than a quarter of a 375px screen. Two by two, so every board keeps a readable name. */
+.seg-row.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .seg {
   flex: 1; padding: 9px 8px; border-radius: 10px;
   font-size: 13px; font-weight: 700; color: var(--dim);
