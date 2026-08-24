@@ -3212,8 +3212,11 @@ function reactToLog(g) {
         if (e.p === playerId) toast('Nobody had a card to take.');
         break;
       case 'offer':
-        // The tray shows the offer; this is what makes you look down at it.
-        if (e.p !== playerId && !tradeRejectFrom.has(e.p)) {
+        // The strip shows the offer; this is what makes you look down at it. So it has to
+        // stay in step with the strip: an offer you cannot pay for is not shown and is
+        // declined on the spot, and announcing one anyway is worse than saying nothing —
+        // it points at a strip that is not there, about a trade you could not have taken.
+        if (e.p !== playerId && !tradeRejectFrom.has(e.p) && canPay(g, e.want)) {
           sfx.card(); toast(`${nameFor(e.p)} offers you a trade.`);
         }
         break;
@@ -4359,7 +4362,20 @@ const askCards = (bundle) => Object.entries(bundle || {})
 const article = (bundle) => (bundleTotal(bundle) === 1 ? ' a' : '');
 
 /**
- * Offers waiting on an answer from you, in the tray.
+ * Whether this hand covers what an offer is asking for.
+ *
+ * One definition, used by the strip, by the automatic decline and by the announcement
+ * that points at the strip. They have to agree: the bug this fixes was the toast still
+ * calling out offers the strip had already hidden.
+ */
+function canPay(g, want) {
+  const me = g.players[playerId];
+  if (!me) return false;
+  return Object.entries(want || {}).every(([r, n]) => (me.res[r] || 0) >= n);
+}
+
+/**
+ * Offers waiting on an answer from you, floating over the board.
  *
  * This was a sheet, and it had exactly the fault the trade sheet had: it covered your
  * hand and the turn clock. Being asked "will you take two wheat for an ore" is precisely
@@ -4394,7 +4410,7 @@ function renderAsks(g) {
    * offer open on the asker's screen for the full ten seconds waiting on a reply that was
    * never possible. This way they hear back at once.
    */
-  const affordable = (t) => Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n);
+  const affordable = (t) => canPay(g, t.want);
   if (me) {
     for (const t of g.trades || []) {
       if (t.from === playerId || t.replies[playerId] || autoDeclined.has(t.id)) continue;
