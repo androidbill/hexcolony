@@ -1092,15 +1092,6 @@ export class BoardView {
     // Bottom-centre of the drawing on the corner, nudged down so it sits on the
     // junction instead of floating above it.
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
-    if (animate) {
-      // Rotate around the already-positioned visual centre. A small continuous
-      // sweep keeps the piece anchored and readable while still clearly spinning.
-      const cx = 0;
-      const cy = -spec.box.h * 0.28;
-      c.translate(cx, cy);
-      c.rotate(Math.sin(this.now / 520) * 0.22);
-      c.translate(-cx, -cy);
-    }
 
     const path = spec.path;
     c.shadowColor = 'rgba(0, 0, 0, 0.5)';
