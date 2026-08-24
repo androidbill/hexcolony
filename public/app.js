@@ -3854,6 +3854,39 @@ $('btn-discard').addEventListener('click', () => {
   send({ type: 'discard', res: discardChosen });
 });
 
+/**
+ * Your own cards, inside a sheet that is deciding what to do about them.
+ *
+ * The sheets the game waits on already sit in the gap above the tray so the hand stays on
+ * screen underneath — but the veil covers the whole window, so what was actually down
+ * there was the hand behind a blur and two thirds of a dark wash. Readable enough to know
+ * it existed, not to count it.
+ *
+ * The discard sheet answered this by drawing the hand itself, and choosing a resource off
+ * a development card wants it for the same reason: Year of Plenty is the question "what am
+ * I short of", which is not answerable without seeing what you hold.
+ *
+ * `taking` marks cards this choice is about to add, so the row reads as what you would be
+ * holding rather than what you hold now.
+ */
+function drawSheetHand(id, taking = {}) {
+  const g = game();
+  const held = g?.players[playerId]?.res || {};
+  $(id).innerHTML = RESOURCES.map((r) => {
+    const have = held[r] || 0;
+    const add = taking[r] || 0;
+    return resCard(r, {
+      size: 'sm',
+      count: (have + add) || null,
+      dim: !(have + add),
+      selected: !!add,
+      stack: false,
+      // Non-breaking space so every card is the same height, labelled or not.
+      label: add ? `+${add}` : '\u00a0',
+    });
+  }).join('');
+}
+
 function openPickRes(kind) {
   const g = game();
   const title = kind === 'plenty' ? 'Year of Plenty' : 'Monopoly';
@@ -3877,7 +3910,9 @@ function openPickRes(kind) {
         b.addEventListener('click', () => { chosen = b.dataset.pick; sfx.tap(); draw(); });
       }
       $('btn-pickres').disabled = !chosen;
+      drawSheetHand('pickres-hand');
     };
+    $('pickres-hint').textContent = 'what you hold now';
     draw();
     $('btn-pickres').onclick = () => { closeSheet(); send({ type: 'playDev', card: 'mono', res: chosen }); };
   } else {
@@ -3886,6 +3921,8 @@ function openPickRes(kind) {
       const total = Object.values(chosen).reduce((a, b) => a + b, 0);
       resPicker('pickres-picker', chosen, { showHave: false });
       $('btn-pickres').disabled = total !== 2;
+      drawSheetHand('pickres-hand', chosen);
+      $('pickres-hint').textContent = total ? 'with the two you are taking' : 'what you hold now';
       for (const b of document.querySelectorAll('#pickres-picker [data-pm]')) {
         b.addEventListener('click', () => {
           const r = b.dataset.r;
