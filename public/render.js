@@ -1186,7 +1186,9 @@ export class BoardView {
       c.lineWidth = 7;
       c.strokeStyle = color;
       c.stroke(path);
-      const dash = Math.max(6, this.scale * 0.1);
+      // Connected roads use the same visual dash length so the chase does not
+      // change rhythm when it reaches a house or city.
+      const dash = Math.max(6, this.scale * 0.075);
       c.lineCap = 'butt';
       c.lineJoin = 'miter';
       c.setLineDash([dash, dash]);
