@@ -322,6 +322,15 @@ const resetGuess = () => { serverRoom = null; guessSeq = 0; guessAt = 0; wasSeat
 
 const myName = () => (($('name-input').value || localStorage.getItem('hexcolony_name') || '')
   .trim().slice(0, 14));
+const TRADE_REJECT_KEY = 'hexcolony_trade_reject';
+let tradeRejectFrom = new Set();
+try {
+  tradeRejectFrom = new Set(JSON.parse(localStorage.getItem(TRADE_REJECT_KEY) || '[]'));
+} catch { tradeRejectFrom = new Set(); }
+const autoRejectedByPreference = new Set();
+function saveTradeRejectPrefs() {
+  localStorage.setItem(TRADE_REJECT_KEY, JSON.stringify([...tradeRejectFrom]));
+}
 const isHost = () => room && room.hostId === playerId;
 const game = () => room && room.game;
 
@@ -3950,6 +3959,7 @@ function resetTrade() {
   notedAccepts.clear();
   expiredOffers.clear();
   autoDeclined.clear();
+  autoRejectedByPreference.clear();
   // The tray is only redrawn once there is a game to draw it for, and the rows would
   // otherwise still be showing the last one's offers while the lobby loads.
   for (const id of ['trade-want', 'trade-give-bin', 'trade-bar', 'trade-offers', 'trade-asks']) $(id).hidden = true;
@@ -4191,6 +4201,8 @@ function renderTrade(g) {
   if (trading && !canTrade) stopTrade(true);
   const on = trading && canTrade;
 
+  $('btn-trade-filter').hidden = !g || !g.players?.[playerId] || g.seats.length < 2;
+
   $('trade-want').hidden = !on;
   $('give-lead').hidden = !on;
   $('trade-give-bin').hidden = !on;
@@ -4332,6 +4344,17 @@ const article = (bundle) => (bundleTotal(bundle) === 1 ? ' a' : '');
 function renderAsks(g) {
   const box = $('trade-asks');
   const me = g.players[playerId];
+  // A preference is deliberately handled on the receiving device: it is personal and
+  // must never become part of the shared game state. Record each offer once so a render
+  // loop cannot queue duplicate replies while Firestore is catching up.
+  if (me) {
+    for (const t of g.trades || []) {
+      if (t.from === playerId || t.replies[playerId] || !tradeRejectFrom.has(t.from)
+          || autoRejectedByPreference.has(t.id)) continue;
+      autoRejectedByPreference.add(t.id);
+      send({ type: 'replyTrade', id: t.id, yes: false }, { quiet: true });
+    }
+  }
   // No point offering a button that the engine will refuse: replyTrade checks the hand
   // before it will record a yes. And an offer you cannot pay for is only worth a look
   // rather than the full ten seconds — see ASK_SHOW_SECONDS.
@@ -4370,6 +4393,38 @@ $('trade-asks').addEventListener('click', (e) => {
   const [id, yes] = b.dataset.say.split(':');
   sfx.tap();
   send({ type: 'replyTrade', id: Number(id), yes: yes === 'yes' });
+});
+
+function renderTradeFilter(g) {
+  const list = $('trade-filter-list');
+  const others = (g?.seats || []).filter((pid) => pid !== playerId);
+  list.innerHTML = others.length ? others.map((pid) => {
+    const on = tradeRejectFrom.has(pid);
+    return `<button class="trade-filter-row${on ? ' on' : ''}" data-trade-reject-pid="${esc(pid)}"
+      aria-pressed="${on}">
+      <span class="trade-filter-name">${esc(nameFor(pid))}</span>
+      <span class="trade-filter-state">${on ? 'Auto-rejecting' : 'Allowing trades'}</span>
+      <i class="tog${on ? ' on' : ''}" aria-hidden="true"><b></b></i>
+    </button>`;
+  }).join('') : '<p class="hint">No other players at the table.</p>';
+}
+
+$('btn-trade-filter').addEventListener('click', () => {
+  const g = game();
+  if (!g || !g.players?.[playerId]) return;
+  renderTradeFilter(g);
+  sheet('sheet-trade-filter');
+});
+
+$('trade-filter-list').addEventListener('click', (e) => {
+  const row = e.target.closest('[data-trade-reject-pid]');
+  if (!row) return;
+  const pid = row.dataset.tradeRejectPid;
+  if (tradeRejectFrom.has(pid)) tradeRejectFrom.delete(pid);
+  else tradeRejectFrom.add(pid);
+  saveTradeRejectPrefs();
+  renderTradeFilter(game());
+  sfx.tap();
 });
 
 // ---------------------------------------------------------------- steal / players / log
