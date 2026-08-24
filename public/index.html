@@ -198,7 +198,7 @@
           <button class="seg" data-layout="expansion">Expansion &middot; 30</button>
           <button class="seg" data-layout="star">Star &middot; 41</button>
           <button class="seg" data-layout="newfoundland">Newfoundland &middot; 52</button>
-          <button class="seg span2" data-layout="dynamic">Dynamic &middot; 30&ndash;104</button>
+          <button class="seg span2" data-layout="dynamic">Dynamic &middot; 30&ndash;80</button>
         </div>
       </div>
 
@@ -283,8 +283,13 @@
   </div>
 
   <div class="tray" id="tray">
-    <div class="trade-asks" id="trade-asks" hidden></div>
-    <div class="trade-offers" id="trade-offers" hidden></div>
+    <!-- Trades float above the tray rather than sitting in it. An offer arriving used to
+         push the whole tray up and squeeze the island into a strip; now it covers a bit
+         of water instead, and the board underneath does not move. -->
+    <div class="tray-float" id="tray-float">
+      <div class="trade-asks" id="trade-asks" hidden></div>
+      <div class="trade-offers" id="trade-offers" hidden></div>
+    </div>
     <div class="trade-want" id="trade-want" hidden></div>
     <div class="trade-lead" id="give-lead" hidden>I will offer</div>
     <div class="trade-give-bin" id="trade-give-bin" hidden></div>
@@ -425,7 +430,7 @@
       <button class="seg" data-solo-layout="expansion">Expansion &middot; 30</button>
       <button class="seg" data-solo-layout="star">Star &middot; 41</button>
       <button class="seg" data-solo-layout="newfoundland">Newfoundland &middot; 52</button>
-      <button class="seg span2" data-solo-layout="dynamic">Dynamic &middot; 30&ndash;104</button>
+      <button class="seg span2" data-solo-layout="dynamic">Dynamic &middot; 30&ndash;80</button>
     </div>
   </div>
 

@@ -120,7 +120,7 @@ const NEWFOUNDLAND_ROWS = [
 
 // ---------------------------------------------------------------- the dynamic island
 export const DYNAMIC_MIN = 30;
-export const DYNAMIC_MAX = 104;
+export const DYNAMIC_MAX = 80;
 
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
 const ckey = (q, r) => `${q},${r}`;
@@ -146,10 +146,24 @@ const ckey = (q, r) => `${q},${r}`;
  */
 function dynamicCoords(seed) {
   // Its own stream, so the shape cannot shift the terrain and token deals that follow.
-  const rng = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-  const target = DYNAMIC_MIN + Math.floor(rng() * (DYNAMIC_MAX - DYNAMIC_MIN + 1));
-  const bias = 1 + rng() * 3;
+  const pick = mulberry32((seed ^ 0x9e3779b9) >>> 0);
+  const wanted = DYNAMIC_MIN + Math.floor(pick() * (DYNAMIC_MAX - DYNAMIC_MIN + 1));
+  const bias = 1 + pick() * 3;
 
+  // Filling a lake adds tiles after the growth has stopped, so a board that grew to the
+  // ceiling can come back one over it. Rather than let the range be approximate, grow
+  // again a little smaller until it fits. Each attempt draws from its own stream keyed on
+  // the attempt number, so this stays identical on every device.
+  let coords = [];
+  for (let attempt = 0; attempt < 8; attempt++) {
+    coords = growIsland(wanted - attempt, bias, mulberry32((seed * 2654435761 + attempt) >>> 0));
+    if (coords.length <= DYNAMIC_MAX) break;
+  }
+  return coords;
+}
+
+/** Grow one island to `target` tiles and fill in anything it wrapped around. */
+function growIsland(target, bias, rng) {
   const have = new Set([ckey(0, 0)]);
   const coords = [{ q: 0, r: 0 }];
   const cand = new Map();
@@ -168,12 +182,12 @@ function dynamicCoords(seed) {
     let total = 0;
     for (const c of list) total += c.n ** bias;
     let x = rng() * total;
-    let pick = list[list.length - 1];
-    for (const c of list) { x -= c.n ** bias; if (x <= 0) { pick = c; break; } }
-    cand.delete(ckey(pick.q, pick.r));
-    have.add(ckey(pick.q, pick.r));
-    coords.push({ q: pick.q, r: pick.r });
-    offer(pick.q, pick.r);
+    let take = list[list.length - 1];
+    for (const c of list) { x -= c.n ** bias; if (x <= 0) { take = c; break; } }
+    cand.delete(ckey(take.q, take.r));
+    have.add(ckey(take.q, take.r));
+    coords.push({ q: take.q, r: take.r });
+    offer(take.q, take.r);
   }
 
   // Fill anything the growth wrapped around: flood the empty cells from outside the

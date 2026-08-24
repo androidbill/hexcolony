@@ -204,9 +204,16 @@ function shoutout(msg, accent, duration = 2000) {
 function trayHeight() {
   const t = $('tray');
   if (t) document.documentElement.style.setProperty('--tray-h', `${t.offsetHeight}px`);
+  // And how much the floating trade layer is currently covering, so the board's own
+  // buttons can sit above it rather than under an offer.
+  const f = $('tray-float');
+  const h = f && f.offsetParent !== null ? f.offsetHeight : 0;
+  document.documentElement.style.setProperty('--float-h', `${h ? h + 8 : 0}px`);
 }
 if (typeof ResizeObserver === 'function' && $('tray')) {
-  new ResizeObserver(trayHeight).observe($('tray'));
+  const ro = new ResizeObserver(trayHeight);
+  ro.observe($('tray'));
+  if ($('tray-float')) ro.observe($('tray-float'));
 }
 
 // The one measurement that matters on a phone: 100vh lies when the URL bar is showing,
@@ -2956,22 +2963,8 @@ function drawDiscardClock(secs) {
 // while the transaction is in flight.
 const expiredOffers = new Set();
 
-/**
- * How long an offer you cannot pay for stays on your screen, against the ten it stands
- * for everybody else.
- *
- * There is nothing to decide: the engine will not record a yes from a player who does not
- * hold what was asked for, so the only answer available is no. Five seconds is long enough
- * to see what was proposed and who by — which is worth knowing, because it tells you what
- * they are short of — and short enough that a strip you cannot act on is not sitting over
- * your cards for the rest of somebody else's turn.
- *
- * When it runs out the answer goes in rather than the strip simply vanishing. Leaving
- * silently would hold the offer open on the asker's screen for the full ten waiting for a
- * reply that was never possible; declining lets the engine close it the moment the last
- * player has answered.
- */
-const ASK_SHOW_SECONDS = 5;
+// Offers already declined on this device because the hand could not cover them, so a
+// render loop cannot queue the same reply twice while Firestore is catching up.
 const autoDeclined = new Set();
 
 /**
@@ -2987,22 +2980,9 @@ function drawOfferClocks() {
   const me = g.players[playerId];
   for (const t of g.trades || []) {
     const el = document.querySelector(`[data-offer-clock="${t.id}"]`);
-    // An offer put to me that I cannot pay for is counting down a shorter clock, and the
-    // element says which one it is showing.
-    const able = el ? el.dataset.able !== '0' : true;
-    const shown = askLeft(t, able);
-
-    // Out of time to look at it: answer with the only answer there was, and let the
-    // strip go with the reply.
-    if (!able && shown !== null && shown <= 0 && me && !t.replies[playerId]
-        && !autoDeclined.has(t.id)) {
-      autoDeclined.add(t.id);
-      send({ type: 'replyTrade', id: t.id, yes: false }, { quiet: true });
-    }
-
     const left = offerLeft(t);
     if (!el || left === null) continue;
-    const secs = Math.max(0, Math.ceil(shown === null ? left : shown));
+    const secs = Math.max(0, Math.ceil(left));
     el.textContent = `${secs}s`;
     el.classList.toggle('urgent', secs <= 3);
     // Its author gets first refusal, and after three more seconds anybody still watching
@@ -4357,18 +4337,11 @@ function offerLeft(t) {
  * Seconds left on an offer for THIS player, which is not the same for everybody: one who
  * cannot pay for it gets the shorter look.
  */
-function askLeft(t, able) {
+function offerClock(t) {
   const left = offerLeft(t);
-  if (left === null) return null;
-  return able ? left : left - (R.TRADE_SECONDS - ASK_SHOW_SECONDS);
-}
-
-function offerClock(t, able = true) {
-  const left = askLeft(t, able);
   if (left === null) return '';
   const secs = Math.max(0, Math.ceil(left));
-  return `<span class="offer-clock${secs <= 3 ? ' urgent' : ''}" data-offer-clock="${t.id}"`
-    + ` data-able="${able ? 1 : 0}">${secs}s</span>`;
+  return `<span class="offer-clock${secs <= 3 ? ' urgent' : ''}" data-offer-clock="${t.id}">${secs}s</span>`;
 }
 
 /**
@@ -4409,21 +4382,36 @@ function renderAsks(g) {
       send({ type: 'replyTrade', id: t.id, yes: false }, { quiet: true });
     }
   }
-  // No point offering a button that the engine will refuse: replyTrade checks the hand
-  // before it will record a yes. And an offer you cannot pay for is only worth a look
-  // rather than the full ten seconds — see ASK_SHOW_SECONDS.
+  /**
+   * An offer you cannot pay for is not shown at all.
+   *
+   * There was never a decision in it: replyTrade checks the hand before it will record a
+   * yes, so the only answer available was no. It used to appear anyway, greyed, with
+   * "You have not got that" and a five-second clock — which is a strip sitting over your
+   * cards, during somebody else's turn, to tell you about something you cannot do.
+   *
+   * Declining it here rather than just hiding it matters: leaving silently would hold the
+   * offer open on the asker's screen for the full ten seconds waiting on a reply that was
+   * never possible. This way they hear back at once.
+   */
+  const affordable = (t) => Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n);
+  if (me) {
+    for (const t of g.trades || []) {
+      if (t.from === playerId || t.replies[playerId] || autoDeclined.has(t.id)) continue;
+      if (affordable(t)) continue;
+      autoDeclined.add(t.id);
+      send({ type: 'replyTrade', id: t.id, yes: false }, { quiet: true });
+    }
+  }
+
   const waiting = (me ? (g.trades || []) : [])
     .filter((t) => t.from !== playerId && !t.replies[playerId]
-      && !tradeRejectFrom.has(t.from))
-    .map((t) => ({ t, able: Object.entries(t.want).every(([r, n]) => (me.res[r] || 0) >= n) }))
-    .filter(({ t, able }) => {
-      const left = askLeft(t, able);
-      return able || left === null || left > 0;
-    });
+      && !tradeRejectFrom.has(t.from) && affordable(t))
+    .map((t) => ({ t }));
   if (!waiting.length) { box.innerHTML = ''; box.hidden = true; return; }
   box.hidden = false;
 
-  box.innerHTML = waiting.map(({ t, able }) => {
+  box.innerHTML = waiting.map(({ t }) => {
     return `<div class="ask" style="--c:${esc(colorFor(t.from))}">
       <div class="ask-line">
         <span class="ask-who">${esc(nameFor(t.from))}</span>
@@ -4433,10 +4421,9 @@ function renderAsks(g) {
           <span class="ask-cards">${askCards(t.want)}</span></span>
       </div>
       <div class="ask-go">
-        ${able ? '' : '<span class="ask-cant">You have not got that</span>'}
-        ${offerClock(t, able)}
+        ${offerClock(t)}
         <button class="btn btn-ghost" data-say="${t.id}:no">No thanks</button>
-        <button class="btn btn-key" data-say="${t.id}:yes"${able ? '' : ' disabled'}>Accept</button>
+        <button class="btn btn-key" data-say="${t.id}:yes">Accept</button>
       </div>
     </div>`;
   }).join('');

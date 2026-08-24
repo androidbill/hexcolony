@@ -665,7 +665,27 @@ button {
    the clock — which is worse for the person answering than for the person asking, since
    you are deciding on somebody else's timer. Struck through with the asker's colour so
    it is obvious at a glance who is waiting on you. */
+/* Trades sit above the tray, over the water, rather than inside it.
+   They used to be tray rows, so an incoming offer grew the tray and the board — which is
+   a flex child above it — lost exactly that much height. On a phone a couple of offers
+   squeezed the island into a strip, and the whole map jumped every time somebody asked
+   for wheat. Out of the flow, the board underneath does not move at all. */
+.tray-float {
+  position: absolute;
+  left: 10px; right: 10px; bottom: 100%;
+  margin-bottom: 8px;
+  z-index: 4;
+  display: flex; flex-direction: column; gap: 6px;
+  /* Empty most of the time, and must not swallow taps on the board when it is. */
+  pointer-events: none;
+}
+.tray-float > *:not([hidden]) { pointer-events: auto; }
+
 .trade-asks { max-height: 34vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+/* Reading over open water rather than over the tray's own panel, so each one needs to
+   carry its own weight against a moving background. */
+.tray-float .ask,
+.tray-float .my-offer { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45); }
 .ask {
   border: 1px solid var(--line);
   border-left: 4px solid var(--c, var(--gold));
@@ -712,10 +732,6 @@ button {
    breaks the line between the two halves instead: "Dag is offering you a wheat" over
    "in exchange for an ore", which is where a person would break it too. */
 .ask-part { display: inline-flex; align-items: center; gap: 5px; flex: 0 1 auto; }
-/* wrap is load-bearing: .ask-cant below asks for a whole line of its own, and without
-   somewhere to wrap to it took this row and pushed both buttons off the right of the
-   screen. It only showed when the line was there — which is to say only for the player
-   who could not accept, who is exactly the one who needs to reach "No thanks". */
 /* The countdown rides with the buttons, not in the sentence.
    In the sentence it was one more item competing for the same line, and it was the item
    that tipped "…in exchange for a [card]" onto a second row — the sentence fits in about
@@ -724,13 +740,6 @@ button {
 .ask-go { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 8px; }
 .ask-go .offer-clock { flex: 0 0 auto; }
 .ask-go .btn { flex: 1 1 0; min-width: 0; padding: 9px 8px; font-size: 13px; }
-.ask-go .btn:disabled { opacity: 0.4; }
-.ask-cant {
-  font-size: 10.5px; font-weight: 700;
-  color: var(--danger);
-  flex: 1 0 100%;
-  margin-bottom: 1px;
-}
 
 /* Your own offers ride above the pickers, and stay in the tray after you leave trade
    mode — an acceptance should not need a sheet reopened at you to be seen. */
@@ -814,9 +823,14 @@ button {
    A row rather than two separately positioned buttons: chat is hidden in solo, and a
    row closes the gap where absolute positions would leave one. */
 .board-fabs {
-  position: absolute; bottom: 12px;
+  position: absolute;
+  /* Above whatever the floating trade layer is currently holding. Both live in the
+     bottom-left corner of the board, so an offer arriving would otherwise land straight
+     on top of these and bury the name of whoever sent it. */
+  bottom: calc(12px + var(--float-h, 0px));
   display: flex; gap: 8px;
   z-index: 5;
+  transition: bottom .18s;
 }
 .board-fabs.left { left: 12px; }
 .board-fabs.right { right: 12px; }
@@ -1047,8 +1061,10 @@ button {
 .trade-filter-float {
   position: absolute;
   left: 12px;
-  bottom: 68px;
+  /* Stacked on the pair below it, and lifted with them clear of any offer on screen. */
+  bottom: calc(68px + var(--float-h, 0px));
   z-index: 5;
+  transition: bottom .18s;
 }
 .trade-filter-float svg { width: 24px; height: 24px; color: #fff; }
 .trade-filter-list { display: flex; flex-direction: column; gap: 7px; }
@@ -1236,7 +1252,9 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .rcard--ore   { --rc: #7f8a99; --rc-art: url('art/ore.jpg'); }
 
 /* ------------------------------------------------------------ tray */
+/* `relative` so the trades can hang off the top of it without being part of it. */
 .tray {
+  position: relative;
   flex-shrink: 0;
   background: rgba(5, 18, 32, 0.94);
   border-top: 1px solid var(--line);
