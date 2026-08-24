@@ -3225,7 +3225,9 @@ function reactToLog(g) {
         break;
       case 'offer':
         // The tray shows the offer; this is what makes you look down at it.
-        if (e.p !== playerId) { sfx.card(); toast(`${nameFor(e.p)} offers you a trade.`); }
+        if (e.p !== playerId && !tradeRejectFrom.has(e.p)) {
+          sfx.card(); toast(`${nameFor(e.p)} offers you a trade.`);
+        }
         break;
       case 'declined':
         if (e.p === playerId) toast('Everybody passed on that one.');
