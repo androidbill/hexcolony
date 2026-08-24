@@ -1000,11 +1000,25 @@ function seatDots(players) {
 }
 
 function renderRoomList() {
-  // A room whose time has run out is still sitting in the collection with state 'lobby',
-  // because nothing sweeps them — the TTL is only ever read. Filtering here is what stops
-  // the browser being a list of tables nobody is at.
+  /**
+   * Anyone looking at the list tidies it.
+   *
+   * These two cases have no device of their own left to close them: a room with nobody
+   * seated lost its last player to an app that was killed rather than closed, and a room
+   * past its eight hours is over whoever is nominally still in it. Both used to be
+   * filtered out of the list and left in the database for good.
+   *
+   * Deleting is safe from here and safe to race: several browsers may try the same room
+   * at once, and a delete that finds nothing there has done its job anyway.
+   */
+  for (const r of roomList) {
+    if (Object.keys(r.players || {}).length === 0 || roomIsStale(r)) {
+      deleteDoc(doc(db, 'rooms', r.code)).catch(() => {});
+    }
+  }
+
   const open = roomList
-    .filter((r) => !roomIsStale(r))
+    .filter((r) => !roomIsStale(r) && Object.keys(r.players || {}).length > 0)
     .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
   if (!open.length) {
@@ -1113,6 +1127,21 @@ const clockTrusted = () => solo || clockReady();
 // Going quiet is proof this phone's stream is broken, and it repairs itself.
 const PULSE_MS = 4000;
 const HEALTH_MS = 2000;
+
+/**
+ * How long a room may sit with one person in it before it closes itself.
+ *
+ * Nothing ever removed a room. Leaving as the last player deletes it, but an app that is
+ * killed rather than closed — a phone locked, a tab shut, a browser crashed — leaves the
+ * room behind with its one player still seated, and there it stays. Twenty-one of them
+ * had piled up by the time anybody looked, the oldest six days cold.
+ *
+ * A room with one person in it is not a game, so the device that is in it closes it and
+ * goes home. That is the half that can be done from inside; the browser sweeps the other
+ * half, the rooms with nobody left to do it.
+ */
+const ALONE_MS = 2 * 60 * 1000;
+let aloneSince = null;
 const STALE_RESUB_MS = 11000;
 const STALE_PULL_MS = 17000;
 const STALE_RESET_MS = 26000;
@@ -1331,6 +1360,22 @@ function healthCheck() {
   if (!roomRef) return;
   if (shouldPulse()) writePulse();
 
+  // One player is not a table. Timed from when the room became that way rather than from
+  // arriving, so the clock starts when the last other person leaves.
+  const seated = Object.keys(room?.players || {}).length;
+  if (seated > 1) aloneSince = null;
+  else {
+    if (aloneSince === null) aloneSince = Date.now();
+    else if (Date.now() - aloneSince > ALONE_MS) {
+      aloneSince = null;
+      // leaveRoom deletes the room when there is nobody else in it, which is the case
+      // here by definition — so this closes the room as well as leaving it.
+      toast('Room closed — nobody else joined.');
+      leaveRoom(true);
+      return;
+    }
+  }
+
   const stale = Date.now() - lastFreshAt;
   if (stale > STALE_RESET_MS) hardReset();
   else if (stale > STALE_PULL_MS) pullFromServer();
@@ -1349,6 +1394,7 @@ function healthCheck() {
 }
 
 function enterRoom(code) {
+  aloneSince = null;
   roomCode = code;
   roomRef = doc(db, 'rooms', code);
   pulseRef = doc(db, 'pulses', code);
@@ -1372,6 +1418,7 @@ function enterRoom(code) {
 }
 
 async function leaveRoom(removeSelf = true) {
+  aloneSince = null;
   if (solo) { exitSolo(); return; }
   const wasPlaying = room?.state === 'playing' && game();
   const ref = roomRef;
