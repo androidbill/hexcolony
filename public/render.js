@@ -1089,6 +1089,14 @@ export class BoardView {
     c.save();
     c.translate(x, y);
     c.scale(k, k);
+    if (animate) {
+      // Active-player houses and cities gently rotate around their own centre.
+      const cx = spec.box.x + spec.box.w / 2;
+      const cy = spec.box.y + spec.box.h / 2;
+      c.translate(cx, cy);
+      c.rotate(this.now / 900);
+      c.translate(-cx, -cy);
+    }
     // Bottom-centre of the drawing on the corner, nudged down so it sits on the
     // junction instead of floating above it.
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
