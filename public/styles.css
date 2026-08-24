@@ -1066,15 +1066,14 @@ button { background: none; border: 0; cursor: pointer; }
 }
 .chip-crown + .chip-crown { margin-left: 2px; }
 
-/* Three or more and the chips give up some padding. 72px is chosen, not guessed: it is
-   the widest floor that still fits three across the narrowest phone worth supporting
-   (360px, leaving the strip 240px between the two icon buttons), which is what keeps six
-   players down to two rows rather than three. */
+/* Three or more: chips share the strip equally so all always fit on one row for 4 players
+   and wrap cleanly to two rows for 5-6. flex:1 lets each chip grow/shrink together rather
+   than fighting for space with a min-width floor that overflows narrow phones. */
 .score-strip.tight { gap: 4px; }
 .score-strip.tight .chip {
   padding: 4px 8px; gap: 4px;
   font-size: 11.5px;
-  min-width: 72px; max-width: 116px;
+  flex: 1 1 0; min-width: 0; max-width: 116px;
 }
 .score-strip.tight .chip-cards { font-size: 10.5px; }
 .score-strip.tight .chip-crown { font-size: 9px; width: 15px; height: 15px; }
