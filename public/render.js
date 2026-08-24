@@ -1092,17 +1092,6 @@ export class BoardView {
     // Bottom-centre of the drawing on the corner, nudged down so it sits on the
     // junction instead of floating above it.
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
-    if (animate) {
-      // Rotate after positioning so the piece spins in place instead of moving away
-      // from its board corner and covering the placement highlight.
-      // The placement translation above puts the path centre at x=0 and y=-.28h.
-      // Rotate around that transformed centre, not the source SVG centre.
-      const cx = 0;
-      const cy = -spec.box.h * 0.28;
-      c.translate(cx, cy);
-      c.rotate(this.now / 900);
-      c.translate(-cx, -cy);
-    }
 
     const path = spec.path;
     c.shadowColor = 'rgba(0, 0, 0, 0.5)';
