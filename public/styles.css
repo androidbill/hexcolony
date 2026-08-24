@@ -552,6 +552,21 @@ button { background: none; border: 0; cursor: pointer; }
   flex-wrap: wrap;
 }
 #give-lead { padding-top: 6px; margin-bottom: -2px; }
+.trade-give-bin {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  align-content: flex-start;
+  min-height: 104px;
+  margin: 0 0 2px;
+  padding: 9px;
+  border: 2px solid var(--sky);
+  border-radius: var(--r);
+  background: rgba(61, 143, 224, 0.12);
+}
+.trade-give-bin.empty {
+  align-content: center; justify-content: center;
+  border-style: dashed;
+}
+.trade-give-hint { color: var(--dim); font-size: 12px; text-align: center; padding: 0 12px; }
 .trade-lead {
   align-self: center;
   font-size: 10px; font-weight: 800;

@@ -3428,27 +3428,19 @@ function renderHand(g) {
   const devs = R.devCount(p);
   $('hand').innerHTML = RESOURCES.map((r) => {
     const n = p.res[r] || 0;
-    // While trading, the hand is the give side — there is no second copy of it in a
-    // sheet any more, and no row of "have 3" labels standing in for cards you could not
-    // see. The badge still counts what you hold; the label under it says how many of
-    // them are going, or what the bank charges for them when none are.
+    // In trade mode, selected cards move up into the blue offer box. The hand retains
+    // its usual arrangement underneath, with its count reduced by what is on the table.
     const take = trading ? (giveSel[r] || 0) : 0;
+    const left = n - take;
     const card = resCard(r, {
-      count: n || null, dim: !n, size: 'sm', selected: !!take,
+      count: (trading ? left : n) || null, dim: !(trading ? left : n), size: 'sm',
       dataset: ` data-res="${r}"`,
       stack: false,
-      // A non-breaking space rather than nothing, so a card with no count under it is
-      // exactly as tall as one that has: the hand aligns on its bottom edge, and cards
-      // of two heights sitting in it look broken.
-      label: trading ? (take ? `give ${take}` : '\u00a0') : '',
+      label: '',
     });
     if (!trading) return card;
-    // The rate goes above, where it is read before the decision rather than after it:
-    // what the bank charges for this card is the whole of what you are weighing up when
-    // you choose which cards to part with.
-    const rate = `${R.tradeRate(g, board, playerId, r)}:1`;
-    return pickCell(r, take, card, 'data-pay',
-      `Offer ${RES_NAME[r]} at ${rate}${take ? ` — ${take} so far` : ''}`, rate);
+    return `<button class="discard-card" data-pay="${r}"
+      aria-label="Offer one ${RES_NAME[r]}${take ? ` — ${take} already selected` : ''}">${card}</button>`;
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
   }).join('') + (trading ? '' : devCard({ count: devs || null, dim: !devs, size: 'sm', stack: false }));
@@ -3460,11 +3452,6 @@ $('hand').addEventListener('click', (e) => {
   if (!trading) return;
   const g = game();
   if (!g) return;
-  const clear = e.target.closest('[data-clear]');
-  if (clear) {
-    delete giveSel[clear.dataset.clear];
-    sfx.tap(); render(); return;
-  }
   const el = e.target.closest('[data-pay]');
   if (!el) return;
   // The one real limit in the whole of trading: you cannot offer a card you do not hold.
@@ -3965,7 +3952,7 @@ function resetTrade() {
   autoDeclined.clear();
   // The tray is only redrawn once there is a game to draw it for, and the rows would
   // otherwise still be showing the last one's offers while the lobby loads.
-  for (const id of ['trade-want', 'trade-bar', 'trade-offers', 'trade-asks']) $(id).hidden = true;
+  for (const id of ['trade-want', 'trade-give-bin', 'trade-bar', 'trade-offers', 'trade-asks']) $(id).hidden = true;
   $('actions').hidden = false;
 }
 
@@ -4092,6 +4079,20 @@ function renderWantRow(g) {
   }).join('');
 }
 
+/** The cards put forward for this trade, above the hand they came from. */
+function renderGiveBin() {
+  const bin = $('trade-give-bin');
+  const staged = bundleTotal(giveSel);
+  bin.classList.toggle('empty', !staged);
+  bin.innerHTML = staged
+    ? RESOURCES.filter((r) => giveSel[r]).map((r) => `
+        <button class="discard-card" data-payback="${r}"
+          aria-label="Take ${giveSel[r]} ${RES_NAME[r]} back from this offer">
+          ${resCard(r, { size: 'sm', count: giveSel[r], selected: true, stack: false })}
+        </button>`).join('')
+    : '<span class="trade-give-hint">Tap cards below to add them to your offer</span>';
+}
+
 /**
  * A card with a way back off it.
  *
@@ -4192,6 +4193,7 @@ function renderTrade(g) {
 
   $('trade-want').hidden = !on;
   $('give-lead').hidden = !on;
+  $('trade-give-bin').hidden = !on;
   $('trade-bar').hidden = !on;
   $('actions').hidden = false;
 
@@ -4208,6 +4210,7 @@ function renderTrade(g) {
       ready: canBuyDev, badge: held || 0,
     });
   renderWantRow(g);
+  renderGiveBin();
   renderTradeBar(g);
 }
 
@@ -4229,6 +4232,17 @@ $('trade-want').addEventListener('click', (e) => {
   const room = gettableOf(g, r);
   if ((wantSel[r] || 0) >= room) return;
   wantSel[r] = (wantSel[r] || 0) + 1;
+  sfx.tap();
+  render();
+});
+
+$('trade-give-bin').addEventListener('click', (e) => {
+  const back = e.target.closest('[data-payback]');
+  if (!back) return;
+  const r = back.dataset.payback;
+  if (!giveSel[r]) return;
+  giveSel[r] -= 1;
+  if (!giveSel[r]) delete giveSel[r];
   sfx.tap();
   render();
 });
