@@ -524,6 +524,25 @@ async function createRoom() {
   localStorage.setItem('hexcolony_name', name);
   $('btn-rooms-create').disabled = true;
   try {
+    // A cellular handoff can make the previous create look failed even after
+    // Firestore accepted it. Rejoin the remembered room before creating another.
+    const remembered = localStorage.getItem('hexcolony_room');
+    if (remembered) {
+      try {
+        const existing = await withTimeout(getDoc(doc(db, 'rooms', remembered)), 5000);
+        const data = existing.exists() ? existing.data() : null;
+        if (data && !roomIsStale(data) && data.players?.[playerId]) {
+          enterRoom(remembered);
+          return;
+        }
+        if (!data || roomIsStale(data)) localStorage.removeItem('hexcolony_room');
+      } catch {
+        // Preserve the remembered code when offline; the normal room listener
+        // will reconnect and recover it instead of creating a duplicate.
+        enterRoom(remembered);
+        return;
+      }
+    }
     let code = null;
     for (let i = 0; i < 12; i++) {
       const candidate = makeCode();
