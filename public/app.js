@@ -4259,13 +4259,13 @@ $('trade-bar').addEventListener('click', (e) => {
     // failure partway through left the player halfway into something they had asked for
     // as one thing.
     send({ type: 'bankTrade', give: giveSel, want: wantSel });
-    giveSel = {}; wantSel = {}; portHint = null;
+    stopTrade(true);
     render();
     return;
   }
   if (!offerPlan(g).ok) return;
   send({ type: 'offerTrade', give: giveSel, want: wantSel });
-  giveSel = {}; wantSel = {}; portHint = null;
+  stopTrade(true);
   render();
 });
 
