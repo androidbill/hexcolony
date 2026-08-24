@@ -1973,8 +1973,13 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
      board keeps the full width — it is a picture and it fits itself — and everything you
      read or press is gathered back into the middle, under the same cap the sheets have
      always used. None of this exists below 720px, so the phone is untouched. */
+  /* `width: 100%` is load-bearing. These are children of a column flex container, and an
+     auto inline margin on one of those stops it stretching and shrinks it to its content
+     instead — which collapsed the action bar to the width of three small buttons rather
+     than centring a full-width one. Given a width to fill first, the auto margins go back
+     to doing only what they are here for. */
   .actions,
-  .hand { max-width: 560px; margin-left: auto; margin-right: auto; }
+  .hand { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; }
 
   /* The kebab comes out of the flow so the chips centre on the window rather than on
      what is left of it once the button has taken its 40px — otherwise the strip sits
