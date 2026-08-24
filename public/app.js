@@ -3767,49 +3767,90 @@ function drawDiscard(g) {
 
   $('discard-title').textContent = `You need to discard ${owed} card${owed === 1 ? '' : 's'}`;
 
-  // One button per card, in each place, so a tap always means exactly one card.
-  const cards = (counts, where) => RESOURCES.flatMap((r) =>
-    Array.from({ length: counts[r] || 0 }, (_, i) => `
-      <button class="discard-card" data-move="${where}:${r}" data-k="${r}${i}"
-        aria-label="${where === 'bin' ? `Take back ${RES_NAME[r]}` : `Discard ${RES_NAME[r]}`}">
-        ${resCard(r, { size: 'sm' })}
-      </button>`)).join('');
-
+  // The bin holds only what is going, so it groups: one card per kind with a count on it.
+  // A tap gives one back rather than the lot, matching the tap that put one there.
   const bin = $('discard-bin');
   bin.classList.toggle('empty', !staged);
   bin.innerHTML = staged
-    ? cards(discardChosen, 'bin')
+    ? RESOURCES.filter((r) => discardChosen[r]).map((r) => `
+        <button class="discard-card" data-dback="${r}"
+          aria-label="Take back one ${RES_NAME[r]}">
+          ${resCard(r, { size: 'sm', count: discardChosen[r], selected: true, stack: false })}
+        </button>`).join('')
     : `<span class="discard-bin-hint">Tap ${owed} card${owed === 1 ? '' : 's'} below and they
         will appear here. Tap one here to put it back.</span>`;
 
-  const remaining = {};
-  for (const r of RESOURCES) remaining[r] = (held[r] || 0) - (discardChosen[r] || 0);
+  /**
+   * The hand, drawn the way the hand is always drawn: all five resources, each with the
+   * number of it you hold, greyed at nothing.
+   *
+   * The count comes down as cards move up, so what is on screen is what you would still
+   * be holding — which is the number you are actually deciding about. A card with none
+   * left stays in place and greys out rather than disappearing, exactly as in the tray,
+   * because a row that reflows while you are tapping it is how you discard the wrong card.
+   */
   const hand = $('discard-hand');
   hand.classList.toggle('done', staged >= owed);
-  hand.innerHTML = cards(remaining, 'hand');
+  hand.innerHTML = RESOURCES.map((r) => {
+    const left = (held[r] || 0) - (discardChosen[r] || 0);
+    const take = discardChosen[r] || 0;
+    const card = resCard(r, {
+      size: 'sm', count: left || null, dim: !left, selected: !!take, stack: false,
+      // Non-breaking space so every card is the same height with or without a label.
+      label: take ? `losing ${take}` : '\u00a0',
+    });
+    return `<span class="pick">`
+      + `<button class="pick-tap" data-dpick="${r}"`
+      + ` aria-label="Discard one ${RES_NAME[r]}${take ? ` — ${take} so far` : ''}">${card}</button>`
+      + (take ? `<button class="pick-clear" data-dclear="${r}"`
+        + ` aria-label="Take back all ${RES_NAME[r]}">×</button>` : '')
+      + `</span>`;
+  }).join('');
 
   $('discard-hint').textContent = staged >= owed
     ? 'that is enough — tap OK'
     : `${owed - staged} more`;
   $('btn-discard').disabled = staged !== owed;
-
-  for (const b of document.querySelectorAll('#sheet-discard [data-move]')) {
-    b.addEventListener('click', () => {
-      const [where, r] = b.dataset.move.split(':');
-      if (where === 'hand') {
-        if (staged >= owed) return;
-        if ((discardChosen[r] || 0) >= (held[r] || 0)) return;
-        discardChosen[r] = (discardChosen[r] || 0) + 1;
-      } else {
-        if (!discardChosen[r]) return;
-        discardChosen[r] -= 1;
-        if (!discardChosen[r]) delete discardChosen[r];
-      }
-      sfx.tap();
-      drawDiscard(g);
-    });
-  }
 }
+
+// Delegated on the sheet, so the cards can be redrawn as often as they like. Its own
+// attribute names rather than the trade sheet's, which are already spoken for.
+$('sheet-discard').addEventListener('click', (e) => {
+  const g = game();
+  if (!g) return;
+  const owed = g.pending.discard[playerId] || 0;
+  const held = g.players[playerId]?.res || {};
+  const staged = Object.values(discardChosen).reduce((a, b) => a + b, 0);
+
+  const pick = e.target.closest('[data-dpick]');
+  if (pick) {
+    const r = pick.dataset.dpick;
+    if (staged >= owed) return;
+    if ((discardChosen[r] || 0) >= (held[r] || 0)) return;
+    discardChosen[r] = (discardChosen[r] || 0) + 1;
+    sfx.tap();
+    drawDiscard(g);
+    return;
+  }
+
+  const back = e.target.closest('[data-dback]');
+  if (back) {
+    const r = back.dataset.dback;
+    if (!discardChosen[r]) return;
+    discardChosen[r] -= 1;
+    if (!discardChosen[r]) delete discardChosen[r];
+    sfx.tap();
+    drawDiscard(g);
+    return;
+  }
+
+  const clear = e.target.closest('[data-dclear]');
+  if (clear) {
+    delete discardChosen[clear.dataset.dclear];
+    sfx.tap();
+    drawDiscard(g);
+  }
+});
 
 $('btn-discard').addEventListener('click', () => {
   const g = game();
