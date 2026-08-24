@@ -77,7 +77,11 @@ body {
 }
 
 button, input { font: inherit; color: inherit; }
-button { background: none; border: 0; cursor: pointer; }
+button {
+  background: none; border: 0; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  will-change: transform;
+}
 
 /* ------------------------------------------------------------ screens */
 .screen {
@@ -179,7 +183,7 @@ button { background: none; border: 0; cursor: pointer; }
   transition: transform .12s, filter .15s, opacity .15s;
   width: 100%;
 }
-.btn:active { transform: scale(0.975); }
+.btn:active { transform: scale(0.975) translateZ(0); }
 .btn:disabled { opacity: 0.45; pointer-events: none; }
 
 .btn-key {
