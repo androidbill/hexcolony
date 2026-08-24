@@ -5244,6 +5244,11 @@ window.HEXCOLONY = {
     history.replaceState(null, '', url.pathname + url.search + url.hash);
   }
 
+  // A name is already saved whenever someone creates, joins, or starts a solo game.
+  // Put it back in the field on the next visit so a returning player need not type it
+  // again, while still leaving it easy to replace for a different player on this device.
+  $('name-input').value = (localStorage.getItem('hexcolony_name') || '').trim().slice(0, 14);
+
   showScreen('screen-home');
   refreshResume();
   startPresence();
