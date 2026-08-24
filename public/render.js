@@ -1030,6 +1030,7 @@ export class BoardView {
     if (!this.game) return;
     const c = this.ctx;
     const R = this.scale;
+    const activePid = this.game.seats?.[this.game.turn?.seat];
     for (const [eid, pid] of Object.entries(this.game.roads)) {
       const e = EDGES[eid];
       const [ax, ay] = this.toScreen(VERTS[e.a].x, VERTS[e.a].y);
@@ -1047,9 +1048,16 @@ export class BoardView {
         c.lineWidth = w;
         c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
       };
+      const active = pid === activePid;
+      if (active) {
+        c.shadowColor = `rgba(255, 255, 255, ${0.18 + this.pulse * 0.28})`;
+        c.shadowBlur = 3 + this.pulse * 5;
+      }
       stripe(R * 0.245, EDGE_INK);
-      stripe(R * 0.215, OUTLINE);
+      stripe(R * (0.215 + (active ? this.pulse * 0.018 : 0)), OUTLINE);
       stripe(R * 0.125, this.colorOf(pid));
+      c.shadowColor = 'transparent';
+      c.shadowBlur = 0;
     }
   }
 
@@ -1059,17 +1067,20 @@ export class BoardView {
     // that at nearly twice size a neighbour would otherwise paint over the very piece the
     // jump is pointing at.
     const jumping = [];
+    const activePid = this.game.seats?.[this.game.turn?.seat];
     for (const [vid, b] of Object.entries(this.game.bldg)) {
       const v = Number(vid);
       const k = this.buildPop(v);
       if (k > 0) { jumping.push([v, b, k]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p)) : this.drawSettlement(x, y, this.colorOf(b.p));
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, b.p === activePid)
+        : this.drawSettlement(x, y, this.colorOf(b.p), 1, b.p === activePid);
     }
     for (const [v, b, k] of jumping) {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const grow = 1 + k * (BUILD_PEAK - 1);
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow) : this.drawSettlement(x, y, this.colorOf(b.p), grow);
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, b.p === activePid)
+        : this.drawSettlement(x, y, this.colorOf(b.p), grow, b.p === activePid);
     }
   }
 
@@ -1080,7 +1091,7 @@ export class BoardView {
    * Stand a piece on a corner, sized by height so a city reads as wider than a house
    * rather than merely taller.
    */
-  drawPiece(kind, x, y, color, height) {
+  drawPiece(kind, x, y, color, height, animate = false) {
     const spec = PIECES[kind];
     if (!spec) return;
     const c = this.ctx;
@@ -1107,14 +1118,16 @@ export class BoardView {
     c.lineWidth = 11;
     c.strokeStyle = EDGE_INK;
     c.stroke(path);
-    c.lineWidth = 7;
+    c.shadowColor = animate ? `rgba(255, 255, 255, ${0.16 + this.pulse * 0.26})` : 'transparent';
+    c.shadowBlur = animate ? 3 + this.pulse * 5 : 0;
+    c.lineWidth = animate ? 7 + this.pulse * 1.4 : 7;
     c.strokeStyle = OUTLINE;
     c.stroke(path);
     c.restore();
   }
 
-  drawSettlement(x, y, color, grow = 1) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow); }
-  drawCity(x, y, color, grow = 1) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow); }
+  drawSettlement(x, y, color, grow = 1, animate = false) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow, animate); }
+  drawCity(x, y, color, grow = 1, animate = false) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow, animate); }
 
   drawRobber() {
     if (!this.game) return;
