@@ -283,6 +283,7 @@ export class BoardView {
     this.fitScale = 40;
     this.pulse = 0;
     this.animatePieces = true;
+    this.connectedPerimeterEnabled = true;
     this.pieceGroups = null;
     this.onPick = null;                // ({ kind, id }) => void
     this._pointers = new Map();
@@ -322,6 +323,56 @@ export class BoardView {
     const phase = new Map(), roots = new Map();
     for (const key of parent.keys()) { const root = find(key); if (!roots.has(root)) roots.set(root, roots.size * 90); phase.set(key, roots.get(root)); }
     return phase;
+  }
+
+  drawConnectedPerimeters() {
+    if (!this.game || !this.animatePieces || !this.connectedPerimeterEnabled) return;
+    const pid = this.game.seats?.[this.game.turn?.seat];
+    if (!pid) return;
+    const groups = new Map();
+    const add = (key, points) => {
+      const root = this.connectedPiecePhases();
+      const phase = root.get(key);
+      const id = `${pid}:${phase ?? key}`;
+      if (!groups.has(id)) groups.set(id, []);
+      groups.get(id).push(...points);
+    };
+    const R = this.scale;
+    for (const [eid, owner] of Object.entries(this.game.roads || {})) {
+      if (owner !== pid) continue;
+      const e = EDGES[eid]; if (!e) continue;
+      const [aX, aY] = this.toScreen(VERTS[e.a].x, VERTS[e.a].y);
+      const [bX, bY] = this.toScreen(VERTS[e.b].x, VERTS[e.b].y);
+      const dx = bX - aX, dy = bY - aY, len = Math.hypot(dx, dy) || 1;
+      const nx = -dy / len * R * .16, ny = dx / len * R * .16;
+      add(`r:${eid}`, [[aX + nx, aY + ny], [aX - nx, aY - ny], [bX + nx, bY + ny], [bX - nx, bY - ny]]);
+    }
+    for (const [vid, b] of Object.entries(this.game.bldg || {})) {
+      if (b.p !== pid) continue;
+      const [x, y] = this.toScreen(VERTS[vid].x, VERTS[vid].y);
+      const r = R * (b.t === 'c' ? .42 : .36);
+      add(`b:${vid}`, Array.from({ length: 8 }, (_, i) => {
+        const a = i * Math.PI / 4; return [x + Math.cos(a) * r, y + Math.sin(a) * r];
+      }));
+    }
+    const hull = (pts) => {
+      const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const lo = []; for (const q of p) { while (lo.length > 1 && cross(lo[lo.length - 2], lo.at(-1), q) <= 0) lo.pop(); lo.push(q); }
+      const hi = []; for (const q of [...p].reverse()) { while (hi.length > 1 && cross(hi[hi.length - 2], hi.at(-1), q) <= 0) hi.pop(); hi.push(q); }
+      return lo.slice(0, -1).concat(hi.slice(0, -1));
+    };
+    const c = this.ctx;
+    for (const pts of groups.values()) {
+      const path = hull(pts); if (path.length < 3) continue;
+      c.beginPath(); c.moveTo(path[0][0], path[0][1]);
+      for (const [x, y] of path.slice(1)) c.lineTo(x, y); c.closePath();
+      c.lineJoin = 'round'; c.lineCap = 'round'; c.lineWidth = Math.max(5, R * .09);
+      c.strokeStyle = this.colorOf(pid); c.stroke();
+      c.setLineDash([Math.max(6, R * .075), Math.max(6, R * .075)]);
+      c.lineDashOffset = -this.now / 40; c.strokeStyle = '#fff'; c.stroke();
+      c.setLineDash([]); c.lineDashOffset = 0;
+    }
   }
   setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [], cities: [] }; }
   setSea(key) { this.sea = seaAt(key); }
@@ -604,6 +655,7 @@ export class BoardView {
     this.drawEdgeHighlights();
     if (paying) this.drawPayingSpots(paying);
     this.drawBuildings();
+    this.drawConnectedPerimeters();
     this.drawRobber();
     this.drawVertexHighlights();
     if (this.zoom) this.drawRolledTokens(this.zoom.k);
@@ -1071,7 +1123,7 @@ export class BoardView {
         c.lineWidth = w;
         c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke();
       };
-      const active = this.animatePieces && pid === activePid;
+      const active = this.animatePieces && !this.connectedPerimeterEnabled && pid === activePid;
       stripe(R * 0.245, EDGE_INK);
       if (active) {
         // Keep the player's colour as the road, then chase a white dash around the
@@ -1125,7 +1177,7 @@ export class BoardView {
       const k = this.buildPop(v);
       if (k > 0) { jumping.push([v, b, k]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
-      const animate = this.animatePieces && b.p === activePid;
+      const animate = this.animatePieces && !this.connectedPerimeterEnabled && b.p === activePid;
       this.piecePhase = phases.get(`b:${vid}`) || 0;
       b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, animate)
         : this.drawSettlement(x, y, this.colorOf(b.p), 1, animate);
@@ -1133,7 +1185,7 @@ export class BoardView {
     for (const [v, b, k] of jumping) {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const grow = 1 + k * (BUILD_PEAK - 1);
-      const animate = this.animatePieces && b.p === activePid;
+      const animate = this.animatePieces && !this.connectedPerimeterEnabled && b.p === activePid;
       this.piecePhase = phases.get(`b:${v}`) || 0;
       b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, animate)
         : this.drawSettlement(x, y, this.colorOf(b.p), grow, animate);
