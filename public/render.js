@@ -1157,6 +1157,8 @@ export class BoardView {
       c.strokeStyle = color;
       c.stroke(path);
       const dash = Math.max(6, this.scale * 0.1);
+      c.lineCap = 'butt';
+      c.lineJoin = 'miter';
       c.setLineDash([dash, dash]);
       c.lineDashOffset = -this.now / 40;
       c.lineWidth = 7;
@@ -1164,6 +1166,8 @@ export class BoardView {
       c.stroke(path);
       c.setLineDash([]);
       c.lineDashOffset = 0;
+      c.lineCap = 'round';
+      c.lineJoin = 'round';
     }
     c.restore();
   }
