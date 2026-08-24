@@ -1917,7 +1917,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   const order = shuffle([playerId, ...bots.map((b) => b.id)]);
   const settings = {
     targetVP, discardLimit, boardMode: 'random', layout, useRobber,
-    turnSeconds: soloTurnSeconds, sea: soloSea, discardSeconds: soloDiscardSeconds,
+    turnSeconds: soloTurnSeconds, sea: soloSea, discardSeconds: R.DISCARD_SECONDS,
   };
 
   // Straight to the map picker: solo has a host too, and it is you.
@@ -1974,7 +1974,6 @@ let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
 let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
 let soloSea = localStorage.getItem('hexcolony_solo_sea') || SEA_DEFAULT;
-let soloDiscardSeconds = Number(localStorage.getItem('hexcolony_solo_dtimer')) || R.DISCARD_SECONDS;
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
@@ -2012,20 +2011,8 @@ function drawSoloSheet() {
   // because there the host is changing settings other people are watching — here nobody
   // else is looking, so it can simply go.
   $('solo-discard-row').hidden = !soloRobber;
-  $('solo-discard-timer-row').hidden = !soloRobber;
-  for (const b of document.querySelectorAll('[data-solo-dtimer]')) {
-    b.classList.toggle('on', Number(b.dataset.soloDtimer) === soloDiscardSeconds);
-  }
 }
 
-for (const b of document.querySelectorAll('[data-solo-dtimer]')) {
-  b.addEventListener('click', () => {
-    soloDiscardSeconds = Number(b.dataset.soloDtimer);
-    localStorage.setItem('hexcolony_solo_dtimer', String(soloDiscardSeconds));
-    sfx.tap();
-    drawSoloSheet();
-  });
-}
 for (const b of document.querySelectorAll('[data-solo-timer]')) {
   b.addEventListener('click', () => {
     soloTurnSeconds = Number(b.dataset.soloTimer);
@@ -2145,12 +2132,6 @@ for (const b of document.querySelectorAll('[data-timer]')) {
   });
 }
 
-for (const b of document.querySelectorAll('[data-dtimer]')) {
-  b.addEventListener('click', () => {
-    if (setSetting({ 'settings.discardSeconds': Number(b.dataset.dtimer) })) sfx.tap();
-  });
-}
-
 for (const b of document.querySelectorAll('[data-robber]')) {
   b.addEventListener('click', () => {
     if (setSetting({ 'settings.useRobber': b.dataset.robber === 'on' })) sfx.tap();
@@ -2254,13 +2235,6 @@ function renderLobby() {
     ? `${turnSeconds}s to act, ${R.ROLL_SECONDS}s to roll. Doing something adds 10s.`
     : 'No limit — take as long as you like.';
 
-  // Only spent when a seven can make somebody discard, so it follows the robber setting.
-  const discardSeconds = R.DISCARD_OPTIONS.includes(s.discardSeconds)
-    ? s.discardSeconds : R.DISCARD_SECONDS;
-  for (const b of document.querySelectorAll('[data-dtimer]')) {
-    b.classList.toggle('on', Number(b.dataset.dtimer) === discardSeconds);
-  }
-
   const useRobber = s.useRobber !== false;
   for (const b of document.querySelectorAll('[data-robber]')) {
     b.classList.toggle('on', (b.dataset.robber === 'on') === useRobber);
@@ -2270,7 +2244,6 @@ function renderLobby() {
     : 'No discard, no robber — just take a card from any player.';
   // The discard limit has nothing to govern once the robber is off.
   for (const b of document.querySelectorAll('[data-set="discard"]')) b.disabled = !useRobber;
-  $('discard-timer-row').hidden = !useRobber;
   const discardRow = $('set-discard').closest('.opt-row');
   if (discardRow) discardRow.style.opacity = useRobber ? '' : '0.4';
 
