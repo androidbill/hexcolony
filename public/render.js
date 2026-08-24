@@ -1067,7 +1067,9 @@ export class BoardView {
         perimeter.lineTo(x1 - nx, y1 - ny);
         perimeter.quadraticCurveTo(x1 - ux * half, y1 - uy * half, x1 + nx, y1 + ny);
         perimeter.closePath();
-        const dash = Math.max(6, R * 0.10);
+        // The capsule perimeter makes equal numeric dashes look longer than the
+        // house's compact outline, so use the visual equivalent here.
+        const dash = Math.max(6, R * 0.075);
         c.lineCap = 'butt';
         c.setLineDash([dash, dash]);
         c.lineDashOffset = -this.now / 40;
