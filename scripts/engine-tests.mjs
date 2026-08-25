@@ -907,13 +907,16 @@ check('a dynamic island is the same island on every device', () => {
 });
 
 check('the shipped page asks for this build of the CSS and the JS', () => {
-  // index.html pins styles.css and app.js with ?v=. If one of those drifts from
-  // APP_VERSION, a refresh inside GitHub Pages' ten-minute cache window can leave new
-  // JavaScript being laid out by the previous build's stylesheet — which is not a
-  // failure anything else would catch, because both files load and neither complains.
+  // index.html pins its own assets with ?v=. If one drifts from APP_VERSION, a refresh
+  // inside GitHub Pages' ten-minute cache window can leave new JavaScript being laid out
+  // by the previous build's stylesheet — which is not a failure anything else would
+  // catch, because both files load and neither complains.
+  //
+  // Every pin is checked rather than a named two: iro.min.js was added later, kept the
+  // version it was added on, and nothing noticed. Whatever is pinned has to agree.
   const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-  const pinned = [...html.matchAll(/(?:href|src)="(styles\.css|app\.js)\?v=([^"]+)"/g)];
-  eq(pinned.length, 2, 'styles.css and app.js should both carry a ?v=');
+  const pinned = [...html.matchAll(/(?:href|src)="([^"?]+)\?v=([^"]+)"/g)];
+  assert(pinned.length >= 2, `expected the page to pin its assets, found ${pinned.length}`);
   for (const [, file, v] of pinned) eq(v, APP_VERSION, `${file} is pinned to the wrong build`);
 });
 

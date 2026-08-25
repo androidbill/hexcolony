@@ -323,6 +323,16 @@ const GUESS_HOLD_MS = 20000;
 // Whether this device has ever been seen seated in the room it is watching. Guards the
 // removal check above against the gap between joining and the join being written.
 let wasSeated = false;
+/**
+ * Whether the room document has ever actually been seen.
+ *
+ * createRoom fires the write that creates the room and does NOT wait for it — waiting on
+ * an ack a phone connection might swallow is how lobbies come to feel broken — then
+ * subscribes straight away. So the listener's first answer from the server is routinely
+ * about a document that has not landed yet, and "not there" at that moment means "not
+ * written", not "closed".
+ */
+let sawRoomDoc = false;
 let serverRoom = null;   // the last state the server actually sent
 let guessSeq = 0;        // g.seq the guess on screen has reached; 0 when not guessing
 let guessAt = 0;         // when it was drawn
@@ -572,7 +582,13 @@ async function createRoom() {
       players: { [playerId]: freshPlayer(name) },
       order: [],
       game: null,
-    }).catch((e) => { console.error(e); toast('Could not create the room — check your connection.'); });
+    }).catch((e) => {
+      console.error(e);
+      toast('Could not create the room — check your connection.');
+      // Nothing is coming. Without this the host waits in a lobby for a room that was
+      // never written, which the guard above would otherwise keep them in indefinitely.
+      if (roomCode === code) leaveRoom(false);
+    });
     sfx.join();
     enterRoom(code);
   } finally {
@@ -1294,10 +1310,15 @@ function subscribeRoom() {
   unsub = onSnapshot(roomRef, { includeMetadataChanges: true }, (snap) => {
     if (!snap.exists()) {
       if (snap.metadata.fromCache) return;
+      // Never seen it, so it has not gone — it has not arrived. Announcing "the room was
+      // closed" here threw the host out of the room they had just made, a second before
+      // the write landed and put it in the browser with their own name on it.
+      if (!sawRoomDoc) return;
       toast('The room was closed.');
       leaveRoom(false);
       return;
     }
+    sawRoomDoc = true;
     applyRoom(snap.data(), !snap.metadata.fromCache);
   }, (err) => {
     console.error(err);
@@ -1425,6 +1446,7 @@ function healthCheck() {
 
 function enterRoom(code) {
   aloneSince = null;
+  sawRoomDoc = false;
   roomCode = code;
   roomRef = doc(db, 'rooms', code);
   pulseRef = doc(db, 'pulses', code);
