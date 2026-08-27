@@ -24,8 +24,7 @@ import { APP_VERSION } from './version.js';
 import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO, layoutInfo,
   DYNAMIC_SIZES, DYNAMIC_DEFAULT, dynamicSize } from './board.js';
 import { icon } from './icons.js';
-import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS, SEA_DEFAULT, seaAt,
-  readableOnSea } from './render.js';
+import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS, SEA_DEFAULT, seaAt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
@@ -2442,24 +2441,16 @@ function renderLobby() {
  * window is visible from across a room and cannot be mistaken for anything else.
  *
  * Only on your own turn. A ring that lit up for everybody would be moving almost all of
- * the time, and something that is always on says nothing.
- *
- * The colour is yours, pushed clear of the water first: the sea is whatever a colour wheel
- * produced, so the blue player on a blue sea would otherwise get a ring that reads as part
- * of the background. The glow is the same colour at half alpha, which is why this
- * builds an rgba string rather than leaning on the hex.
+ * the time, and something that is always on says nothing. It is white rather than the
+ * player's colour: white is the one thing that stands off every sea in the list without
+ * being reasoned about, and there is only ever one ring on screen, so it has nothing to
+ * be told apart from.
  */
 function renderTurnRing(g) {
   const ring = $('turn-ring');
   if (!ring) return;
   const mine = !!g && g.phase !== 'over' && R.isTurn(g, playerId) && !!g.players[playerId];
-  if (!mine || pauseBlocksGame()) { ring.hidden = true; return; }
-
-  const hex = readableOnSea(colorFor(playerId), room?.settings?.sea);
-  const [r, gr, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
-  ring.style.setProperty('--c', hex);
-  ring.style.setProperty('--glow', `rgba(${r}, ${gr}, ${b}, 0.5)`);
-  ring.hidden = false;
+  ring.hidden = !mine || pauseBlocksGame();
 }
 
 // ---------------------------------------------------------------- board plumbing

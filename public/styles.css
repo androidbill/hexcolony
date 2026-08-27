@@ -547,15 +547,16 @@ button {
    the moment you are most likely to be looking away. Nothing here takes a tap, so sitting
    on top costs the sheets nothing.
 
-   The colour is the player's own, shifted in JS until it separates from the water — see
-   readableOnSea. A ring the same blue as a blue sea is a ring nobody notices. */
+   White, and not the player's own colour: white is the one thing that stands off every
+   sea in the list without having to be reasoned about, and only one ring is ever on
+   screen, so it has nothing to be told apart from. */
 .turn-ring {
   position: fixed; inset: 0;
   pointer-events: none;
   z-index: 55;
   box-shadow:
-    inset 0 0 0 5px var(--c, var(--gold)),
-    inset 0 0 30px 6px var(--glow, rgba(227, 186, 87, .55));
+    inset 0 0 0 10px #fff,
+    inset 0 0 34px 8px rgba(255, 255, 255, .5);
   animation: turn-ring-pulse 1.15s ease-in-out infinite;
 }
 @keyframes turn-ring-pulse {
