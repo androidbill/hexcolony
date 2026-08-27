@@ -1986,7 +1986,16 @@ function saveSolo() {
   } catch { /* storage full or blocked — the game still plays, it just won't resume */ }
 }
 function loadSolo() {
-  try { return JSON.parse(localStorage.getItem(SOLO_KEY) || 'null'); } catch { return null; }
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SOLO_KEY) || 'null'); } catch { return null; }
+  // A game saved on an island this build no longer has. useLayout would quietly fall back
+  // to the classic board, and the saved settlements and roads point at corners that board
+  // does not have — so the game would come back subtly wrong rather than not at all.
+  // Boards come and go; a half-finished solo game against bots is not worth keeping one
+  // for, so the save goes instead.
+  const layout = saved?.game?.layout;
+  if (layout && !LAYOUT_INFO[layout]) { clearSolo(); return null; }
+  return saved;
 }
 function clearSolo() { try { localStorage.removeItem(SOLO_KEY); } catch { /* fine */ } }
 

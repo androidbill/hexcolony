@@ -9,10 +9,9 @@
 // Hexes are pointy-top in axial (q, r) coordinates. In `size = 1` units:
 //   centre  x = sqrt(3) * (q + r/2),  y = 1.5 * r
 //
-//   classic       rows of 3,4,5,4,3     = 19 tiles
-//   expansion     rows of 3,4,5,6,5,4,3 = 30 tiles (the 5-6 player board)
-//   star          41 tiles, a six-pointed island
-//   newfoundland  52 tiles, the island's outline in hexes
+//   classic    rows of 3,4,5,4,3     = 19 tiles
+//   expansion  rows of 3,4,5,6,5,4,3 = 30 tiles (the 5-6 player board)
+//   dyn30/41/52  grown from the seed, see DYNAMIC_SIZES
 
 export const SQ3 = Math.sqrt(3);
 const HALF_SQ3 = SQ3 / 2;
@@ -52,71 +51,6 @@ const ROW_PLANS = {
   classic:   { firstRow: -2, counts: [3, 4, 5, 4, 3] },
   expansion: { firstRow: 0, counts: [3, 4, 5, 6, 5, 4, 3] },
 };
-
-/**
- * A shape that is not a stack of centred rows.
- *
- * The row plan above can only describe something symmetrical about x = 0, which covers a
- * round island and nothing else. A star has to reach further out on some rows than the
- * ones above them, and a coastline has bays in it — a row of an island is not always one
- * unbroken run of tiles.
- *
- * So these are written as runs of `[column, count]` in offset coordinates, where a column
- * is one hex across and odd rows sit half a hex to the right — which is how the tiles
- * actually sit, and means the source reads roughly like the island it draws. Two runs in
- * one row leave water between them.
- *
- * There is one rule a shape has to keep, and it is not obvious: no two tiles may meet at
- * a bare corner. `walkCoast` steps from one coastal edge to the next through the vertex
- * they share, which only works while every coastal vertex has exactly two of them. Tiles
- * touching corner-to-corner give a vertex four, the walk forks, and the ring of ports
- * comes out as a fragment of the coast. scripts/shape-lab.mjs draws a candidate and
- * checks this before it ever reaches the game.
- */
-function runCoords(rows) {
-  const out = [];
-  rows.forEach((runs, r) => {
-    for (const [col0, n] of runs) {
-      // odd-r offset -> axial
-      for (let k = 0; k < n; k++) out.push({ q: col0 + k - ((r - (r & 1)) >> 1), r });
-    }
-  });
-  return out;
-}
-
-// A six-pointed island: a tip, a broad shoulder, and an arm reaching out either side,
-// mirrored below. The narrow waist between the two arms is what keeps it a star rather
-// than a blob, and it is the part of the board people will fight over.
-const STAR_ROWS = [
-  [[5, 1]],
-  [[3, 4]],
-  [[1, 9]],
-  [[3, 4]],
-  [[3, 5]],
-  [[3, 4]],
-  [[1, 9]],
-  [[3, 4]],
-  [[5, 1]],
-];
-
-// Newfoundland, north up and generalised to fifty-two hexes: the Great Northern Peninsula
-// running down from the top left, the broad body below it, and the Avalon hanging off the
-// south-east across a bay, joined by a single tile where the isthmus is. At this size it
-// is a likeness rather than a map, but the three parts are all there and the isthmus is
-// a real choke point to build across.
-const NEWFOUNDLAND_ROWS = [
-  [[4, 2]],                 // Great Northern Peninsula, running north
-  [[3, 2]],
-  [[4, 2]],
-  [[3, 3]],
-  [[3, 5]],                 // it opens out into the body
-  [[2, 6]],
-  [[2, 7]],
-  [[2, 7]],
-  [[3, 6]],
-  [[4, 6]],                 // the last tile of this row is the isthmus
-  [[5, 3], [9, 3]],         // bay, then the Avalon
-];
 
 // ---------------------------------------------------------------- the dynamic island
 /**
@@ -350,20 +284,6 @@ export const LAYOUT_INFO = {
     bank: 24,
     dev: { knight: 20, vp: 6, road: 3, plenty: 3, mono: 2 },
   },
-  star: {
-    key: 'star',
-    label: 'Beetle',
-    tiles: 41,
-    blurb: '41 tiles in a six-pointed island. Long coast, narrow waist, room for six.',
-    terrain: { forest: 8, pasture: 8, fields: 8, hills: 7, mountains: 7, desert: 3 },
-    tokens: { 2: 3, 3: 4, 4: 4, 5: 4, 6: 4, 8: 4, 9: 4, 10: 4, 11: 4, 12: 3 },
-    // Ports are scaled by island rather than by coastline. A star has far more shore than
-    // its area deserves — going by coast alone would ring it in harbours and make the
-    // 2-for-1s ordinary.
-    ports: 14,
-    bank: 28,
-    dev: { knight: 26, vp: 7, road: 4, plenty: 4, mono: 3 },
-  },
   // One entry per dynamic size. The bags and decks still come from dynamicInfo, which
   // works them out from the tile count; these exist so a picker, a room list and a blurb
   // can treat a dynamic board exactly like a fixed one.
@@ -374,17 +294,6 @@ export const LAYOUT_INFO = {
     dynamic: true,
     blurb: `${n} tiles, a different shape every game.`,
   }])),
-  newfoundland: {
-    key: 'newfoundland',
-    label: 'Island',
-    tiles: 52,
-    blurb: '52 tiles shaped like the island. The Avalon is one tile from the mainland.',
-    terrain: { forest: 10, pasture: 10, fields: 10, hills: 9, mountains: 9, desert: 4 },
-    tokens: { 2: 4, 3: 5, 4: 5, 5: 5, 6: 5, 8: 5, 9: 5, 10: 5, 11: 5, 12: 4 },
-    ports: 16,
-    bank: 32,
-    dev: { knight: 32, vp: 8, road: 5, plenty: 5, mono: 3 },
-  },
 };
 
 const terrainBag = (info) => Object.entries(info.terrain).flatMap(([t, n]) => Array(n).fill(t));
@@ -513,8 +422,6 @@ function walkCoast(edges, vertices, coastEdges, coastSet) {
 const TOPOS = {
   classic: buildTopology(planCoords(ROW_PLANS.classic)),
   expansion: buildTopology(planCoords(ROW_PLANS.expansion)),
-  star: buildTopology(runCoords(STAR_ROWS)),
-  newfoundland: buildTopology(runCoords(NEWFOUNDLAND_ROWS)),
 };
 
 // These are `let` on purpose. Exported `let` bindings are live, so switching the layout

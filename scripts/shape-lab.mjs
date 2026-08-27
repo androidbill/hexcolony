@@ -201,15 +201,16 @@ export function reportCoords(name, coords) {
   return a;
 }
 
-// Run with no arguments to check the two hand-drawn islands that ship. Paste a candidate
-// in alongside them to see it drawn and checked before it goes anywhere near board.js.
+// Nothing hand-drawn ships any more — the fixed boards are the two centred row plans in
+// board.js, and every other island is grown from a seed. This stays because the next
+// drawn shape will want it: paste a candidate below as rows of [column, count] runs and
+// run the file to see it drawn and checked before it goes anywhere near board.js.
 //
-// The dynamic board is checked in scripts/engine-tests.mjs instead, across many seeds:
-// its shapes are grown rather than written down, so there is nothing here to eyeball.
-report('star · 41', [
-  [[5, 1]], [[3, 4]], [[1, 9]], [[3, 4]], [[3, 5]], [[3, 4]], [[1, 9]], [[3, 4]], [[5, 1]],
-]);
-report('newfoundland · 52', [
-  [[4, 2]], [[3, 2]], [[4, 2]], [[3, 3]], [[3, 5]], [[2, 6]],
-  [[2, 7]], [[2, 7]], [[3, 6]], [[4, 6]], [[5, 3], [9, 3]],
+// The grown boards are checked in scripts/engine-tests.mjs instead, across many seeds.
+report('example · a shape to replace', [
+  [[2, 3]],
+  [[1, 5]],
+  [[1, 6]],
+  [[1, 5]],
+  [[2, 3]],
 ]);
