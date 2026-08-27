@@ -584,7 +584,7 @@ button {
   pointer-events: none;
   z-index: 55;
   box-shadow:
-    inset 0 0 0 10px #fff,
+    inset 0 0 0 8px #fff,
     inset 0 0 34px 8px rgba(255, 255, 255, .5);
   animation: turn-ring-pulse 1.15s ease-in-out infinite;
 }
