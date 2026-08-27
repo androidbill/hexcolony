@@ -2717,9 +2717,12 @@ $('board-tools-btn').addEventListener('click', (e) => {
   unlock(); sfx.tap();
   setBoardTools(!$('board-tools').classList.contains('open'));
 });
-for (const id of ['btn-trade-filter', 'btn-recenter', 'game-log-btn']) {
+for (const id of ['btn-how-board', 'btn-trade-filter', 'btn-recenter', 'game-log-btn']) {
   $(id).addEventListener('click', () => setBoardTools(false));
 }
+// Same sheet the menu and the landing page open; the board just gets its own way in,
+// because the moment you want the costs is the moment you are looking at the board.
+$('btn-how-board').addEventListener('click', () => { unlock(); sfx.tap(); openHow(); });
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#board-tools')) setBoardTools(false);
 });

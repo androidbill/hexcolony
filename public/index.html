@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.27.06">
+<link rel="stylesheet" href="styles.css?v=2026.08.27.07">
 </head>
 <body>
 
@@ -332,6 +332,11 @@
          "more" — the kebab at the top of every other screen. -->
     <div class="board-tools" id="board-tools">
       <div class="board-tools-list" id="board-tools-list">
+        <!-- Furthest from the handle because it is the rarest: once you know the costs you
+             stop opening it, while the log and the recentre stay in use all game. -->
+        <button class="board-fab" id="btn-how-board" aria-label="How to play">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M9.4 9.2a2.7 2.7 0 0 1 5.2.9c0 1.8-2.6 2.1-2.6 3.9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="17.4" r="1.15" fill="currentColor"/></svg>
+        </button>
         <button class="board-fab" id="btn-trade-filter" aria-label="Trade rejection settings" hidden>
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m6 6 12 12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
         </button>
@@ -759,7 +764,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.27.06"></script>
-<script type="module" src="app.js?v=2026.08.27.06"></script>
+<script src="iro.min.js?v=2026.08.27.07"></script>
+<script type="module" src="app.js?v=2026.08.27.07"></script>
 </body>
 </html>
