@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.27.04">
+<link rel="stylesheet" href="styles.css?v=2026.08.27.05">
 </head>
 <body>
 
@@ -322,18 +322,34 @@
         <div class="die die-sum" id="die-sum">?</div>
       </div>
     </div>
-    <div class="board-fabs left">
-      <button class="board-fab" id="btn-recenter" aria-label="Recentre board">
-        <svg viewBox="0 0 24 24"><path d="M12 3v3m0 12v3M3 12h3m12 0h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-      </button>
-      <button class="board-fab" id="game-log-btn" aria-label="Game log">
-        <svg viewBox="0 0 24 24"><path d="M5 5h14M5 10h14M5 15h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        <i class="chat-dot log-dot" id="log-dot" hidden></i>
+    <!-- Three tools behind one button. They are used a few times a game each and sat on
+         the water all of it, so they fold into a vertical pill that opens on a tap — the
+         same shut-is-the-answer idea as the sea picker's swatch.
+
+         Vertical dots for the handle, not the three horizontal lines the log wears: the
+         log is one of the things inside, and a handle wearing its child's icon says the
+         wrong thing about what opens. Vertical dots are already this app's word for
+         "more" — the kebab at the top of every other screen. -->
+    <div class="board-tools" id="board-tools">
+      <div class="board-tools-list" id="board-tools-list">
+        <button class="board-fab" id="btn-trade-filter" aria-label="Trade rejection settings" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m6 6 12 12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
+        </button>
+        <button class="board-fab" id="btn-recenter" aria-label="Recentre board">
+          <svg viewBox="0 0 24 24"><path d="M12 3v3m0 12v3M3 12h3m12 0h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <button class="board-fab" id="game-log-btn" aria-label="Game log">
+          <svg viewBox="0 0 24 24"><path d="M5 5h14M5 10h14M5 15h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <i class="chat-dot log-dot" id="log-dot" hidden></i>
+        </button>
+      </div>
+      <button class="board-fab board-tools-btn" id="board-tools-btn" aria-label="Board tools" aria-expanded="false" aria-controls="board-tools-list">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1.9" fill="currentColor"/><circle cx="12" cy="12" r="1.9" fill="currentColor"/><circle cx="12" cy="19" r="1.9" fill="currentColor"/></svg>
+        <!-- Something new in the log has to still be visible with the log put away,
+             otherwise folding these up quietly hides the one that asks for attention. -->
+        <i class="chat-dot" id="board-tools-dot" hidden></i>
       </button>
     </div>
-    <button class="board-fab trade-filter-float" id="btn-trade-filter" aria-label="Trade rejection settings" hidden>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m6 6 12 12" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-    </button>
     <div class="tile-tip" id="tile-tip" hidden></div>
   </div>
 
@@ -743,7 +759,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.27.04"></script>
-<script type="module" src="app.js?v=2026.08.27.04"></script>
+<script src="iro.min.js?v=2026.08.27.05"></script>
+<script type="module" src="app.js?v=2026.08.27.05"></script>
 </body>
 </html>

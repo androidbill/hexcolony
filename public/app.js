@@ -2684,6 +2684,46 @@ view.onPick = (hit) => {
 };
 
 
+/**
+ * The board's three tools, behind one handle.
+ *
+ * Shut by default and shut again the moment one is used: every one of them either opens a
+ * sheet or moves the board, so there is nothing left to pick from afterwards. A tap
+ * anywhere else shuts it too, which on this screen mostly means a tap on the island —
+ * the pill is over the water and getting rid of it should not need aim.
+ */
+function setBoardTools(open) {
+  const wrap = $('board-tools');
+  if (!wrap) return;
+  wrap.classList.toggle('open', open);
+  $('board-tools-btn').setAttribute('aria-expanded', String(open));
+  syncLogDot();
+}
+
+/**
+ * The log's unread mark, on whichever of the two is currently on screen.
+ *
+ * Folding the log away must not fold away the fact that something happened in it, so
+ * while the pill is shut the handle wears the mark instead.
+ */
+function syncLogDot() {
+  const dot = $('board-tools-dot');
+  if (!dot) return;
+  dot.hidden = $('log-dot').hidden || $('board-tools').classList.contains('open');
+}
+
+$('board-tools-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  unlock(); sfx.tap();
+  setBoardTools(!$('board-tools').classList.contains('open'));
+});
+for (const id of ['btn-trade-filter', 'btn-recenter', 'game-log-btn']) {
+  $(id).addEventListener('click', () => setBoardTools(false));
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#board-tools')) setBoardTools(false);
+});
+
 $('btn-recenter').addEventListener('click', () => { view.resetView(); sfx.tap(); });
 
 // ---------------------------------------------------------------- chat
@@ -3515,6 +3555,7 @@ function reactToLog(g) {
   if (first) return; // don't replay the whole game's audio when you open the room
 
   $('log-dot').hidden = false;
+  syncLogDot();
   /**
    * Nothing here raises a toast any more.
    *
@@ -5196,6 +5237,7 @@ function openLog(g) {
   const rows = (g.log || []).slice().reverse().map(logLine).join('');
   $('log-list').innerHTML = rows || '<p class="hint">Nothing yet.</p>';
   $('log-dot').hidden = true;
+  syncLogDot();
   seenLogAt = Date.now();
   sheet('sheet-log');
 }

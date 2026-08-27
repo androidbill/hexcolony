@@ -25,6 +25,11 @@
   --sky-shade: #0f5f85; /* the lip the raised buttons sit on */
   --danger: #e5484d;
   --good: #22c55e;
+  /* The same two accents, taken down far enough to read on a white plate. Gold and red
+     were both chosen against dark blue; on white they sit at about 1.8:1 and 3:1, which
+     is a colour you can see but not a colour you can read at a glance across a table. */
+  --gold-ink: #7a5a10;
+  --danger-ink: #b8262b;
 
   --app-height: 100vh;
   --safe-t: env(safe-area-inset-top, 0px);
@@ -481,10 +486,22 @@ button {
    the board. They used to be three separately positioned things stacked down the middle,
    which read as three announcements rather than one status line, and pushed the dice a
    third of the way down the island. */
+/* One white pill holding all three, rather than three dark ones in a row. They are a
+   single status line — whose go it is, how long is left, what came up — and three
+   separate lozenges read as three announcements that happened to land side by side.
+   White because the parts inside are ink and gold and a card face; on the dark blue they
+   each had to carry their own plate to be legible. */
 .board-hud {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 9px;
   max-width: calc(100% - 16px);
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(13, 27, 40, 0.14);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(8px);
+  color: var(--ink);
   pointer-events: none;
   /* Above the veil (40) and above the sheets (50). A sheet the game is waiting on is
      exactly when the clock matters most — you are being held to a deadline by the very
@@ -493,44 +510,41 @@ button {
   z-index: 60;
 }
 
+/* The pill around all of it carries the plate now, so each part is just its text. */
 .board-badge {
-  background: rgba(5, 18, 32, 0.88);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 7px 13px;
   font-size: 13px; font-weight: 700;
   white-space: nowrap;
   /* The flexible one: the dice and the clock are fixed widths, so when the row runs out
      of phone this is what gives. */
   min-width: 0; flex: 0 1 auto;
   overflow: hidden; text-overflow: ellipsis;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
 }
-.board-badge.mine { border-color: var(--gold); color: var(--gold); }
-.board-badge.pause-badge { border-color: var(--gold); color: var(--gold); }
+/* Bronze, not --gold: the gold was picked to carry on dark blue and is barely there on
+   white. Same hue, taken far enough down to read. */
+.board-badge.mine, .board-badge.pause-badge { color: var(--gold-ink); }
 .board-badge.pause-badge.pause-urgent {
-  border-color: var(--danger); color: #ff9fa1;
+  color: var(--danger-ink);
   animation: timer-tick 1s steps(2) infinite;
 }
 
 .turn-timer {
   flex: 0 0 auto;
-  min-width: 38px;
-  padding: 5px 9px;
-  border-radius: 999px;
-  background: rgba(5, 18, 32, 0.88);
-  border: 1px solid var(--line);
+  min-width: 26px;
   font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums;
   text-align: center;
-  backdrop-filter: blur(8px);
   pointer-events: none;
 }
 /* Yours to act on — and running out. */
-.turn-timer.mine { border-color: var(--gold); color: var(--gold); }
+.turn-timer.mine { color: var(--gold-ink); }
 .turn-timer.urgent {
-  border-color: var(--danger); color: #ff9fa1;
+  color: var(--danger-ink);
   animation: timer-tick 1s steps(2) infinite;
+}
+/* Hairlines instead of gaps, so three things on one plate still read as three things.
+   Only on what is actually showing — the clock and the dice each come and go. */
+.turn-timer:not([hidden]), .dice-float:not([hidden]) {
+  border-left: 1px solid rgba(13, 27, 40, 0.16);
+  padding-left: 9px;
 }
 @keyframes timer-tick { 50% { opacity: 0.45; } }
 
@@ -538,15 +552,17 @@ button {
   flex: 0 0 auto;
   display: flex; align-items: center; gap: 5px;
 }
-/* Smaller than they were, because they now share a row rather than owning one. */
+/* Smaller than they were, because they now share a row rather than owning one. Dark
+   faces, since the plate under them went white and a parchment die on white is a number
+   floating in space rather than a die. */
 .die {
-  width: 30px; height: 30px;
-  border-radius: 9px;
-  background: var(--parch);
-  color: var(--ink);
-  font-size: 16px; font-weight: 800;
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  background: var(--ink);
+  color: var(--parch);
+  font-size: 15px; font-weight: 800;
   display: grid; place-items: center;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 2px 5px rgba(13, 27, 40, 0.3);
   animation: die-in .32s cubic-bezier(.2, 1.4, .4, 1);
 }
 @keyframes die-in { from { transform: scale(.3) rotate(-25deg); opacity: 0; } }
@@ -724,18 +740,17 @@ button {
   to { transform: translate(var(--dx), var(--dy)) scale(var(--ds)); opacity: 0; }
 }
 
-/* The total, so the roll can be read without adding the pips up. Same face as a die but
-   parchment-on-ink reversed, so it is plainly the answer rather than a third die. */
+/* The total, so the roll can be read without adding the pips up. Gold rather than ink,
+   so it is plainly the answer rather than a third die. */
 .die-eq {
   align-self: center;
-  color: var(--parch);
+  color: rgba(13, 27, 40, 0.5);
   font-size: 13px; font-weight: 800;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
 }
 .die.die-sum {
   background: var(--gold);
   color: #2a1e08;
-  min-width: 30px; width: auto; padding: 0 8px;
+  min-width: 28px; width: auto; padding: 0 8px;
 }
 
 /* ------------------------------------------------------------ discarding */
@@ -1072,22 +1087,61 @@ button {
 .src-none { font-size: 12px; color: var(--dim); font-style: italic; }
 
 /* ------------------------------------------------------------ chat */
-/* Chat and the game log, in the board's bottom-left corner, opposite the recentre
-   control — so nothing floating sits under the thumb that is placing a road.
-   A row rather than two separately positioned buttons: chat is hidden in solo, and a
-   row closes the gap where absolute positions would leave one. */
-.board-fabs {
+/* The board's own tools, in its bottom-left corner — opposite the side a thumb places a
+   road on, so nothing floating sits under it.
+
+   One handle, three tools. Trade filter, recentre and the log are each worth a few taps a
+   game and were on the water for all of it, three dark discs over the island. Folded up
+   they cost one, and open they are a single pill rather than three discs again: the
+   buttons inside lose their own circles so the pill is the shape and the icons are its
+   contents. */
+.board-tools {
   position: absolute;
+  left: 12px;
   /* Above whatever the floating trade layer is currently holding. Both live in the
      bottom-left corner of the board, so an offer arriving would otherwise land straight
      on top of these and bury the name of whoever sent it. */
   bottom: calc(12px + var(--float-h, 0px));
-  display: flex; gap: 8px;
   z-index: 5;
   transition: bottom .18s;
 }
-.board-fabs.left { left: 12px; }
-.board-fabs.right { right: 12px; }
+/* Stacked ABOVE the handle by absolute position rather than by being a sibling in a
+   column. In a column it would have to leave the layout to stay shut, and a box that
+   leaves the layout cannot be animated back into it — and it would drag the handle up
+   off the corner every time it opened. Out of flow, the handle never moves and the pill
+   can grow out of it. */
+.board-tools-list {
+  position: absolute;
+  bottom: calc(100% + 8px); left: 50%;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  background: rgba(5, 18, 32, 0.9);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+  transform-origin: 50% 100%;
+  transform: translateX(-50%);
+  transition: opacity .16s ease, transform .16s cubic-bezier(.2, 1.2, .4, 1), visibility .16s;
+}
+/* Shut: invisible AND untappable, so it cannot swallow a tap meant for the island. */
+.board-tools:not(.open) .board-tools-list {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-50%) translateY(8px) scale(.85);
+}
+/* Inside the pill the buttons ARE the pill's contents, so they drop their own disc.
+   Kept the full 44px tall: a smaller target is the wrong economy on a phone. */
+.board-tools-list .board-fab {
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+.board-tools-list .board-fab:active { background: rgba(255, 255, 255, .14); }
+.board-tools.open .board-tools-btn svg { transform: rotate(90deg); }
+.board-tools-btn svg { transition: transform .16s; }
 .board-fab {
   position: relative;
   width: 44px; height: 44px; border-radius: 50%;
@@ -1341,15 +1395,7 @@ button {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
 }
-.trade-filter-float {
-  position: absolute;
-  left: 12px;
-  /* Stacked on the pair below it, and lifted with them clear of any offer on screen. */
-  bottom: calc(68px + var(--float-h, 0px));
-  z-index: 5;
-  transition: bottom .18s;
-}
-.trade-filter-float svg { width: 24px; height: 24px; color: #fff; }
+#btn-trade-filter svg { width: 24px; height: 24px; color: #fff; }
 .trade-filter-list { display: flex; flex-direction: column; gap: 7px; }
 .trade-filter-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center;
