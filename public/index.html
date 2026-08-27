@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.24.41">
+<link rel="stylesheet" href="styles.css?v=2026.08.24.45">
 </head>
 <body>
 
@@ -177,37 +177,60 @@
     <div class="card" id="lobby-settings">
       <div class="card-title">Game setup</div>
 
-      <div class="opt-row">
-        <span class="opt-l">Points to win<em>How long the game runs</em></span>
-        <div class="stepper">
-          <button class="step-b" data-set="target" data-step="-1">&minus;</button>
-          <span class="step-v" id="set-target">10</span>
-          <button class="step-b" data-set="target" data-step="1">+</button>
-        </div>
-      </div>
-
-      <div class="opt-row">
-        <span class="opt-l">Discard on a 7<em>Hands above this lose half</em></span>
-        <div class="stepper">
-          <button class="step-b" data-set="discard" data-step="-1">&minus;</button>
-          <span class="step-v" id="set-discard">7</span>
-          <button class="step-b" data-set="discard" data-step="1">+</button>
-        </div>
-      </div>
+      <!-- Three groups, in the order a table actually decides them: which island, how
+           long the game runs, and what it looks like. The section headings do most of the
+           shortening — six rows that each had to introduce themselves became three
+           stretches of related settings that only need a heading each. -->
+      <div class="opt-group">The island</div>
 
       <div class="opt-row col">
-        <span class="opt-l">Board<em id="layout-blurb">19 tiles. The standard island, best for 3 or 4 players.</em></span>
         <div class="seg-row grid2">
           <button class="seg on" data-layout="classic">Classic &middot; 19</button>
           <button class="seg" data-layout="expansion">Expansion &middot; 30</button>
           <button class="seg" data-layout="star">Beetle &middot; 41</button>
           <button class="seg" data-layout="newfoundland">Island &middot; 52</button>
-          <button class="seg span2" data-layout="dynamic">Dynamic &middot; 30&ndash;80</button>
+          <button class="seg span2" data-layout="dynamic">Dynamic</button>
+        </div>
+        <!-- Only up when Dynamic is the choice: a size picker for a board nobody has
+             picked is a row explaining itself to no one. -->
+        <div class="seg-row sub" id="dyn-size-row" hidden>
+          <button class="seg" data-dynsize="30">30</button>
+          <button class="seg" data-dynsize="41">41</button>
+          <button class="seg" data-dynsize="52">52</button>
+        </div>
+        <em class="opt-note" id="layout-blurb">19 tiles. The standard island, best for 3 or 4 players.</em>
+      </div>
+
+      <div class="opt-row">
+        <span class="opt-l">Sea</span>
+        <div class="sea-row" id="sea-row"></div>
+      </div>
+
+      <div class="opt-group">The game</div>
+
+      <!-- Two numbers side by side. They are the same shape of control and they are read
+           together — how long this runs, and how much a seven hurts. -->
+      <div class="opt-pair">
+        <div class="opt-cell">
+          <span class="opt-l">Points to win</span>
+          <div class="stepper">
+            <button class="step-b" data-set="target" data-step="-1">&minus;</button>
+            <span class="step-v" id="set-target">10</span>
+            <button class="step-b" data-set="target" data-step="1">+</button>
+          </div>
+        </div>
+        <div class="opt-cell">
+          <span class="opt-l">Discard at</span>
+          <div class="stepper">
+            <button class="step-b" data-set="discard" data-step="-1">&minus;</button>
+            <span class="step-v" id="set-discard">7</span>
+            <button class="step-b" data-set="discard" data-step="1">+</button>
+          </div>
         </div>
       </div>
 
       <div class="opt-row col">
-        <span class="opt-l">Turn timer<em id="timer-blurb">No limit — take as long as you like.</em></span>
+        <span class="opt-l">Turn timer</span>
         <div class="seg-row">
           <button class="seg on" data-timer="0">Off</button>
           <button class="seg" data-timer="15">15s</button>
@@ -215,19 +238,16 @@
           <button class="seg" data-timer="45">45s</button>
           <button class="seg" data-timer="60">60s</button>
         </div>
+        <em class="opt-note" id="timer-blurb">No limit — take as long as you like.</em>
       </div>
 
       <div class="opt-row col">
-        <span class="opt-l">Rolling a 7<em id="robber-blurb">Discard down, move the robber, rob whoever it lands on.</em></span>
+        <span class="opt-l">Rolling a 7</span>
         <div class="seg-row">
           <button class="seg on" data-robber="on">Discard</button>
           <button class="seg" data-robber="off">No Discard</button>
         </div>
-      </div>
-
-      <div class="opt-row col">
-        <span class="opt-l">Sea<em id="sea-blurb">The water around the island</em></span>
-        <div class="sea-row" id="sea-row"></div>
+        <em class="opt-note" id="robber-blurb">Discard down, move the robber, rob whoever it lands on.</em>
       </div>
 
     </div>
@@ -254,6 +274,18 @@
 
   <div class="board-wrap">
     <canvas id="board-cv"></canvas>
+
+    <!-- The roll, thrown across the board before it settles into the readout in the HUD.
+         A sibling of the canvas rather than a child of .board-hud: that strip is pinned to
+         the top of the board and is what these fly down INTO, and a thing cannot travel to
+         its own container. -->
+    <div class="dice-stage" id="dice-stage" aria-hidden="true" hidden>
+      <div class="bigdie" id="bigdie-a"></div>
+      <div class="bigdie" id="bigdie-b"></div>
+    </div>
+
+    <!-- What the roll just paid you, held up big and then put away into your hand. -->
+    <div class="gain-stage" id="gain-stage" aria-hidden="true" hidden></div>
     <div class="board-hud">
       <div class="board-badge" id="turn-badge"></div>
       <div class="turn-timer" id="turn-timer" hidden><span id="timer-secs">0</span></div>
@@ -422,19 +454,33 @@
   </div>
   <p class="hint" id="solo-blurb"></p>
 
+  <div class="opt-group">The island</div>
+
   <div class="opt-row col">
-    <span class="opt-l">Board<em id="solo-layout-blurb"></em></span>
     <div class="seg-row grid2">
       <button class="seg on" data-solo-layout="classic">Classic &middot; 19</button>
       <button class="seg" data-solo-layout="expansion">Expansion &middot; 30</button>
       <button class="seg" data-solo-layout="star">Beetle &middot; 41</button>
       <button class="seg" data-solo-layout="newfoundland">Island &middot; 52</button>
-      <button class="seg span2" data-solo-layout="dynamic">Dynamic &middot; 30&ndash;80</button>
+      <button class="seg span2" data-solo-layout="dynamic">Dynamic</button>
     </div>
+    <div class="seg-row sub" id="solo-dyn-size-row" hidden>
+      <button class="seg" data-solo-dynsize="30">30</button>
+      <button class="seg" data-solo-dynsize="41">41</button>
+      <button class="seg" data-solo-dynsize="52">52</button>
+    </div>
+    <em class="opt-note" id="solo-layout-blurb"></em>
   </div>
 
+  <div class="opt-row">
+    <span class="opt-l">Sea</span>
+    <div class="sea-row" id="solo-sea-row"></div>
+  </div>
+
+  <div class="opt-group">The game</div>
+
   <div class="opt-row col">
-    <span class="opt-l">Turn timer<em id="solo-timer-blurb"></em></span>
+    <span class="opt-l">Turn timer</span>
     <div class="seg-row">
       <button class="seg on" data-solo-timer="0">Off</button>
       <button class="seg" data-solo-timer="15">15s</button>
@@ -442,46 +488,46 @@
       <button class="seg" data-solo-timer="45">45s</button>
       <button class="seg" data-solo-timer="60">60s</button>
     </div>
+    <em class="opt-note" id="solo-timer-blurb"></em>
   </div>
 
   <div class="opt-row col">
-    <span class="opt-l">Rolling a 7<em id="solo-robber-blurb"></em></span>
+    <span class="opt-l">Rolling a 7</span>
     <div class="seg-row">
       <button class="seg on" data-solo-robber="on">Discard</button>
       <button class="seg" data-solo-robber="off">No Discard</button>
     </div>
+    <em class="opt-note" id="solo-robber-blurb"></em>
   </div>
 
 
-  <div class="opt-row" id="solo-discard-row">
-    <span class="opt-l">Discard on a 7<em>Hands above this lose half</em></span>
-    <div class="stepper">
-      <button class="step-b" data-solo="discard" data-step="-1">&minus;</button>
-      <span class="step-v" id="solo-discard">7</span>
-      <button class="step-b" data-solo="discard" data-step="1">+</button>
+  <!-- Three numbers of the same shape, on one row instead of three. The discard limit
+       hides itself when a seven takes a card instead of emptying hands, and the row
+       reflows to two rather than leaving a hole. -->
+  <div class="opt-pair three">
+    <div class="opt-cell">
+      <span class="opt-l">Opponents</span>
+      <div class="stepper">
+        <button class="step-b" data-solo="bots" data-step="-1">&minus;</button>
+        <span class="step-v" id="solo-bots">3</span>
+        <button class="step-b" data-solo="bots" data-step="1">+</button>
+      </div>
     </div>
-  </div>
-
-  <div class="opt-row col">
-    <span class="opt-l">Sea<em id="solo-sea-blurb">The water around the island</em></span>
-    <div class="sea-row" id="solo-sea-row"></div>
-  </div>
-
-  <div class="opt-row">
-    <span class="opt-l">Opponents<em>How many bots at the table</em></span>
-    <div class="stepper">
-      <button class="step-b" data-solo="bots" data-step="-1">&minus;</button>
-      <span class="step-v" id="solo-bots">3</span>
-      <button class="step-b" data-solo="bots" data-step="1">+</button>
+    <div class="opt-cell">
+      <span class="opt-l">Points</span>
+      <div class="stepper">
+        <button class="step-b" data-solo="target" data-step="-1">&minus;</button>
+        <span class="step-v" id="solo-target">10</span>
+        <button class="step-b" data-solo="target" data-step="1">+</button>
+      </div>
     </div>
-  </div>
-
-  <div class="opt-row">
-    <span class="opt-l">Points to win<em>How long the game runs</em></span>
-    <div class="stepper">
-      <button class="step-b" data-solo="target" data-step="-1">&minus;</button>
-      <span class="step-v" id="solo-target">10</span>
-      <button class="step-b" data-solo="target" data-step="1">+</button>
+    <div class="opt-cell" id="solo-discard-row">
+      <span class="opt-l">Discard at</span>
+      <div class="stepper">
+        <button class="step-b" data-solo="discard" data-step="-1">&minus;</button>
+        <span class="step-v" id="solo-discard">7</span>
+        <button class="step-b" data-solo="discard" data-step="1">+</button>
+      </div>
     </div>
   </div>
 
@@ -674,7 +720,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.24.41"></script>
-<script type="module" src="app.js?v=2026.08.24.41"></script>
+<script src="iro.min.js?v=2026.08.24.45"></script>
+<script type="module" src="app.js?v=2026.08.24.45"></script>
 </body>
 </html>

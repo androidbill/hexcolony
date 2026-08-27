@@ -119,8 +119,24 @@ const NEWFOUNDLAND_ROWS = [
 ];
 
 // ---------------------------------------------------------------- the dynamic island
-export const DYNAMIC_MIN = 30;
-export const DYNAMIC_MAX = 80;
+/**
+ * The sizes a dynamic island comes in.
+ *
+ * It used to roll its own size anywhere in a range, which made every game a surprise in
+ * two ways at once — a shape you had not seen and a size you had not agreed. The shape is
+ * the interesting half. Picking the size back out of the randomness means a table can say
+ * "the big random one" and get it, and it lines the option up with the fixed boards, which
+ * are already chosen by how many tiles they have.
+ */
+export const DYNAMIC_SIZES = [30, 41, 52];
+export const DYNAMIC_DEFAULT = 41;
+
+/** 'dyn41' -> 41, and anything else -> null. */
+export function dynamicSize(layout) {
+  const m = /^dyn(\d+)$/.exec(layout || '');
+  const n = m ? Number(m[1]) : null;
+  return DYNAMIC_SIZES.includes(n) ? n : null;
+}
 
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, -1], [-1, 1]];
 const ckey = (q, r) => `${q},${r}`;
@@ -144,22 +160,26 @@ const ckey = (q, r) => `${q},${r}`;
  * rejecting: a lake means the growth reached round and closed on itself, which is a
  * perfectly good island once the middle is land.
  */
-function dynamicCoords(seed) {
+function dynamicCoords(seed, wanted) {
   // Its own stream, so the shape cannot shift the terrain and token deals that follow.
   const pick = mulberry32((seed ^ 0x9e3779b9) >>> 0);
-  const wanted = DYNAMIC_MIN + Math.floor(pick() * (DYNAMIC_MAX - DYNAMIC_MIN + 1));
   const bias = 1 + pick() * 3;
 
-  // Filling a lake adds tiles after the growth has stopped, so a board that grew to the
-  // ceiling can come back one over it. Rather than let the range be approximate, grow
-  // again a little smaller until it fits. Each attempt draws from its own stream keyed on
-  // the attempt number, so this stays identical on every device.
-  let coords = [];
-  for (let attempt = 0; attempt < 8; attempt++) {
-    coords = growIsland(wanted - attempt, bias, mulberry32((seed * 2654435761 + attempt) >>> 0));
-    if (coords.length <= DYNAMIC_MAX) break;
+  // The size is a promise the picker made — "Dynamic · 41" has to be forty-one tiles —
+  // and filling a lake adds tiles after the growth has already stopped. So rather than
+  // grow short and hope the fill makes up the difference, grow to the number every time
+  // and reroll the shape whenever the fill had anything to do. A lake turns up in about
+  // one shape in twenty-five, so this almost always takes the first attempt and cannot
+  // plausibly take twelve. Each attempt draws its own stream keyed on the attempt, so
+  // every device walks the same sequence and lands on the same island.
+  let best = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const coords = growIsland(wanted, bias, mulberry32((seed * 2654435761 + attempt) >>> 0));
+    if (coords.length === wanted) return coords;
+    if (!best || Math.abs(coords.length - wanted) < Math.abs(best.length - wanted)) best = coords;
   }
-  return coords;
+  // Never reached in practice; the closest island beats no island at all.
+  return best;
 }
 
 /** Grow one island to `target` tiles and fill in anything it wrapped around. */
@@ -216,12 +236,13 @@ function growIsland(target, bias, rng) {
 
 // Built per seed and kept, because the rules engine rebuilds the board on every move.
 const dynamicTopos = new Map();
-function dynamicTopo(seed) {
-  let t = dynamicTopos.get(seed);
+function dynamicTopo(seed, size) {
+  const key = `${seed}|${size}`;
+  let t = dynamicTopos.get(key);
   if (!t) {
-    t = buildTopology(dynamicCoords(seed));
+    t = buildTopology(dynamicCoords(seed, size));
     if (dynamicTopos.size > 16) dynamicTopos.clear();
-    dynamicTopos.set(seed, t);
+    dynamicTopos.set(key, t);
   }
   return t;
 }
@@ -259,7 +280,7 @@ function dynamicInfo(tiles) {
   }
 
   return {
-    key: 'dynamic',
+    key: `dyn${tiles}`,
     label: 'Dynamic',
     tiles,
     blurb: `${tiles} tiles, drawn fresh for this game.`,
@@ -282,7 +303,10 @@ function dynamicInfo(tiles) {
  * grown first, because its size is not known until its seed is.
  */
 export function layoutInfo(layout, seed) {
-  if (layout === 'dynamic' && Number.isFinite(seed)) return dynamicInfo(dynamicTopo(seed).hexes.length);
+  const size = dynamicSize(layout);
+  // The size is in the name, so unlike before this does not need the seed to answer —
+  // the seed only decides which shape of that size gets grown.
+  if (size) return dynamicInfo(size);
   return LAYOUT_INFO[layout] || LAYOUT_INFO.classic;
 }
 
@@ -340,15 +364,16 @@ export const LAYOUT_INFO = {
     bank: 28,
     dev: { knight: 26, vp: 7, road: 4, plenty: 4, mono: 3 },
   },
-  // No sizes here: a dynamic board's are decided by its seed, so anything that needs them
-  // has to ask layoutInfo(layout, seed) rather than read them off this table.
-  dynamic: {
-    key: 'dynamic',
+  // One entry per dynamic size. The bags and decks still come from dynamicInfo, which
+  // works them out from the tile count; these exist so a picker, a room list and a blurb
+  // can treat a dynamic board exactly like a fixed one.
+  ...Object.fromEntries(DYNAMIC_SIZES.map((n) => [`dyn${n}`, {
+    key: `dyn${n}`,
     label: 'Dynamic',
-    tiles: null,
+    tiles: n,
     dynamic: true,
-    blurb: `A different island every game, anywhere from ${DYNAMIC_MIN} to ${DYNAMIC_MAX} tiles.`,
-  },
+    blurb: `${n} tiles, a different shape every game.`,
+  }])),
   newfoundland: {
     key: 'newfoundland',
     label: 'Island',
@@ -509,13 +534,14 @@ export let EDGES = TOPO.edges;
  * no single topology to switch to the way there is for the fixed islands.
  */
 export function useLayout(name, seed) {
-  if (name === 'dynamic' && Number.isFinite(seed)) {
-    LAYOUT = 'dynamic';
-    TOPO = dynamicTopo(seed);
+  const size = dynamicSize(name);
+  if (size && Number.isFinite(seed)) {
+    LAYOUT = name;
+    TOPO = dynamicTopo(seed, size);
     HEXES = TOPO.hexes;
     VERTS = TOPO.vertices;
     EDGES = TOPO.edges;
-    return 'dynamic';
+    return name;
   }
   const key = TOPOS[name] ? name : 'classic';
   LAYOUT = key;

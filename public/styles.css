@@ -379,6 +379,53 @@ button {
 .opt-l { flex: 1; font-weight: 600; display: flex; flex-direction: column; gap: 2px; }
 .opt-l em { font-style: normal; font-weight: 500; font-size: 12px; color: var(--dim); }
 
+/* A heading over a stretch of related settings. Six rows that each had to introduce
+   themselves is what made the panel long; three headings carry the same meaning in a
+   fraction of the height, and give the eye somewhere to rest between groups. */
+.opt-group {
+  font-size: 10.5px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .09em;
+  color: var(--gold);
+  padding: 16px 0 2px;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+}
+.opt-group:first-of-type { border-top: 0; margin-top: 0; padding-top: 2px; }
+/* The heading already draws the line above the group, so the first row under it must
+   not draw a second one three pixels below. */
+.opt-group + .opt-row, .opt-group + .opt-pair { border-top: 0; }
+
+/* The explainer moved out of the label and under the control it describes — it is about
+   the answer, not the question, and reading it after the choice is the right order. */
+.opt-note {
+  font-style: normal; font-weight: 500;
+  font-size: 12px; color: var(--dim);
+  line-height: 1.35;
+}
+
+/* Two settings of the same shape, side by side. Both are a number with a stepper and
+   they are read together, so they cost one row rather than two. */
+.opt-pair {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+.opt-pair.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.opt-cell { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+/* Narrow cells: the stepper has to give up its gaps before the number gets clipped. */
+.opt-pair.three .step-b { width: 30px; height: 30px; font-size: 16px; }
+.opt-pair.three .step-v { min-width: 20px; font-size: 16px; }
+.opt-cell .stepper { justify-content: space-between; }
+
+/* The size row under Dynamic. Indented and quieter than the boards above it, so it reads
+   as a detail of the choice already made rather than a second, competing choice. */
+.seg-row.sub {
+  margin-left: 14px;
+  background: rgba(0, 0, 0, 0.18);
+}
+.seg-row.sub .seg { font-size: 12.5px; padding: 7px 8px; }
+
 .stepper { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .step-b {
   width: 34px; height: 34px; border-radius: 10px;
@@ -490,6 +537,104 @@ button {
   animation: die-in .32s cubic-bezier(.2, 1.4, .4, 1);
 }
 @keyframes die-in { from { transform: scale(.3) rotate(-25deg); opacity: 0; } }
+
+/* ------------------------------------------------------------ the roll
+   Rolling is the most repeated action in the game and it used to be two numbers
+   appearing. These are the same two numbers, thrown across the board first.
+
+   The stage covers the board and takes no input: the dice are a thing happening, not a
+   thing to press, and a full-screen layer that swallowed taps would eat the first tap of
+   the turn it is announcing. */
+.dice-stage {
+  position: absolute; inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  display: grid; place-items: center;
+  grid-auto-flow: column;
+  gap: 22px;
+}
+.bigdie {
+  width: 96px; height: 96px;
+  border-radius: 20px;
+  background: linear-gradient(160deg, #fdf6e4, var(--parch));
+  color: var(--ink);
+  display: grid; place-items: center;
+  font-size: 54px; font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .55), inset 0 -4px 0 rgba(0, 0, 0, .18);
+  /* The two transforms the animation drives, declared here so the settle can start from
+     wherever the tumble happened to leave the die. */
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+}
+/* Each die gets its own tumble so the pair never spins in step, which is the tell that
+   makes a rolled die read as animation rather than as a throw. */
+.dice-stage.rolling #bigdie-a { animation: tumble-a .62s cubic-bezier(.28,.02,.24,1) both; }
+.dice-stage.rolling #bigdie-b { animation: tumble-b .62s cubic-bezier(.22,.03,.3,1) both; }
+
+@keyframes tumble-a {
+  0%   { transform: translate(-40px, 120px) scale(.35) rotate(-160deg); opacity: 0; }
+  22%  { opacity: 1; }
+  55%  { transform: translate(6px, -26px) scale(1.12) rotate(190deg); }
+  78%  { transform: translate(0, 8px) scale(.97) rotate(352deg); }
+  100% { transform: translate(0, 0) scale(1) rotate(360deg); opacity: 1; }
+}
+@keyframes tumble-b {
+  0%   { transform: translate(46px, 132px) scale(.35) rotate(140deg); opacity: 0; }
+  22%  { opacity: 1; }
+  52%  { transform: translate(-8px, -34px) scale(1.15) rotate(-200deg); }
+  80%  { transform: translate(0, 6px) scale(.98) rotate(-368deg); }
+  100% { transform: translate(0, 0) scale(1) rotate(-360deg); opacity: 1; }
+}
+
+/* ------------------------------------------------------------ what you were paid
+   The cards a roll gave you, shown at a size you cannot miss and then put away into your
+   hand. Before this the only sign you had been paid was a badge quietly counting up in
+   the tray, which is easy to miss entirely on somebody else's turn — and the whole point
+   of a production roll is finding out what you got. */
+.gain-stage {
+  position: absolute; inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  display: grid; place-items: center;
+}
+/* The gap has to clear the blown-up cards, which overflow their own boxes. */
+.gain-row { display: flex; align-items: center; gap: 62px; }
+.gain-card {
+  transform-origin: 50% 50%;
+  will-change: transform, opacity;
+  /* Held up at more than double the size they will be in the tray. */
+  animation: gain-in .34s cubic-bezier(.2, 1.35, .4, 1) both;
+}
+/* Blown up with a transform rather than by setting a bigger width. A card is a frame,
+   a radius, a badge and a shadow as well as a picture, and resizing the box leaves all of
+   those at their original few pixels — at twice the size the border reads as no border at
+   all. Scaling takes the whole card with it. */
+.gain-blow { display: block; transform: scale(2.1); transform-origin: 50% 50%; }
+@keyframes gain-in {
+  from { transform: translateY(46px) scale(.35); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+/* Away: each card flies to its own slot in the tray, so where it lands says which card
+   it was. Measured at run time, like the dice — the tray moves with trade mode, the safe
+   area and how many cards are in it. */
+.gain-stage.away .gain-card {
+  animation: gain-away .42s cubic-bezier(.55, 0, .85, .5) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes gain-away {
+  to { transform: translate(var(--dx), var(--dy)) scale(var(--ds)); opacity: 0; }
+}
+
+/* The settle: the die shrinks and flies to the readout in the status row. The distance
+   is measured at run time and handed in as --dx/--dy, because where that row sits moves
+   with the safe area, the score strip and the width of the turn badge. */
+.dice-stage.settling .bigdie {
+  animation: die-settle .40s cubic-bezier(.5, 0, .75, .9) both;
+}
+@keyframes die-settle {
+  to { transform: translate(var(--dx), var(--dy)) scale(var(--ds)); opacity: 0; }
+}
 
 /* The total, so the roll can be read without adding the pips up. Same face as a die but
    parchment-on-ink reversed, so it is plainly the answer rather than a third die. */
@@ -1031,20 +1176,35 @@ button {
 .room-age { margin-top: 7px; font-size: 11px; color: var(--dim); }
 
 /* ------------------------------------------------------------ sea picker */
-.sea-wheel-label {
-  display: flex; flex-direction: column; align-items: center; gap: 9px;
-  width: 100%; padding: 10px 11px; border-radius: var(--r);
+/* Shut, the control is the answer it gives: a disc of the water and its hex. The wheel
+   is two hundred and fifty pixels and only wanted while it is being used. */
+/* The swatch sits on the label's line; the wheel, when it is out, drops below it and
+   takes the width it needs. */
+.sea-row { flex: 1; display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+.sea-wheel { width: 100%; }
+.sea-toggle {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px 6px 6px; border-radius: 999px;
   background: rgba(255, 255, 255, .06); border: 1px solid var(--line);
-  cursor: pointer;
 }
-.sea-iro { min-height: 236px; display: flex; justify-content: center; }
+.sea-toggle:active { background: rgba(255, 255, 255, .12); }
 .sea-wheel-preview {
-  width: 100%; height: 36px; flex: 0 0 auto; border-radius: 11px;
+  width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%;
   background: linear-gradient(180deg, var(--a), var(--b));
   border: 1px solid rgba(255, 255, 255, .35);
 }
-.sea-wheel-label b, .sea-wheel-label small { display: block; text-align: center; }
-.sea-wheel-label small { margin-top: 2px; color: var(--dim); font-size: 11px; letter-spacing: .06em; }
+.sea-hex {
+  font-size: 12px; font-weight: 700; color: var(--dim);
+  font-variant-numeric: tabular-nums; letter-spacing: .04em;
+}
+.sea-caret { width: 16px; height: 16px; color: var(--dim); transition: transform .18s; }
+.sea-row.open .sea-caret { transform: rotate(180deg); }
+
+.sea-wheel {
+  margin-top: 10px; padding: 12px; border-radius: var(--r);
+  background: rgba(0, 0, 0, .18); border: 1px solid var(--line);
+}
+.sea-iro { min-height: 236px; display: flex; justify-content: center; }
 
 /* What a tile produces, shown when one is tapped. Lifted clear of the buttons along the
    bottom — it used to sit at the same corner as the left-hand pair and was covered by
@@ -1138,6 +1298,9 @@ button {
   flex: 0 0 auto;
 }
 .chip-crown + .chip-crown { margin-left: 2px; }
+/* The award glyph inherits the chip's ink, so it dims with the chip instead of staying
+   at full strength the way a coloured emoji did. */
+.chip-crown svg { display: block; }
 /* The awards live in their own span so the chip can be updated in place, but they should
    sit in the chip's flex row exactly as they did when they were written straight into it —
    and an empty wrapper must not leave a gap behind on a chip that has won nothing. */
@@ -1304,7 +1467,11 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 .act:active { transform: scale(0.95); }
 .act:disabled { opacity: 0.35; pointer-events: none; }
-.act-ico { font-size: 18px; line-height: 1; }
+/* The icons are SVG now, not glyphs, so these size the box rather than the type. `block`
+   matters: an inline SVG sits on the text baseline and leaves a few pixels of descender
+   space under it, which is exactly the misalignment the emoji always had. */
+.act-ico { line-height: 0; display: grid; place-items: center; }
+.act-ico svg { display: block; }
 .act.primary {
   background: linear-gradient(180deg, var(--sky), var(--sky-2));
   color: var(--sky-ink);
@@ -1578,6 +1745,14 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .pcard-stats {
   display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px;
 }
+/* Icons set inline with numbers — the turn badge, the players sheet, the score
+   breakdown, the cost list. Nudged down slightly because a 24-unit box centres above the
+   x-height of the text beside it. */
+#turn-badge svg, .pstat svg, .score-row svg, .cost-ico svg, .history-player svg {
+  display: inline-block; vertical-align: -0.18em;
+}
+.cost-ico { line-height: 0; }
+
 .pstat {
   font-size: 11.5px; padding: 3px 8px; border-radius: 999px;
   background: rgba(255, 255, 255, 0.08); color: var(--dim);
@@ -1793,6 +1968,17 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
     84%  { opacity: 1; transform: none; }
     100% { opacity: 0; transform: none; }
   }
+
+  /* The throw and the payout still happen — they are how you find out what was rolled
+     and what you were paid — but they stop travelling. The dice appear where they land
+     and the cards fade rather than flying, so the information survives and the motion
+     does not. The timings are untouched, because the JavaScript is counting on them to
+     know when to take each stage down. */
+  @keyframes tumble-a { from { opacity: 0; } to { opacity: 1; transform: none; } }
+  @keyframes tumble-b { from { opacity: 0; } to { opacity: 1; transform: none; } }
+  @keyframes die-settle { to { opacity: 0; transform: none; } }
+  @keyframes gain-in { from { opacity: 0; } to { opacity: 1; transform: none; } }
+  @keyframes gain-away { to { opacity: 0; transform: none; } }
 }
 
 /* Over the map, under the status row.
@@ -1866,7 +2052,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   animation: prompt-pulse 1.7s ease-in-out infinite;
 }
 @keyframes prompt-pulse { 50% { border-color: rgba(227, 186, 87, 0.95); } }
-.act-prompt .act-ico { font-size: 17px; }
+.act-prompt .act-ico { flex: 0 0 auto; }
 
 /* ------------------------------------------------------------ kebab menu */
 .kebab-wrap {

@@ -21,7 +21,9 @@ import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { findBadWord, maskText } from './clean.js';
 import { WORD_CODES } from './wordcodes.js';
 import { APP_VERSION } from './version.js';
-import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO, layoutInfo } from './board.js';
+import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO, layoutInfo,
+  DYNAMIC_SIZES, DYNAMIC_DEFAULT, dynamicSize } from './board.js';
+import { icon } from './icons.js';
 import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS, SEA_DEFAULT, seaAt } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
@@ -1779,7 +1781,7 @@ function renderMapPreview() {
 
   if (!host) {
     $('actions').innerHTML =
-      `<div class="act-prompt"><span class="act-ico">🗺️</span>${esc(nameFor(room.hostId))} is choosing a map</div>`;
+      `<div class="act-prompt"><span class="act-ico">${icon('map')}</span>${esc(nameFor(room.hostId))} is choosing a map</div>`;
     return;
   }
 
@@ -2107,8 +2109,14 @@ function drawSoloSheet() {
     b.classList.toggle('on', b.dataset.level === soloLevel);
   }
   $('solo-blurb').textContent = BOT_LEVELS[soloLevel]?.blurb || '';
+  const soloDyn = dynamicSize(soloLayout);
   for (const b of document.querySelectorAll('[data-solo-layout]')) {
-    b.classList.toggle('on', b.dataset.soloLayout === soloLayout);
+    b.classList.toggle('on',
+      b.dataset.soloLayout === 'dynamic' ? !!soloDyn : b.dataset.soloLayout === soloLayout);
+  }
+  $('solo-dyn-size-row').hidden = !soloDyn;
+  for (const b of document.querySelectorAll('[data-solo-dynsize]')) {
+    b.classList.toggle('on', Number(b.dataset.soloDynsize) === soloDyn);
   }
   $('solo-layout-blurb').textContent = LAYOUT_INFO[soloLayout]?.blurb || '';
   for (const b of document.querySelectorAll('[data-solo-robber]')) {
@@ -2129,7 +2137,6 @@ function drawSoloSheet() {
     sfx.tap();
     drawSoloSheet();
   });
-  $('solo-sea-blurb').textContent = `${seaAt(soloSea).name} — the water around the island`;
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
   $('solo-discard').textContent = String(soloDiscard);
@@ -2148,9 +2155,17 @@ for (const b of document.querySelectorAll('[data-solo-timer]')) {
     drawSoloSheet();
   });
 }
+for (const b of document.querySelectorAll('[data-solo-dynsize]')) {
+  b.addEventListener('click', () => {
+    soloLayout = `dyn${b.dataset.soloDynsize}`;
+    localStorage.setItem('hexcolony_solo_layout', soloLayout);
+    sfx.tap();
+    drawSoloSheet();
+  });
+}
 for (const b of document.querySelectorAll('[data-solo-layout]')) {
   b.addEventListener('click', () => {
-    soloLayout = b.dataset.soloLayout;
+    soloLayout = b.dataset.soloLayout === 'dynamic' ? `dyn${DYNAMIC_DEFAULT}` : b.dataset.soloLayout;
     localStorage.setItem('hexcolony_solo_layout', soloLayout);
     sfx.tap();
     drawSoloSheet();
@@ -2289,8 +2304,16 @@ function pickSea(key) {
 
 for (const b of document.querySelectorAll('[data-layout]')) {
   b.addEventListener('click', () => {
-    const layout = b.dataset.layout;
+    // "Dynamic" is not a layout on its own — it is three, one per size. Tapping it lands
+    // on the middle one, and the size row underneath moves between them.
+    const layout = b.dataset.layout === 'dynamic' ? `dyn${DYNAMIC_DEFAULT}` : b.dataset.layout;
     if (setSetting({ 'settings.layout': layout })) sfx.tap();
+  });
+}
+
+for (const b of document.querySelectorAll('[data-dynsize]')) {
+  b.addEventListener('click', () => {
+    if (setSetting({ 'settings.layout': `dyn${b.dataset.dynsize}` })) sfx.tap();
   });
 }
 
@@ -2365,8 +2388,14 @@ function renderLobby() {
   if (discardRow) discardRow.style.opacity = useRobber ? '' : '0.4';
 
   const layout = s.layout || 'classic';
+  const dyn = dynamicSize(layout);
   for (const b of document.querySelectorAll('[data-layout]')) {
-    b.classList.toggle('on', b.dataset.layout === layout);
+    // The Dynamic button lights for any of its three sizes.
+    b.classList.toggle('on', b.dataset.layout === 'dynamic' ? !!dyn : b.dataset.layout === layout);
+  }
+  $('dyn-size-row').hidden = !dyn;
+  for (const b of document.querySelectorAll('[data-dynsize]')) {
+    b.classList.toggle('on', Number(b.dataset.dynsize) === dyn);
   }
   $('layout-blurb').textContent = LAYOUT_INFO[layout]?.blurb || '';
 
@@ -2412,12 +2441,38 @@ function drawSeaRow(elId, chosen, onPick) {
   const current = seaAt(chosen);
   let mount = row.querySelector('.sea-iro');
   if (!mount) {
-    row.innerHTML = `<div class="sea-wheel-label">
-      <div class="sea-iro" aria-label="Choose sea color"></div>
-      <div class="sea-wheel-preview" style="--a:${esc(current.a)};--b:${esc(current.b)}"></div>
-      <span><b>Choose any color</b><small class="sea-hex"></small></span>
-    </div>`;
+    /**
+     * The wheel folds away behind the colour it chose.
+     *
+     * Open, it is two hundred and fifty pixels of a settings panel that is supposed to be
+     * getting shorter — and it is the one control that can show its own answer, so the
+     * shut state loses nothing: a disc of the water and the hex beside it say everything
+     * the wheel would while it sits there unused. It opens on a tap and stays open, which
+     * is the whole of the interaction.
+     *
+     * iro is given an explicit width rather than measuring its container, so it builds
+     * correctly even while the panel is display:none.
+     */
+    row.innerHTML = `<button type="button" class="sea-toggle" aria-expanded="false">
+        <span class="sea-wheel-preview" style="--a:${esc(current.a)};--b:${esc(current.b)}"></span>
+        <span class="sea-hex"></span>
+        <svg class="sea-caret" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+             stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 9.5l6 6 6-6"/>
+        </svg>
+      </button>
+      <div class="sea-wheel" hidden>
+        <div class="sea-iro" aria-label="Choose sea color"></div>
+      </div>`;
     mount = row.querySelector('.sea-iro');
+    const toggle = row.querySelector('.sea-toggle');
+    const panel = row.querySelector('.sea-wheel');
+    toggle.addEventListener('click', () => {
+      panel.hidden = !panel.hidden;
+      toggle.setAttribute('aria-expanded', String(!panel.hidden));
+      row.classList.toggle('open', !panel.hidden);
+      sfx.tap();
+    });
   }
   const custom = String(chosen || '').match(/^custom:(#[0-9a-f]{6})$/i);
   const value = (custom ? custom[1] : current.a).toUpperCase();
@@ -3316,7 +3371,7 @@ function reactToLog(g) {
    */
   for (const e of entries) {
     switch (e.t) {
-      case 'roll': sfx.dice(); view.setRolled(e.roll); break;
+      case 'roll': sfx.dice(); playRoll(e.dice); view.setRolled(e.roll); break;
       case 'build':
         e.what === 'city' ? sfx.city() : e.what === 'road' ? sfx.road() : sfx.build();
         // Houses and cities jump as they land. Roads have no `v` and get no jump: they
@@ -3335,7 +3390,12 @@ function reactToLog(g) {
         }
         break;
       case 'produce':
-        if (e.gains?.[playerId]) { sfx.gain(); bumpCards(Object.keys(e.gains[playerId])); }
+        // Held back behind the dice: the cards are the answer to the roll, and they
+        // should not be on screen before the dice have finished saying what it was.
+        if (e.gains?.[playerId]) {
+          const mine = e.gains[playerId];
+          setTimeout(() => { sfx.gain(); playGain(mine); }, ROLL_TUMBLE_MS + ROLL_SETTLE_MS);
+        }
         break;
       case 'playDev': sfx.card(); break;
       case 'offer':
@@ -3361,7 +3421,7 @@ function reactToLog(g) {
         break;
       case 'win':
         (e.p === playerId ? sfx.win : sfx.lose)();
-        shoutout(`🏆 ${e.p === playerId ? 'You win' : `${nameFor(e.p)} wins`}!`, colorFor(e.p));
+        shoutout(`${e.p === playerId ? 'You win' : `${nameFor(e.p)} wins`}!`, colorFor(e.p));
         confetti(colorFor(e.p));
         // The results are worth reading, but not over the top of the moment they are
         // about. They follow once the shoutout has had its say.
@@ -3409,6 +3469,65 @@ function announceTurn(g) {
   // news to everyone watching it start.
   if (first && !(g.phase === 'setup' && (g.setup?.at ?? 0) === 0)) return;
   shoutout(`${nameFor(up)}'s turn`, colorFor(up), 2000);
+}
+
+/**
+ * Hold up what the roll just paid you, then put it in your hand.
+ *
+ * Being paid used to be a badge quietly counting up in the tray, which is easy to miss
+ * and says nothing about what arrived — you would notice you had wheat some turns later.
+ * So the cards are shown at more than double their tray size in the middle of the board,
+ * held for a beat, and then each one flies to its own slot in the hand.
+ *
+ * Landing on its own slot is the part that carries the information: the card does not
+ * just vanish into "the tray", it goes to the place that card lives, and the badge it
+ * lands on is the one that ticks up.
+ *
+ * Distances are measured when the flight starts rather than written into the stylesheet,
+ * because the tray moves — trade mode adds rows to it, and the safe area moves it again.
+ */
+const GAIN_HOLD_MS = 620;
+const GAIN_FLY_MS = 420;
+let gainTimers = [];
+
+function playGain(gains) {
+  const stage = $('gain-stage');
+  const got = RESOURCES.filter((r) => (gains?.[r] || 0) > 0);
+  if (!stage || !got.length) return;
+
+  for (const t of gainTimers) clearTimeout(t);
+  gainTimers = [];
+
+  stage.classList.remove('away');
+  stage.hidden = false;
+  stage.innerHTML = `<div class="gain-row">${got.map((r) => `
+    <div class="gain-card" data-res="${r}"><span class="gain-blow">
+      ${resCard(r, { count: gains[r] > 1 ? gains[r] : null, stack: false })}
+    </span></div>`).join('')}</div>`;
+
+  gainTimers.push(setTimeout(() => {
+    for (const [i, el] of [...stage.querySelectorAll('.gain-card')].entries()) {
+      const target = document.querySelector(`.rcard-wrap[data-res="${el.dataset.res}"] .rcard`);
+      const from = el.getBoundingClientRect();
+      if (!target || !from.width) continue;
+      const to = target.getBoundingClientRect();
+      el.style.setProperty('--dx', `${Math.round(to.left + to.width / 2 - (from.left + from.width / 2))}px`);
+      el.style.setProperty('--dy', `${Math.round(to.top + to.height / 2 - (from.top + from.height / 2))}px`);
+      el.style.setProperty('--ds', (to.width / from.width).toFixed(3));
+      // A stagger, so three cards read as three cards rather than one wide thing moving.
+      el.style.setProperty('--d', `${i * 70}ms`);
+    }
+    stage.classList.add('away');
+  }, GAIN_HOLD_MS));
+
+  const last = (got.length - 1) * 70;
+  gainTimers.push(setTimeout(() => {
+    stage.hidden = true;
+    stage.classList.remove('away');
+    stage.innerHTML = '';
+    // The badges tick up as the cards land on them.
+    bumpCards(got);
+  }, GAIN_HOLD_MS + GAIN_FLY_MS + last));
 }
 
 function bumpCards(list) {
@@ -3463,18 +3582,20 @@ function renderScoreStrip(g) {
 
     const name = nameFor(pid);
     const vp = String(R.publicVP(g, pid));
-    const cards = `${R.handSize(p)}🂠`;
+    const cards = R.handSize(p);
     const [nameEl, vpEl, cardsEl, awardsEl] = el.children;
     if (nameEl.textContent !== name) nameEl.textContent = name;
     if (vpEl.textContent !== vp) vpEl.textContent = vp;
-    if (cardsEl.textContent !== cards) cardsEl.textContent = cards;
+    // innerHTML rather than textContent: the count carries a card glyph beside it now.
+    const cardsHtml = `${cards}${icon('card', { size: 12 })}`;
+    if (cardsEl.dataset.n !== String(cards)) { cardsEl.dataset.n = String(cards); cardsEl.innerHTML = cardsHtml; }
 
     // One badge each rather than two emoji run together, so each can say what it is.
     const crowns = [
       g.award.road === pid ? `<span class="chip-crown" title="Longest Road (${g.award.roadLen})"`
-        + ` aria-label="Longest Road">🛣️</span>` : '',
+        + ` aria-label="Longest Road">${icon('road', { size: 13 })}</span>` : '',
       g.award.army === pid ? `<span class="chip-crown" title="Largest Army (${g.award.armySize})"`
-        + ` aria-label="Largest Army">⚔️</span>` : '',
+        + ` aria-label="Largest Army">${icon('army', { size: 13 })}</span>` : '',
     ].join('');
     if (awardsEl.innerHTML !== crowns) awardsEl.innerHTML = crowns;
 
@@ -3519,13 +3640,68 @@ function renderTurnBadge(g) {
     // Icons rather than words: this shares the row with the clock and the dice now, and
     // the highlights on the board say the same thing at full length.
     const bits = [];
-    if (h.edges.length) bits.push('🛣️');
-    if (h.verts.length) bits.push('🏠');
-    if (h.cities.length) bits.push('🏛️');
+    if (h.edges.length) bits.push(icon('road', { size: 15 }));
+    if (h.verts.length) bits.push(icon('house', { size: 15 }));
+    if (h.cities.length) bits.push(icon('city', { size: 15 }));
     if (bits.length) text = `Tap ${bits.join(' ')}`;
   }
-  badge.textContent = text;
+  badge.innerHTML = text;
   badge.classList.toggle('mine', !!mine);
+}
+
+/**
+ * Throw the dice across the board, then let them settle into the readout.
+ *
+ * Two halves. The tumble is pure CSS and always the same, because a throw that varied
+ * would read as a glitch rather than as a roll. The settle is measured: the dice fly to
+ * wherever the status row actually is, which moves with the safe area, the score strip
+ * and the width of whatever the turn badge is currently saying — so the distance cannot
+ * be written down in the stylesheet and has to be handed over as a custom property.
+ *
+ * The faces show the real numbers from the moment they appear. Spinning through random
+ * digits and landing on the answer is a lie the eye catches, and it makes the moment
+ * about the animation instead of about the roll.
+ */
+const ROLL_TUMBLE_MS = 620;
+const ROLL_SETTLE_MS = 400;
+let rollTimers = [];
+
+function playRoll(dice) {
+  const stage = $('dice-stage');
+  if (!stage || !Array.isArray(dice) || dice.length !== 2) return;
+  // A second roll landing mid-throw restarts cleanly rather than layering two.
+  for (const t of rollTimers) clearTimeout(t);
+  rollTimers = [];
+
+  const faces = [$('bigdie-a'), $('bigdie-b')];
+  faces.forEach((el, i) => { el.textContent = String(dice[i]); });
+
+  stage.hidden = false;
+  stage.classList.remove('rolling', 'settling');
+  for (const el of faces) el.style.removeProperty('--dx');
+  void stage.offsetWidth;              // restart the animation rather than continue it
+  stage.classList.add('rolling');
+
+  rollTimers.push(setTimeout(() => {
+    // Measured now, not earlier: the status row only takes its final position once the
+    // turn badge has the text for this turn.
+    const targets = [$('die-a'), $('die-b')];
+    faces.forEach((el, i) => {
+      const from = el.getBoundingClientRect();
+      const to = targets[i]?.getBoundingClientRect();
+      if (!to || !to.width) return;
+      el.style.setProperty('--dx', `${Math.round(to.left + to.width / 2 - (from.left + from.width / 2))}px`);
+      el.style.setProperty('--dy', `${Math.round(to.top + to.height / 2 - (from.top + from.height / 2))}px`);
+      el.style.setProperty('--ds', (to.width / from.width).toFixed(3));
+    });
+    stage.classList.remove('rolling');
+    stage.classList.add('settling');
+  }, ROLL_TUMBLE_MS));
+
+  rollTimers.push(setTimeout(() => {
+    stage.classList.remove('rolling', 'settling');
+    stage.hidden = true;
+  }, ROLL_TUMBLE_MS + ROLL_SETTLE_MS));
 }
 
 function renderDice(g) {
@@ -3653,8 +3829,8 @@ function renderActions(g) {
   const devBadge = held;
   const canBuyDev = !!p && mine && g.phase === 'build'
     && !pauseBlocksGame() && R.whatCanIBuild(g, playerId).dev;
-  const utility = () => actBtn('players', '👥', 'Players')
-    + actBtn('dev', '🃏', 'DEV', {
+  const utility = () => actBtn('players', icon('players'), 'Players')
+    + actBtn('dev', icon('dev'), 'DEV', {
       ready: canBuyDev, badge: devBadge || 0,
     });
 
@@ -3662,7 +3838,7 @@ function renderActions(g) {
 
   if (g.phase !== 'over' && pauseBlocksGame()) {
     bar.innerHTML = utility()
-      + '<div class="act-prompt"><span class="act-ico">⏸️</span>Game paused — chat is still available</div>';
+      + `<div class="act-prompt"><span class="act-ico">${icon('pause')}</span>Game paused — chat is still available</div>`;
     return;
   }
 
@@ -3670,15 +3846,15 @@ function renderActions(g) {
     // Results open automatically after the winner announcement. Keep the shortcut
     // visibly present and tappable during that pause so the player can open results
     // immediately if they want to read them.
-    bar.innerHTML = utility() + actBtn('over', '🏆', 'Results', {
+    bar.innerHTML = utility() + actBtn('over', icon('trophy'), 'Results', {
       primary: true, wide: true,
     }); return;
   }
 
   if (g.phase === 'discard') {
     bar.innerHTML = utility() + (g.pending.discard[playerId]
-      ? actBtn('discard', '🗑️', `Discard ${g.pending.discard[playerId]}`, { primary: true, wide: true })
-      : '<div class="act-prompt"><span class="act-ico">⏳</span>Waiting for others to discard</div>'); return;
+      ? actBtn('discard', icon('discard'), `Discard ${g.pending.discard[playerId]}`, { primary: true, wide: true })
+      : `<div class="act-prompt"><span class="act-ico">${icon('waiting')}</span>Waiting for others to discard</div>`); return;
   }
 
   // Cards stays in the bar while somebody else is playing. What is in your hand is
@@ -3692,27 +3868,27 @@ function renderActions(g) {
 
   if (g.phase === 'robber') {
     bar.innerHTML = utility()
-      + '<div class="act-prompt"><span class="act-ico">🥷</span>Tap a highlighted tile to move the robber</div>'; return;
+      + `<div class="act-prompt"><span class="act-ico">${icon('robber')}</span>Tap a highlighted tile to move the robber</div>`; return;
   }
 
   if (g.phase === 'steal' || g.phase === 'take') {
     // A button back into the sheet, in case it was somehow closed.
     bar.innerHTML = utility()
-      + actBtn('steal', '🥷', g.phase === 'take' ? 'Take a card' : 'Rob a player', { primary: true, wide: true }); return;
+      + actBtn('steal', icon('robber'), g.phase === 'take' ? 'Take a card' : 'Rob a player', { primary: true, wide: true }); return;
   }
 
   if (g.phase === 'roll') {
     bar.innerHTML =
       utility() +
-      actBtn('roll', '🎲', 'Roll', { primary: true, wide: true }); return;
+      actBtn('roll', icon('roll'), 'Roll', { primary: true, wide: true }); return;
   }
 
   // build phase
   const mustPlace = g.turn.freeRoads > 0;
   bar.innerHTML =
     utility() +
-    actBtn('trade', '🤝', 'Trade', { disabled: R.handSize(p) === 0 }) +
-    actBtn('end', '✔️', 'End turn', { primary: !mustPlace, disabled: mustPlace });
+    actBtn('trade', icon('trade'), 'Trade', { disabled: R.handSize(p) === 0 }) +
+    actBtn('end', icon('done'), 'End turn', { primary: !mustPlace, disabled: mustPlace });
 }
 
 // Delegated, and bound once to the containers rather than to the buttons.
@@ -4691,12 +4867,14 @@ function openPlayers() {
     const stats = [
       `<span class="pstat">${R.handSize(p)} cards</span>`,
       `<span class="pstat">${R.devCount(p)} dev</span>`,
-      `<span class="pstat">⚔️ ${p.knights}</span>`,
-      `<span class="pstat">🛣️ ${p.roadLen}</span>`,
+      `<span class="pstat">${icon('army', { size: 14 })} ${p.knights}</span>`,
+      `<span class="pstat">${icon('road', { size: 14 })} ${p.roadLen}</span>`,
       // What is left in the box. This used to live in the Build sheet, where it was only
       // ever about you — but an opponent down to their last settlement is real
       // information, and this is the card that already answers "how is everyone doing".
-      `<span class="pstat">left ${p.left.road}🛣️ ${p.left.settlement}🏠 ${p.left.city}🏛️</span>`,
+      `<span class="pstat">left ${p.left.road}${icon('road', { size: 14 })}`
+        + ` ${p.left.settlement}${icon('house', { size: 14 })}`
+        + ` ${p.left.city}${icon('city', { size: 14 })}</span>`,
     ];
     if (g.award.road === pid) stats.push('<span class="pstat award">Longest Road</span>');
     if (g.award.army === pid) stats.push('<span class="pstat award">Largest Army</span>');
@@ -4754,7 +4932,8 @@ function logLine(e) {
     case 'army': text = `<span class="g"><b>${who(e.p)}</b> takes Largest Army (${e.size})</span>`; break;
     case 'left': text = `<b>${who(e.p)}</b> left the game`; break;
     case 'abandoned': text = `<b>${who(e.p)}</b> left — game over`; break;
-    case 'win': text = `<span class="g">🏆 <b>${who(e.p)}</b> wins with ${e.vp} points</span>`; break;
+    case 'win': text = `<span class="g">${icon('trophy', { size: 14 })} <b>${who(e.p)}</b>`
+      + ` wins with ${e.vp} points</span>`; break;
     default: text = e.t;
   }
   return `<div class="log-row" style="--c:${esc(c)}">${text}</div>`;
@@ -4988,7 +5167,7 @@ function openHistory() {
           year: 'numeric', month: 'short', day: 'numeric',
         });
         const players = (game.players || []).map((player) =>
-          `<span class="history-player${player.id === game.winner ? ' winner' : ''}">${esc(player.name)}${player.id === game.winner ? ' 🏆' : ''}</span>`
+          `<span class="history-player${player.id === game.winner ? ' winner' : ''}">${esc(player.name)}${player.id === game.winner ? ` ${icon('trophy', { size: 13 })}` : ''}</span>`
         ).join('');
         return `<div class="history-game">
           <div class="history-game-top"><b>${esc(game.winnerName || 'Someone')} won</b><span>${date}</span></div>
@@ -5016,13 +5195,13 @@ function pointSources(g, pid) {
   }
   const cards = (p.dev.vp || 0) + (p.devNew.vp || 0);
   return [
-    { key: 'houses', icon: '🏠', label: houses === 1 ? 'settlement' : 'settlements', n: houses, vp: houses },
-    { key: 'cities', icon: '🏛️', label: cities === 1 ? 'city' : 'cities', n: cities, vp: cities * 2 },
-    { key: 'road', icon: '🛣️', label: `longest road${g.award.road === pid ? ` (${g.award.roadLen})` : ''}`,
+    { key: 'houses', icon: icon('house', { size: 16 }), label: houses === 1 ? 'settlement' : 'settlements', n: houses, vp: houses },
+    { key: 'cities', icon: icon('city', { size: 16 }), label: cities === 1 ? 'city' : 'cities', n: cities, vp: cities * 2 },
+    { key: 'road', icon: icon('road', { size: 16 }), label: `longest road${g.award.road === pid ? ` (${g.award.roadLen})` : ''}`,
       n: g.award.road === pid ? 1 : 0, vp: g.award.road === pid ? 2 : 0 },
-    { key: 'army', icon: '⚔️', label: `largest army${g.award.army === pid ? ` (${g.award.armySize})` : ''}`,
+    { key: 'army', icon: icon('army', { size: 16 }), label: `largest army${g.award.army === pid ? ` (${g.award.armySize})` : ''}`,
       n: g.award.army === pid ? 1 : 0, vp: g.award.army === pid ? 2 : 0 },
-    { key: 'cards', icon: '🃏', label: cards === 1 ? 'victory card' : 'victory cards', n: cards, vp: cards },
+    { key: 'cards', icon: icon('dev', { size: 16 }), label: cards === 1 ? 'victory card' : 'victory cards', n: cards, vp: cards },
   ];
 }
 
@@ -5123,12 +5302,12 @@ function openHow() {
   $('how-target').textContent = String(g?.target || room?.settings?.targetVP || 10);
   $('how-discard').textContent = String(g?.discardLimit || room?.settings?.discardLimit || 7);
   $('how-costs').innerHTML = [
-    ['🛣️', 'Road', R.COSTS.road],
-    ['🏠', 'Settlement', R.COSTS.settlement],
-    ['🏛️', 'City', R.COSTS.city],
-    ['🃏', 'Development card', R.COSTS.dev],
+    ['road', 'Road', R.COSTS.road],
+    ['house', 'Settlement', R.COSTS.settlement],
+    ['city', 'City', R.COSTS.city],
+    ['dev', 'Development card', R.COSTS.dev],
   ].map(([ico, name, cost]) => `<div class="cost-row">
-      <span>${ico}</span><span class="cost-name">${name}</span>
+      <span class="cost-ico">${icon(ico, { size: 18 })}</span><span class="cost-name">${name}</span>
       <span class="cost-bits">${COST_BITS(cost)}</span></div>`).join('');
   sheet('sheet-how');
 }

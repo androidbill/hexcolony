@@ -10,7 +10,7 @@
 // games with the real bots while asserting the invariants that must never break.
 
 import { makeBoard, RESOURCES, HEXES, VERTS, EDGES, LAYOUT_INFO, layoutInfo,
-  useLayout, TOPO, DYNAMIC_MIN, DYNAMIC_MAX, isRed, hexNeighbours } from '../public/board.js';
+  useLayout, TOPO, DYNAMIC_SIZES, isRed, hexNeighbours } from '../public/board.js';
 import * as R from '../public/rules.js';
 import { botMove } from '../public/bot.js';
 import { APP_VERSION } from '../public/version.js';
@@ -872,9 +872,12 @@ check('every island is the shape it claims to be', () => {
 
 check('a dynamic island is playable whatever the seed grows', () => {
   for (let seed = 1; seed <= 60; seed++) {
-    const b = makeBoard(seed, 'random', 'dynamic');
+    const want = DYNAMIC_SIZES[seed % DYNAMIC_SIZES.length];
+    const b = makeBoard(seed, 'random', `dyn${want}`);
     const n = b.tiles.length;
-    assert(n >= DYNAMIC_MIN && n <= DYNAMIC_MAX, `seed ${seed} grew ${n} tiles`);
+    // Exactly the size the picker promised, not merely inside a range: "Dynamic · 41"
+    // has to be forty-one tiles, and the lake fill runs after the growth stops.
+    eq(n, want, `seed ${seed} grew the wrong size`);
 
     // One coastline. A lake or a second piece leaves the port walk going round the same
     // ring twice, which shows up as two ports on one edge.
@@ -898,11 +901,11 @@ check('a dynamic island is playable whatever the seed grows', () => {
 });
 
 check('a dynamic island is the same island on every device', () => {
-  const a = makeBoard(31337, 'random', 'dynamic');
+  const a = makeBoard(31337, 'random', 'dyn41');
   useLayout('classic');                       // shunt the shared topology elsewhere
-  const b = makeBoard(31337, 'random', 'dynamic');
+  const b = makeBoard(31337, 'random', 'dyn41');
   eq(JSON.stringify(a.tiles), JSON.stringify(b.tiles), 'same seed gave two islands');
-  const c = makeBoard(31338, 'random', 'dynamic');
+  const c = makeBoard(31338, 'random', 'dyn41');
   assert(JSON.stringify(a.tiles) !== JSON.stringify(c.tiles), 'two seeds gave one island');
 });
 
