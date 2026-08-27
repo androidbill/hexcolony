@@ -2720,9 +2720,10 @@ $('board-tools-btn').addEventListener('click', (e) => {
 for (const id of ['btn-how-board', 'btn-trade-filter', 'btn-recenter', 'game-log-btn']) {
   $(id).addEventListener('click', () => setBoardTools(false));
 }
-// Same sheet the menu and the landing page open; the board just gets its own way in,
-// because the moment you want the costs is the moment you are looking at the board.
-$('btn-how-board').addEventListener('click', () => { unlock(); sfx.tap(); openHow(); });
+// The costs alone, not the whole How to Play. Mid-game the question is "what does a city
+// cost", and nine paragraphs of rules is the wrong shape of answer to that; the full text
+// is still one tap away under the menu.
+$('btn-how-board').addEventListener('click', () => { unlock(); sfx.tap(); openCosts(); });
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#board-tools')) setBoardTools(false);
 });
@@ -5597,7 +5598,13 @@ function openHow() {
   const g = game();
   $('how-target').textContent = String(g?.target || room?.settings?.targetVP || 10);
   $('how-discard').textContent = String(g?.discardLimit || room?.settings?.discardLimit || 7);
-  $('how-costs').innerHTML = [
+  $('how-costs').innerHTML = costRows();
+  sheet('sheet-how');
+}
+
+/** What everything costs, drawn once and used by both sheets that show it. */
+function costRows() {
+  return [
     ['road', 'Road', R.COSTS.road],
     ['house', 'Settlement', R.COSTS.settlement],
     ['city', 'City', R.COSTS.city],
@@ -5605,7 +5612,11 @@ function openHow() {
   ].map(([ico, name, cost]) => `<div class="cost-row">
       <span class="cost-ico">${icon(ico, { size: 18 })}</span><span class="cost-name">${name}</span>
       <span class="cost-bits">${COST_BITS(cost)}</span></div>`).join('');
-  sheet('sheet-how');
+}
+
+function openCosts() {
+  $('costs-grid').innerHTML = costRows();
+  sheet('sheet-costs');
 }
 
 function openSettings() {
