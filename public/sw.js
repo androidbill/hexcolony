@@ -33,7 +33,14 @@ const CORE = [
 // actually shipped is listed — the fetch handler is network-first with a cache
 // fallback, so art in any other format still gets cached the first time it is used;
 // precaching every extension would just mean ten 404s on every install.
-const ART = ['wood', 'brick', 'sheep', 'wheat', 'ore', 'desert'].map((n) => `art/${n}.jpg`);
+const ART = [
+  ...['wood', 'brick', 'sheep', 'wheat', 'ore', 'desert'].map((n) => `art/${n}.jpg`),
+  // The two award cards. Precached with the terrain rather than fetched when an award
+  // changes hands: that moment is two seconds long, and a card that arrives after it has
+  // finished is worse than one that was never shown.
+  'art/longest-road.png',
+  'art/largest-army.png',
+];
 
 /**
  * The recorded effects, read from their own index at install time.

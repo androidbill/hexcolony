@@ -3393,12 +3393,8 @@ function reactToLog(g) {
       case 'robber': sfx.robber(); break;
       case 'steal':
         sfx.steal();
-        if (e.p === playerId) {
-          shoutout([{ parts: ['You stole ', { resource: e.res }] }, `from ${nameFor(e.from)}`], colorFor(e.p));
-        }
-        else if (e.from === playerId) {
-          shoutout([{ parts: [`${nameFor(e.p)} stole `, { resource: e.res }] }, 'from you'], colorFor(e.p));
-        }
+        // Only the two of them are told what it was, so only the two of them see it.
+        if (e.p === playerId || e.from === playerId) playSteal(e.res);
         break;
       case 'produce':
         // Held back behind the dice: the cards are the answer to the roll, and they
@@ -3419,14 +3415,10 @@ function reactToLog(g) {
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
       case 'buyDev': if (e.p === playerId) sfx.card(); break;
       // Both awards are two points changing hands, which is the biggest single swing in
-      // the game outside somebody winning — and they used to go past in a toast at the
-      // bottom of the screen. Same card the turn uses, in the taker's own colour.
-      case 'longest':
-        shoutout([e.p === playerId ? 'You take' : `${nameFor(e.p)} takes`, 'Long Road'], colorFor(e.p));
-        break;
-      case 'army':
-        shoutout([e.p === playerId ? 'You take' : `${nameFor(e.p)} takes`, 'Large Army'], colorFor(e.p));
-        break;
+      // the game outside somebody winning — so each is shown as the card it is, named in
+      // the taker's own colour, for two seconds.
+      case 'longest': playAward('road', e.p); break;
+      case 'army': playAward('army', e.p); break;
       case 'turn':
         if (e.p === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }
         break;
@@ -3539,6 +3531,86 @@ function playGain(gains) {
     // The badges tick up as the cards land on them.
     bumpCards(got);
   }, GAIN_HOLD_MS + GAIN_FLY_MS + last));
+}
+
+/**
+ * The one card a robber took, shown to the two people who are allowed to know what it was.
+ *
+ * Same entrance as a payout and the opposite exit: up and off the top of the board rather
+ * than down into a hand, because a card was taken rather than given. Both parties see the
+ * same thing — the thief learns what they got, the victim what they lost — and nobody else
+ * sees anything, which is the rule the log already follows by only telling those two.
+ */
+const STEAL_HOLD_MS = 560;
+const STEAL_FLY_MS = 520;
+let stealTimers = [];
+
+function playSteal(res) {
+  const stage = $('gain-stage');
+  if (!stage || !res) return;
+  for (const t of stealTimers) clearTimeout(t);
+  stealTimers = [];
+
+  stage.classList.remove('away', 'stolen');
+  stage.hidden = false;
+  stage.innerHTML = `<div class="gain-row">
+    <div class="gain-card" data-res="${res}"><span class="gain-blow">
+      ${resCard(res, { stack: false })}
+    </span></div></div>`;
+
+  stealTimers.push(setTimeout(() => {
+    const el = stage.querySelector('.gain-card');
+    if (el) {
+      // Far enough to clear the top of the board whatever height it is, measured rather
+      // than guessed so it leaves the screen rather than stopping just short of it.
+      const from = el.getBoundingClientRect();
+      el.style.setProperty('--dy', `${-Math.round(from.bottom + 80)}px`);
+    }
+    stage.classList.add('stolen');
+  }, STEAL_HOLD_MS));
+
+  stealTimers.push(setTimeout(() => {
+    stage.hidden = true;
+    stage.classList.remove('stolen');
+    stage.innerHTML = '';
+  }, STEAL_HOLD_MS + STEAL_FLY_MS));
+}
+
+/**
+ * An award changing hands, as the card it is.
+ *
+ * Two points moving is the biggest single swing in the game outside somebody winning, and
+ * it used to be a line of text sliding past. The card is held for two seconds — long
+ * enough to read who took it and see which award it was, short enough that it is not in
+ * the way of the turn it happened during.
+ */
+const AWARD_HOLD_MS = 2000;
+const AWARD_OUT_MS = 300;
+let awardTimers = [];
+
+function playAward(kind, pid) {
+  const stage = $('award-stage');
+  if (!stage) return;
+  for (const t of awardTimers) clearTimeout(t);
+  awardTimers = [];
+
+  $('award-card').src = `art/${kind === 'army' ? 'largest-army' : 'longest-road'}.png`;
+  $('award-card').alt = kind === 'army' ? 'Largest Army' : 'Longest Road';
+  $('award-take').textContent = pid === playerId ? 'You take' : `${nameFor(pid)} takes`;
+  stage.style.setProperty('--c', colorFor(pid));
+
+  stage.classList.remove('out');
+  stage.hidden = false;
+  // Restart the entrance rather than letting a second award continue the first one's.
+  for (const el of [$('award-take'), $('award-card')]) {
+    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+  }
+
+  awardTimers.push(setTimeout(() => stage.classList.add('out'), AWARD_HOLD_MS));
+  awardTimers.push(setTimeout(() => {
+    stage.hidden = true;
+    stage.classList.remove('out');
+  }, AWARD_HOLD_MS + AWARD_OUT_MS));
 }
 
 function bumpCards(list) {

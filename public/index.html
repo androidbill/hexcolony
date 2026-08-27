@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.24.46">
+<link rel="stylesheet" href="styles.css?v=2026.08.24.47">
 </head>
 <body>
 
@@ -283,8 +283,15 @@
       <div class="bigdie" id="bigdie-b"></div>
     </div>
 
-    <!-- What the roll just paid you, held up big and then put away into your hand. -->
+    <!-- What the roll just paid you, held up big and then put away into your hand.
+         Also carries the single card a robber takes, which leaves upward instead. -->
     <div class="gain-stage" id="gain-stage" aria-hidden="true" hidden></div>
+
+    <!-- The two awards, each a card in its own right, held up when it changes hands. -->
+    <div class="award-stage" id="award-stage" aria-hidden="true" hidden>
+      <div class="award-take" id="award-take"></div>
+      <img class="award-card" id="award-card" alt="" decoding="async">
+    </div>
     <div class="board-hud">
       <div class="board-badge" id="turn-badge"></div>
       <div class="turn-timer" id="turn-timer" hidden><span id="timer-secs">0</span></div>
@@ -718,7 +725,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.24.46"></script>
-<script type="module" src="app.js?v=2026.08.24.46"></script>
+<script src="iro.min.js?v=2026.08.24.47"></script>
+<script type="module" src="app.js?v=2026.08.24.47"></script>
 </body>
 </html>
