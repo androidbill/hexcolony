@@ -78,6 +78,56 @@ service cloud.firestore {
                    && request.resource.data.version.size() <= 32;
     }
 
+    // Who is online right now — one small document per device, rewritten every fifteen
+    // seconds and read as a whole collection. It holds a nickname and what the device is
+    // doing, nothing else, and a stale one simply ages out of the list on the client.
+    match /presence/{pid} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasOnly(['name', 'at', 'mode'])
+                   && request.resource.data.name is string
+                   && request.resource.data.name.size() <= 14;
+      allow delete: if true;
+    }
+
+    // Lobby chat — the one conversation that belongs to no room, for people browsing and
+    // waiting. Messages delete themselves after a minute, from the client that wrote them
+    // and from anybody who sees an expired one, which is why delete is open.
+    match /lobbyChat/{msg} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['by', 'name', 'text', 'at'])
+                    && request.resource.data.text is string
+                    && request.resource.data.text.size() > 0
+                    && request.resource.data.text.size() <= 2000
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 14;
+      allow update: if false;
+      allow delete: if true;
+    }
+
+    // One person to one person: a poke, or a message.
+    //
+    // Every device watches its own items from the moment the app opens, whatever screen
+    // it is on, which is what lets a message reach somebody playing against the bots —
+    // they have no room, so they have no room chat to reach them through.
+    //
+    // `text` is what tells the two apart: with it the item is a message and lands in the
+    // recipient's chat window; without it, it is a poke. Optional rather than a second
+    // collection, so one listener delivers both.
+    match /notifications/{pid}/items/{item} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['from', 'name', 'at'])
+                    && request.resource.data.keys().hasOnly(['from', 'name', 'at', 'text'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 14
+                    && (!request.resource.data.keys().hasAny(['text'])
+                        || (request.resource.data.text is string
+                            && request.resource.data.text.size() > 0
+                            && request.resource.data.text.size() <= 140));
+      // Said is said, here too.
+      allow update: if false;
+      allow delete: if true;
+    }
+
     // Everything else is closed.
     match /{document=**} {
       allow read, write: if false;

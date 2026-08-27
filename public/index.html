@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.27.03">
+<link rel="stylesheet" href="styles.css?v=2026.08.27.04">
 </head>
 <body>
 
@@ -80,7 +80,10 @@
       </button>
 
       <button class="btn btn-ghost" id="btn-lobby-chat">
-        <span class="btn-label">Lobby Chat</span>
+        <!-- The head count sits on the label, not in the sub-line: whether anybody is in
+             there is the thing that decides whether the button is worth pressing, and it
+             has to be readable without reading the sentence under it. -->
+        <span class="btn-label">Lobby Chat<i class="btn-count" id="lobby-online-count" hidden></i></span>
         <span class="btn-sub">Chat with people browsing and waiting</span>
         <i class="chat-dot lobby-chat-dot" id="lobby-chat-dot" hidden></i>
       </button>
@@ -152,6 +155,20 @@
     <button class="btn btn-go" id="lobby-chat-send">Send</button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<!-- One message to one person, wherever they are. Its own sheet rather than a mode on
+     the lobby chat box, because "who is this going to" is the whole difference between
+     this and the room full of people behind it, and a mode does not say that loudly. -->
+<div class="sheet" id="sheet-dm">
+  <h3 class="sheet-title" id="dm-title">Message</h3>
+  <p class="sheet-sub" id="dm-sub"></p>
+  <textarea id="dm-input" class="text-input" maxlength="140" rows="3"
+            autocomplete="off" autocapitalize="sentences" placeholder="Say something"></textarea>
+  <div class="sheet-actions">
+    <button class="btn btn-ghost" data-close>Cancel</button>
+    <button class="btn btn-go" id="dm-send">Send</button>
+  </div>
 </div>
 
 <!-- ============================== LOBBY ============================== -->
@@ -726,7 +743,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.27.03"></script>
-<script type="module" src="app.js?v=2026.08.27.03"></script>
+<script src="iro.min.js?v=2026.08.27.04"></script>
+<script type="module" src="app.js?v=2026.08.27.04"></script>
 </body>
 </html>

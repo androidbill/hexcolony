@@ -107,6 +107,10 @@ function showScreen(id) {
     view.resize();
     requestAnimationFrame(() => view.resize());
   }
+  // The chat button is fixed to the window rather than to a screen, so whether it belongs
+  // here is a question every screen change has to re-ask — a message can arrive while you
+  // are on the landing page, and there has to be a way to read it.
+  renderChatButton();
   updateInstallBanner();
 }
 
@@ -752,11 +756,6 @@ function startPresence() {
   presenceInterval = setInterval(writePresence, PRESENCE_HEARTBEAT_MS);
 }
 
-function stopPresenceListener() {
-  if (unsubPresence) { unsubPresence(); unsubPresence = null; }
-  presenceList = [];
-}
-
 function subscribePresence() {
   if (unsubPresence) unsubPresence();
   unsubPresence = onSnapshot(collection(db, 'presence'), (snap) => {
@@ -777,6 +776,21 @@ function renderPresence() {
   const playing = online.filter((p) => p.mode === 'playing').length;
   const lobby = Math.max(0, online.length - playing);
   box.innerHTML = `<b>Online now: ${online.length}</b><span>Playing: ${playing} · In lobby: ${lobby}</span>`;
+  renderLobbyOnlineCount(online.length);
+}
+
+/**
+ * How many people are around, on the Lobby Chat button itself.
+ *
+ * Hidden at zero rather than showing "0". A button that says nobody is here is a button
+ * nobody presses, and the count is only ever this device's own view of it — the presence
+ * listener may not have answered yet, and "0" would be a lie for the first second.
+ */
+function renderLobbyOnlineCount(n) {
+  const pill = $('lobby-online-count');
+  if (!pill) return;
+  pill.hidden = !n;
+  pill.textContent = n ? `${n} online` : '';
 }
 
 function lobbyPeople() {
@@ -795,8 +809,12 @@ function renderLobbyPeople() {
   list.innerHTML = people.length ? people.map((p) => `
     <div class="lobby-person">
       <button class="lobby-person-name" data-person="${esc(p.id)}"><b>${esc(p.name || 'Someone')}</b><small>${p.id === playerId ? 'You · ' : ''}${p.mode === 'playing' ? 'In a game' : 'In lobby'}</small></button>
-      ${lobbySelectedPerson === p.id && p.id !== playerId ? `<button class="lobby-person-bell" data-bell="${esc(p.id)}" aria-label="Notify ${esc(p.name || 'Someone')}">
+      ${lobbySelectedPerson === p.id && p.id !== playerId ? `
+      <button class="lobby-person-act" data-poke="${esc(p.id)}" aria-label="Poke ${esc(p.name || 'Someone')}">
         <svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <button class="lobby-person-act" data-dm="${esc(p.id)}" aria-label="Message ${esc(p.name || 'Someone')}">
+        <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-5.2A8 8 0 0 1 11 4h2a8 8 0 0 1 8 8Z" fill="currentColor"/></svg>
       </button>` : ''}
     </div>`).join('') : '<span class="hint">Nobody is online right now.</span>';
   for (const b of list.querySelectorAll('[data-person]')) {
@@ -805,26 +823,92 @@ function renderLobbyPeople() {
       renderLobbyPeople();
     });
   }
-  for (const b of list.querySelectorAll('[data-bell]')) {
+  for (const b of list.querySelectorAll('[data-poke]')) {
     b.addEventListener('click', (e) => {
       e.stopPropagation();
-      notifyLobbyPerson(b.dataset.bell);
+      pokePerson(b.dataset.poke);
+    });
+  }
+  for (const b of list.querySelectorAll('[data-dm]')) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDirectMessage(b.dataset.dm, lobbyPeople().find((p) => p.id === b.dataset.dm)?.name);
     });
   }
 }
 
-async function notifyLobbyPerson(target) {
+/**
+ * The one-to-one channel: a poke, or a message.
+ *
+ * Everybody watches `notifications/<their own id>/items` from the moment the app opens,
+ * whatever screen they are on and whatever they are playing — a four-player table, a game
+ * against bots, or nothing at all. That is what makes this work where room chat cannot:
+ * room chat lives under a room, and somebody playing the bots has no room.
+ *
+ * A document with `text` is a message; one without is a poke. Same collection, same
+ * listener, so a message costs nothing new to deliver.
+ */
+const DM_MAX = 140;
+
+async function sendNotification(target, extra = {}) {
+  return addDoc(collection(db, 'notifications', target, 'items'), {
+    from: playerId,
+    name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
+    at: serverTimestamp(),
+    ...extra,
+  });
+}
+
+async function pokePerson(target) {
   const person = lobbyPeople().find((p) => p.id === target);
   if (!person || target === playerId) return;
   try {
-    await addDoc(collection(db, 'notifications', target, 'items'), {
-      from: playerId,
-      name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
-      at: serverTimestamp(),
-    });
-    toast(`Bell sent to ${person.name || 'Someone'}.`);
-  } catch { toast('Could not send the bell.'); }
+    await sendNotification(target);
+    toast(`Poke sent to ${person.name || 'Someone'}.`);
+  } catch { toast('Could not send the poke.'); }
 }
+
+let dmTarget = null;
+
+function openDirectMessage(target, name) {
+  if (!NET_READY) return toast('Messaging needs a connection.');
+  if (!target || target === playerId) return;
+  if (!usableName()) return;
+  dmTarget = { id: target, name: name || 'Someone' };
+  $('dm-title').textContent = `Message ${dmTarget.name}`;
+  $('dm-sub').textContent = 'Goes straight to them, wherever they are — it lands in their game chat.';
+  $('dm-input').value = '';
+  sheet('sheet-dm');
+  $('dm-input').focus();
+}
+
+async function sendDirectMessage() {
+  if (!dmTarget) return;
+  const input = $('dm-input');
+  const text = (input.value || '').trim().slice(0, DM_MAX);
+  if (!text) return;
+  const bad = findBadWord(text);
+  if (bad) {
+    toast(`Let's keep it clean — "${bad}" will not send.`);
+    sfx.error();
+    return;
+  }
+  const to = dmTarget;
+  input.value = '';
+  closeSheet();
+  try {
+    await withTimeout(sendNotification(to.id, { text }), 8000);
+    toast(`Message sent to ${to.name}.`);
+  } catch (e) {
+    console.error(e);
+    toast('That message did not send.');
+  }
+}
+
+$('dm-send').addEventListener('click', () => { unlock(); sendDirectMessage(); });
+$('dm-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDirectMessage(); }
+});
 
 function startNotifications() {
   if (!NET_READY || !playerId) return;
@@ -838,8 +922,16 @@ function startNotifications() {
     }
     for (const change of snap.docChanges()) {
       if (change.type !== 'added') continue;
-      const from = change.doc.data()?.name || 'Someone';
+      const item = change.doc.data() || {};
+      const from = item.name || 'Someone';
       unlock();
+      if (typeof item.text === 'string' && item.text.trim()) {
+        // Into the chat window, and announced exactly the way a message from somebody at
+        // the table is — the point of it is that it should not feel like a different
+        // thing from the game's own chat.
+        receiveDirectMessage(change.doc.id, item, from);
+        continue;
+      }
       sfx.yourTurn();
       buzz([45, 85, 55]);
       toast(`${from} sent you a poke.`);
@@ -1000,7 +1092,8 @@ function showRooms() {
 
 function leaveRooms() {
   if (unsubRooms) { unsubRooms(); unsubRooms = null; }
-  stopPresenceListener();
+  // The presence listener stays up: the Lobby Chat button on the landing page carries a
+  // head count now, and it cannot be live if the only listener dies on the way home.
   roomList = [];
   showScreen('screen-home');
 }
@@ -2611,6 +2704,10 @@ const CHAT_POS_KEY = 'hexcolony_chat_position';
 
 let unsubChat = null;
 let chatLog = [];
+// Messages sent to this player from outside the room, kept here rather than in chatLog
+// because chatLog is replaced wholesale by every Firestore snapshot. They live for the
+// session: the notification is the delivery, this is just where it is readable after.
+let directLog = [];
 let chatSeenAt = Number(localStorage.getItem('hexcolony_chat_seen') || 0);
 let chatUnread = 0;
 let chatPrimed = false;
@@ -2745,17 +2842,20 @@ function subscribeChat() {
 function stopChat() {
   if (unsubChat) { unsubChat(); unsubChat = null; }
   chatLog = [];
+  // directLog is NOT cleared. It belongs to the player, not to the room, and leaving a
+  // table is no reason to lose a message somebody sent you while you were at it.
   chatUnread = 0;
   chatPrimed = false;
+  countUnread();
 }
 
 /** Anything newer than the last time the sheet was open, and not from this player. */
 function countUnread() {
-  chatUnread = chatLog.filter((m) => m.by !== playerId && (stampMs(m.at) || 0) > chatSeenAt).length;
+  chatUnread = chatRows().filter((m) => m.by !== playerId && (stampMs(m.at) || 0) > chatSeenAt).length;
 }
 
 function markChatRead() {
-  const latest = Math.max(chatSeenAt, ...chatLog.map((message) => stampMs(message.at) || 0));
+  const latest = Math.max(chatSeenAt, ...chatRows().map((message) => stampMs(message.at) || 0));
   chatSeenAt = latest || Date.now();
   localStorage.setItem('hexcolony_chat_seen', String(chatSeenAt));
   chatUnread = 0;
@@ -2765,8 +2865,10 @@ function renderChatButton() {
   const btn = $('btn-chat');
   if (!btn) return;
   // Chat is available in the lobby, while players choose a map, and during the game.
-  // Solo has nobody to talk to.
-  btn.hidden = solo || !roomCode || !['lobby', 'map', 'playing', 'over'].includes(room?.state);
+  // Solo has nobody to talk to — until somebody messages you from the lobby, and then
+  // there is something to read whatever you are playing.
+  const inRoom = !solo && !!roomCode && ['lobby', 'map', 'playing', 'over'].includes(room?.state);
+  btn.hidden = !inRoom && !directLog.length;
   $('chat-dot').hidden = chatUnread === 0;
   $('chat-dot').textContent = chatUnread > 9 ? '9+' : String(chatUnread);
 }
@@ -2833,30 +2935,69 @@ function makeChatDraggable() {
   restoreChatPosition();
 }
 
+/** The room's chat and anything sent straight to this player, in the order it arrived. */
+function chatRows() {
+  return [...chatLog, ...directLog].sort((x, y) => (stampMs(x.at) || 0) - (stampMs(y.at) || 0));
+}
+
 function drawChat() {
   const box = $('chat-log');
-  if (!chatLog.length) {
+  const rows = chatRows();
+  if (!rows.length) {
     box.innerHTML = '<p class="hint">Nothing said yet. Say hello.</p>';
     return;
   }
-  box.innerHTML = chatLog.map((m) => {
+  box.innerHTML = rows.map((m) => {
     const mine = m.by === playerId;
     const c = m.by && room?.players?.[m.by] ? colorFor(m.by) : '#6b7a8c';
     // Masked here, on the way in, every time it is drawn.
-    return `<div class="chat-row${mine ? ' mine' : ''}" style="--c:${esc(c)}">
-      <div class="chat-meta"><span class="chat-who">${esc(m.name || 'Someone')}</span><time class="chat-time">${esc(chatTime(m.at))}</time></div>
+    return `<div class="chat-row${mine ? ' mine' : ''}${m.dm ? ' dm' : ''}" style="--c:${esc(m.dm ? '#35c4ff' : c)}">
+      <div class="chat-meta"><span class="chat-who">${esc(m.name || 'Someone')}</span>${m.dm
+        ? `<span class="chat-tag">direct</span><button class="chat-reply" data-reply="${esc(m.by)}" data-reply-name="${esc(m.name || 'Someone')}">Reply</button>`
+        : ''}<time class="chat-time">${esc(chatTime(m.at))}</time></div>
       <span class="chat-text">${chatTextMarkup(m.text, 'game')}</span>
     </div>`;
   }).join('');
+  for (const b of box.querySelectorAll('[data-reply]')) {
+    b.addEventListener('click', () => openDirectMessage(b.dataset.reply, b.dataset.replyName));
+  }
   box.scrollTop = box.scrollHeight;
+}
+
+/**
+ * A message that arrived from outside the room.
+ *
+ * Same sound, same buzz, same toast as the room's own chat, deliberately: whether the
+ * sender happens to be sitting at this table is not something the person reading it
+ * should have to work out from how it announced itself.
+ */
+function receiveDirectMessage(id, item, from) {
+  if (directLog.some((m) => m.id === id)) return;
+  directLog.push({ id, by: item.from || null, name: from, text: item.text, at: item.at, dm: true });
+  if (directLog.length > CHAT_KEEP) directLog = directLog.slice(-CHAT_KEEP);
+  const open = openSheet === 'sheet-chat';
+  if (open) { markChatRead(); drawChat(); }
+  else {
+    countUnread();
+    sfx.yourTurn();
+    buzz([35]);
+    toast(`${from} sent you a message.`);
+  }
+  renderChatButton();
 }
 
 function openChat() {
   markChatRead();
   renderChatButton();
   drawChat();
+  // With no room there is nobody to say it to. The messages are still readable and each
+  // one still has its own Reply, which is the only sending this sheet can honestly offer.
+  const canSend = !solo && !!roomCode;
+  $('chat-send').disabled = !canSend;
+  $('chat-input').disabled = !canSend;
+  $('chat-input').placeholder = canSend ? 'Message the room' : 'Reply to a message to answer it';
   sheet('sheet-chat');
-  $('chat-input').focus();
+  if (canSend) $('chat-input').focus();
 }
 
 async function sendChat() {
@@ -5824,7 +5965,7 @@ window.HEXCOLONY = {
   refreshResume();
   startPresence();
   startNotifications();
-  if (NET_READY) subscribeLobbyChat();
+  if (NET_READY) { subscribePresence(); subscribeLobbyChat(); }
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
 
   if (!NET_READY) {
