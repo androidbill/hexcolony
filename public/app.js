@@ -24,7 +24,8 @@ import { APP_VERSION } from './version.js';
 import { makeBoard, RESOURCES, TERRAIN, HEXES, VERTS, EDGES, LAYOUT_INFO, layoutInfo,
   DYNAMIC_SIZES, DYNAMIC_DEFAULT, dynamicSize } from './board.js';
 import { icon } from './icons.js';
-import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS, SEA_DEFAULT, seaAt } from './render.js';
+import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS, SEA_DEFAULT, seaAt,
+  readableOnSea } from './render.js';
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
@@ -1472,6 +1473,7 @@ function enterRoom(code) {
 }
 
 async function leaveRoom(removeSelf = true) {
+  $('turn-ring').hidden = true;
   aloneSince = null;
   if (solo) { exitSolo(); return; }
   const wasPlaying = room?.state === 'playing' && game();
@@ -2075,6 +2077,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
 }
 
 function exitSolo() {
+  $('turn-ring').hidden = true;
   clearTimeout(soloTimer);
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   solo = false;
@@ -2428,6 +2431,35 @@ function renderLobby() {
     ? 'Share the code — players can join until you start.'
     : 'You can change your name and colour on the home screen.';
   renderChatButton();
+}
+
+/**
+ * The frame that says it is your go.
+ *
+ * Forgetting your turn is the complaint this answers, and the badge at the top of the
+ * board was not loud enough to stop it — it is small, it is inside the board, and it is
+ * the same shape whether the turn is yours or somebody else's. A pulse around the whole
+ * window is visible from across a room and cannot be mistaken for anything else.
+ *
+ * Only on your own turn. A ring that lit up for everybody would be moving almost all of
+ * the time, and something that is always on says nothing.
+ *
+ * The colour is yours, pushed clear of the water first: the sea is whatever a colour wheel
+ * produced, so the blue player on a blue sea would otherwise get a ring that reads as part
+ * of the background. The glow is the same colour at half alpha, which is why this
+ * builds an rgba string rather than leaning on the hex.
+ */
+function renderTurnRing(g) {
+  const ring = $('turn-ring');
+  if (!ring) return;
+  const mine = !!g && g.phase !== 'over' && R.isTurn(g, playerId) && !!g.players[playerId];
+  if (!mine || pauseBlocksGame()) { ring.hidden = true; return; }
+
+  const hex = readableOnSea(colorFor(playerId), room?.settings?.sea);
+  const [r, gr, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  ring.style.setProperty('--c', hex);
+  ring.style.setProperty('--glow', `rgba(${r}, ${gr}, ${b}, 0.5)`);
+  ring.hidden = false;
 }
 
 // ---------------------------------------------------------------- board plumbing
@@ -3354,6 +3386,7 @@ function render() {
   drawTimer();
   renderScoreStrip(g);
   renderTurnBadge(g);
+  renderTurnRing(g);
   if (pauseBlocksGame()) drawPauseCountdown();
   renderDice(g);
   settlePay(g);
@@ -3403,7 +3436,7 @@ function reactToLog(g) {
       case 'steal':
         sfx.steal();
         // Only the two of them are told what it was, so only the two of them see it.
-        if (e.p === playerId || e.from === playerId) playSteal(e.res);
+        if (e.p === playerId || e.from === playerId) playSteal(e.res, e.p === playerId);
         break;
       case 'produce':
         // Held back behind the dice: the cards are the answer to the roll, and they
@@ -3554,11 +3587,15 @@ const STEAL_HOLD_MS = 560;
 const STEAL_FLY_MS = 520;
 let stealTimers = [];
 
-function playSteal(res) {
+function playSteal(res, toMe) {
   const stage = $('gain-stage');
   if (!stage || !res) return;
   for (const t of stealTimers) clearTimeout(t);
   stealTimers = [];
+
+  // A card flying into the tray is the payout flight and takes the payout's time; a card
+  // leaving the top of the screen has further to go.
+  const fly = toMe ? GAIN_FLY_MS : STEAL_FLY_MS;
 
   stage.classList.remove('away', 'stolen');
   stage.hidden = false;
@@ -3569,20 +3606,36 @@ function playSteal(res) {
 
   stealTimers.push(setTimeout(() => {
     const el = stage.querySelector('.gain-card');
-    if (el) {
-      // Far enough to clear the top of the board whatever height it is, measured rather
-      // than guessed so it leaves the screen rather than stopping just short of it.
-      const from = el.getBoundingClientRect();
+    if (!el) return;
+    const from = el.getBoundingClientRect();
+    if (toMe) {
+      // A card you took is a card you now hold, so it goes where that card lives —
+      // the same flight a payout makes, to the same slot in the tray.
+      const target = document.querySelector(`.rcard-wrap[data-res="${res}"] .rcard`);
+      if (target && from.width) {
+        const to = target.getBoundingClientRect();
+        el.style.setProperty('--dx', `${Math.round(to.left + to.width / 2 - (from.left + from.width / 2))}px`);
+        el.style.setProperty('--dy', `${Math.round(to.top + to.height / 2 - (from.top + from.height / 2))}px`);
+        el.style.setProperty('--ds', (to.width / from.width).toFixed(3));
+        el.style.setProperty('--d', '0ms');
+      }
+      stage.classList.add('away');
+    } else {
+      // A card taken from you leaves. Far enough to clear the top of the board whatever
+      // height it is, measured rather than guessed so it goes off rather than stopping
+      // just short of the edge.
       el.style.setProperty('--dy', `${-Math.round(from.bottom + 80)}px`);
+      stage.classList.add('stolen');
     }
-    stage.classList.add('stolen');
   }, STEAL_HOLD_MS));
 
   stealTimers.push(setTimeout(() => {
     stage.hidden = true;
-    stage.classList.remove('stolen');
+    stage.classList.remove('stolen', 'away');
     stage.innerHTML = '';
-  }, STEAL_HOLD_MS + STEAL_FLY_MS));
+    // The tray card kicks as it lands on it, exactly as a payout does.
+    if (toMe) bumpCards([res]);
+  }, STEAL_HOLD_MS + fly));
 }
 
 /**
