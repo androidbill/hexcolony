@@ -1176,20 +1176,12 @@ const clockTrusted = () => solo || clockReady();
 const PULSE_MS = 4000;
 const HEALTH_MS = 2000;
 
-/**
- * How long a room may sit with one person in it before it closes itself.
- *
- * Nothing ever removed a room. Leaving as the last player deletes it, but an app that is
- * killed rather than closed — a phone locked, a tab shut, a browser crashed — leaves the
- * room behind with its one player still seated, and there it stays. Twenty-one of them
- * had piled up by the time anybody looked, the oldest six days cold.
- *
- * A room with one person in it is not a game, so the device that is in it closes it and
- * goes home. That is the half that can be done from inside; the browser sweeps the other
- * half, the rooms with nobody left to do it.
- */
-const ALONE_MS = 2 * 60 * 1000;
-let aloneSince = null;
+// A room used to close itself after two minutes with one person in it, on the grounds
+// that an app killed rather than closed leaves its player seated forever. Removed: it
+// also threw out a host who was waiting for somebody to join, and leaving a room deletes
+// it when you are the last one in it, which covers the ordinary case. Orphans from a
+// killed app are swept from outside — scripts/sweep-rooms.mjs — and roomIsStale keeps
+// them out of the browse list meanwhile.
 const STALE_RESUB_MS = 11000;
 const STALE_PULL_MS = 17000;
 const STALE_RESET_MS = 26000;
@@ -1413,22 +1405,6 @@ function healthCheck() {
   if (!roomRef) return;
   if (shouldPulse()) writePulse();
 
-  // One player is not a table. Timed from when the room became that way rather than from
-  // arriving, so the clock starts when the last other person leaves.
-  const seated = Object.keys(room?.players || {}).length;
-  if (seated > 1) aloneSince = null;
-  else {
-    if (aloneSince === null) aloneSince = Date.now();
-    else if (Date.now() - aloneSince > ALONE_MS) {
-      aloneSince = null;
-      // leaveRoom deletes the room when there is nobody else in it, which is the case
-      // here by definition — so this closes the room as well as leaving it.
-      toast('Room closed — nobody else joined.');
-      leaveRoom(true);
-      return;
-    }
-  }
-
   const stale = Date.now() - lastFreshAt;
   if (stale > STALE_RESET_MS) hardReset();
   else if (stale > STALE_PULL_MS) pullFromServer();
@@ -1447,7 +1423,6 @@ function healthCheck() {
 }
 
 function enterRoom(code) {
-  aloneSince = null;
   sawRoomDoc = false;
   roomCode = code;
   roomRef = doc(db, 'rooms', code);
@@ -1473,7 +1448,6 @@ function enterRoom(code) {
 
 async function leaveRoom(removeSelf = true) {
   $('turn-ring').hidden = true;
-  aloneSince = null;
   if (solo) { exitSolo(); return; }
   const wasPlaying = room?.state === 'playing' && game();
   const ref = roomRef;
