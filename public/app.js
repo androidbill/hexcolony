@@ -2453,14 +2453,25 @@ function drawSeaRow(elId, chosen, onPick) {
      * iro is given an explicit width rather than measuring its container, so it builds
      * correctly even while the panel is display:none.
      */
-    row.innerHTML = `<button type="button" class="sea-toggle" aria-expanded="false">
-        <span class="sea-wheel-preview" style="--a:${esc(current.a)};--b:${esc(current.b)}"></span>
-        <span class="sea-hex"></span>
-        <svg class="sea-caret" viewBox="0 0 24 24" aria-hidden="true" fill="none"
-             stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M6 9.5l6 6 6-6"/>
-        </svg>
-      </button>
+    /**
+     * The label lives in here rather than beside this block, which is not cosmetic.
+     *
+     * As a control sitting next to a label, this got whatever width was left after
+     * `.opt-l { flex: 1 }` had taken its half — 166px of a 343px row on a phone, and iro
+     * is built at a fixed 210. The wheel drew straight out of its own box and sat off
+     * centre. Owning the whole row means the wheel has the width it was built for.
+     */
+    row.innerHTML = `<div class="sea-head">
+        <span class="opt-l">Sea</span>
+        <button type="button" class="sea-toggle" aria-expanded="false">
+          <span class="sea-wheel-preview" style="--a:${esc(current.a)};--b:${esc(current.b)}"></span>
+          <span class="sea-hex"></span>
+          <svg class="sea-caret" viewBox="0 0 24 24" aria-hidden="true" fill="none"
+               stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 9.5l6 6 6-6"/>
+          </svg>
+        </button>
+      </div>
       <div class="sea-wheel" hidden>
         <div class="sea-iro" aria-label="Choose sea color"></div>
       </div>`;

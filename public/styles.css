@@ -1178,10 +1178,15 @@ button {
 /* ------------------------------------------------------------ sea picker */
 /* Shut, the control is the answer it gives: a disc of the water and its hex. The wheel
    is two hundred and fifty pixels and only wanted while it is being used. */
-/* The swatch sits on the label's line; the wheel, when it is out, drops below it and
-   takes the width it needs. */
-.sea-row { flex: 1; display: flex; flex-direction: column; align-items: flex-end; min-width: 0; }
+/* The block owns the whole row: the label and the swatch share its first line, and the
+   wheel drops underneath with the full width to draw into. */
+.sea-row { display: flex; flex-direction: column; gap: 0; min-width: 0; }
+.sea-head { display: flex; align-items: center; gap: 12px; }
+.sea-head .opt-l { flex: 1; }
 .sea-wheel { width: 100%; }
+/* iro draws at a fixed 210 and does not reflow, so the box it sits in must never be
+   narrower than that plus its own padding. */
+.sea-iro { min-width: 210px; }
 .sea-toggle {
   display: flex; align-items: center; gap: 10px;
   padding: 6px 10px 6px 6px; border-radius: 999px;
