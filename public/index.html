@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.08">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.09">
 </head>
 <body>
 
@@ -309,8 +309,13 @@
 
     <!-- The two awards, each a card in its own right, held up when it changes hands. -->
     <div class="award-stage" id="award-stage" aria-hidden="true" hidden>
-      <div class="award-take" id="award-take"></div>
-      <img class="award-card" id="award-card" alt="" decoding="async">
+      <div class="award-frame">
+        <img class="award-card" id="award-card" alt="" decoding="async">
+        <div class="award-take" id="award-take">
+          <span class="award-take-line" id="award-take-name"></span>
+          <span class="award-take-line" id="award-take-what"></span>
+        </div>
+      </div>
     </div>
     <div class="board-hud">
       <div class="board-badge" id="turn-badge"></div>

@@ -3812,9 +3812,11 @@ function playAward(kind, pid) {
   for (const t of awardTimers) clearTimeout(t);
   awardTimers = [];
 
+  const what = kind === 'army' ? 'Largest Army' : 'Longest Road';
   $('award-card').src = `art/${kind === 'army' ? 'largest-army' : 'longest-road'}.png`;
-  $('award-card').alt = kind === 'army' ? 'Largest Army' : 'Longest Road';
-  $('award-take').textContent = pid === playerId ? 'You take' : `${nameFor(pid)} takes`;
+  $('award-card').alt = what;
+  $('award-take-name').textContent = pid === playerId ? 'You take' : `${nameFor(pid)} takes`;
+  $('award-take-what').textContent = what;
   stage.style.setProperty('--c', colorFor(pid));
 
   stage.classList.remove('out');
