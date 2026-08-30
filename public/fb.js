@@ -71,7 +71,6 @@ export const limit = fs ? fs.limit : (() => null);
 
 export const doc = fs ? fs.doc : (() => ({ id: 'offline' }));
 export const getDoc = fs ? fs.getDoc : offline;
-export const getDocs = fs ? fs.getDocs : offline;
 export const getDocFromServer = fs ? fs.getDocFromServer : offline;
 export const setDoc = fs ? fs.setDoc : offline;
 export const updateDoc = fs ? fs.updateDoc : offline;

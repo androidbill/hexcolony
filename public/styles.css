@@ -203,19 +203,6 @@ button {
 }
 .btn-key:active { box-shadow: 0 2px 0 var(--sky-shade), 0 6px 14px rgba(0, 0, 0, 0.35); }
 .btn-label { font-size: 16.5px; }
-/* The head count riding on a button's label. Inline-block so it sits on the text
-   baseline rather than stretching the button, and normal-weight so the label still
-   reads as the label. */
-.btn-count {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  background: rgba(53, 196, 255, 0.22);
-  color: var(--sky-ink, #0b5d91);
-  font-size: 11px; font-weight: 800; font-style: normal;
-  vertical-align: 1px;
-}
 .btn-sub { font-size: 12px; font-weight: 600; opacity: 0.72; }
 
 .btn-ghost {
@@ -328,9 +315,7 @@ button {
 /* Browse Rooms used to be the first thing in the panel and so needed nothing above it.
    Create a Room sits there now, and the two were left touching. */
 #screen-home #btn-rooms { margin-top: 8px; }
-#screen-home #btn-lobby-chat { margin-top: 8px; position: relative; }
 #screen-home #btn-solo { margin-top: 8px; }
-#screen-home .lobby-chat-dot { top: -4px; right: -4px; }
 #screen-home .ver { margin-top: 0; padding-top: 0; }
 
 /* ------------------------------------------------------------ topbar */
@@ -1323,23 +1308,22 @@ button {
   display: flex; flex-direction: column; gap: 7px;
   padding: 2px 0 6px;
 }
-#sheet-chat, #sheet-lobby-chat {
+#sheet-chat {
   background: linear-gradient(180deg, #bfe7f7 0%, #7cc2e4 100%);
   color: var(--ink);
 }
-#sheet-chat .text-input, #sheet-lobby-chat .text-input {
+#sheet-chat .text-input {
   color: var(--ink);
   background: rgba(255, 255, 255, 0.72);
   border-color: rgba(13, 27, 40, 0.28);
   caret-color: var(--ink);
 }
-#sheet-chat .text-input:focus, #sheet-lobby-chat .text-input:focus {
+#sheet-chat .text-input:focus {
   background: rgba(255, 255, 255, 0.9);
   border-color: var(--ink);
 }
-#sheet-chat .text-input::placeholder, #sheet-lobby-chat .text-input::placeholder { color: rgba(13, 27, 40, 0.58); }
+#sheet-chat .text-input::placeholder { color: rgba(13, 27, 40, 0.58); }
 #sheet-chat .text-input:disabled { opacity: .55; }
-#sheet-dm .text-input { width: 100%; margin-top: 4px; resize: none; }
 .chat-row {
   border-left: 3px solid var(--c, var(--dim));
   padding: 5px 9px;
@@ -1347,20 +1331,6 @@ button {
   background: rgba(255, 255, 255, 0.05);
 }
 .chat-row.mine { background: rgba(53, 196, 255, 0.12); }
-/* A message from outside the room, in the same log as the room's own. Marked rather than
-   separated: it is part of the conversation you are having, it just did not come from
-   somebody at the table, and a second list would be a second place to have to look. */
-.chat-row.dm { background: rgba(53, 196, 255, 0.16); border-left-style: double; border-left-width: 5px; }
-.chat-tag {
-  padding: 0 6px; border-radius: 999px;
-  background: rgba(35, 116, 180, 0.2); color: #0b5d91;
-  font-size: 9.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase;
-}
-.chat-reply {
-  padding: 0 6px; border-radius: 999px;
-  background: rgba(13, 27, 40, 0.1); color: #0b5d91;
-  font-size: 10px; font-weight: 800;
-}
 .chat-meta time { margin-left: auto; }
 .chat-meta { display: flex; align-items: baseline; gap: 7px; }
 .chat-who {
@@ -1411,16 +1381,6 @@ button {
 
 /* ------------------------------------------------------------ room browser */
 .room-list { display: flex; flex-direction: column; gap: 10px; }
-.presence-summary {
-  display: flex; flex-direction: column; gap: 2px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  background: rgba(255, 255, 255, 0.06);
-  text-align: center;
-}
-.presence-summary b { color: var(--gold); }
-.presence-summary span { color: var(--dim); font-size: 12px; }
 .room-card {
   display: block; width: 100%; text-align: left;
   background: rgba(255, 255, 255, 0.05);
@@ -2189,53 +2149,6 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   background: rgba(255, 255, 255, 0.06);
   text-align: center;
 }
-.sheet-full {
-  inset: 0;
-  width: 100%; max-width: none; height: 100%; max-height: none;
-  border: 0; border-radius: 0;
-  padding: calc(var(--safe-t) + 12px) 16px calc(var(--safe-b) + 16px);
-  display: flex; flex-direction: column;
-}
-.lobby-chat-head {
-  position: sticky; top: 0; z-index: 3;
-  display: flex; align-items: center; gap: 10px; flex: 0 0 auto;
-  background: linear-gradient(180deg, #bfe7f7 0%, rgba(191, 231, 247, 0.96) 82%, rgba(191, 231, 247, 0) 100%);
-  padding: 0 0 10px;
-}
-.lobby-chat-head .sheet-title { flex: 1; text-align: center; }
-.lobby-people-btn { position: relative; display: grid; place-items: center; }
-.lobby-people-btn svg { width: 22px; height: 22px; }
-.lobby-people-btn span {
-  position: absolute; right: -4px; top: -4px;
-  min-width: 17px; height: 17px; padding: 0 4px;
-  border-radius: 999px; background: var(--danger); color: #fff;
-  font-size: 10px; font-weight: 800; line-height: 17px; text-align: center;
-}
-.lobby-people-list {
-  display: flex; flex-direction: column; gap: 6px;
-  margin: 12px 0 4px; padding: 8px;
-  border: 1px solid var(--line); border-radius: var(--r);
-  background: rgba(13, 27, 40, 0.28);
-}
-.lobby-person {
-  display: flex; align-items: center; gap: 8px;
-  width: 100%; padding: 8px 9px; border-radius: 10px;
-  background: rgba(255, 255, 255, 0.12); color: var(--ink); text-align: left;
-}
-.lobby-person b { flex: 1; }
-.lobby-person small { color: rgba(13, 27, 40, 0.62); }
-/* Poke and Message, side by side, on the person you tapped. Same size and same weight:
-   neither is the main one — a poke is louder, a message says more. */
-.lobby-person-act {
-  display: grid; place-items: center;
-  flex: 0 0 auto;
-  width: 30px; height: 30px; border-radius: 50%;
-  background: var(--gold); color: var(--ink);
-}
-.lobby-person-act svg { width: 17px; height: 17px; }
-#sheet-lobby-chat .sheet-sub { flex: 0 0 auto; }
-#sheet-lobby-chat .chat-log { flex: 1 1 auto; min-height: 0; max-height: none; }
-#sheet-lobby-chat .sheet-actions { flex: 0 0 auto; }
 .pause-status strong { display: block; color: var(--gold); font-size: 19px; }
 .pause-status small { display: block; margin-top: 4px; color: var(--dim); }
 .pause-accepts { margin-top: 10px; color: var(--dim); font-size: 13px; }

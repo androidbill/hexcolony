@@ -12,7 +12,7 @@
 // Firebase comes through fb.js rather than a direct import: it has to be loadable
 // through Discord's proxy, and a failure there must not stop solo play from running.
 import {
-  db, NET_READY, doc, getDoc, getDocs, getDocFromServer, setDoc, updateDoc, onSnapshot,
+  db, NET_READY, doc, getDoc, getDocFromServer, setDoc, updateDoc, onSnapshot,
   deleteField, deleteDoc, serverTimestamp, runTransaction,
   collection, query, where, limit, orderBy, addDoc,
   disableNetwork, enableNetwork,
@@ -101,19 +101,11 @@ function showScreen(id) {
   $('kebab-wrap').hidden = id === 'screen-game';
   closeKebab();
   if (id === 'screen-game') {
-    // Nobody is looking at a head count once they're on the board, so there is no
-    // reason to keep polling presence (or listening to Lobby Chat, a pre-game feature)
-    // for as long as the game runs.
-    if (presencePollTimer) { clearInterval(presencePollTimer); presencePollTimer = null; }
-    if (unsubLobbyChat) { unsubLobbyChat(); unsubLobbyChat = null; }
     // Size it now, then again after layout settles. The second pass catches the real
     // box once flex has run; the first means a throttled requestAnimationFrame — a
     // backgrounded tab, a hidden window — can never leave the board unsized.
     view.resize();
     requestAnimationFrame(() => view.resize());
-  } else if (NET_READY && !presencePollTimer) {
-    subscribePresence();
-    subscribeLobbyChat();
   }
   // The chat button is fixed to the window rather than to a screen, so whether it belongs
   // here is a question every screen change has to re-ask — a message can arrive while you
@@ -730,386 +722,8 @@ $('btn-discord-join').addEventListener('click', () => { unlock(); joinDiscordRoo
 // that fails until somebody does that is a query that fails in production. Fifty rooms
 // is a small enough list to sort here.
 const ROOM_LIST_MAX = 50;
-// Doubled from 15s — the "browsing/playing" count only needs to be roughly right, not
-// second-perfect. TTL is doubled with it, to keep the same three-beats-of-grace before
-// somebody quietly drops off the count.
-const PRESENCE_HEARTBEAT_MS = 30 * 1000;
-const PRESENCE_TTL_MS = 90 * 1000;
-const LOBBY_CHAT_LIFETIME_MS = 60 * 1000;
 let unsubRooms = null;
 let roomList = [];
-let presencePollTimer = null;
-let presenceList = [];
-let presenceInterval = null;
-let unsubLobbyChat = null;
-let lobbyChatLog = [];
-let lobbyChatExpiryTimers = new Map();
-const LOBBY_CHAT_SEEN_KEY = 'hexcolony_lobby_chat_seen';
-let lobbyChatSeenAt = Number(localStorage.getItem(LOBBY_CHAT_SEEN_KEY) || Date.now());
-if (!localStorage.getItem(LOBBY_CHAT_SEEN_KEY)) localStorage.setItem(LOBBY_CHAT_SEEN_KEY, String(lobbyChatSeenAt));
-let lobbyChatUnread = 0;
-let lobbyChatPrimed = false;
-let unsubNotifications = null;
-let lobbySelectedPerson = null;
-
-function presenceMode() {
-  return room && ['map', 'playing'].includes(room.state) ? 'playing' : 'lobby';
-}
-
-function writePresence() {
-  if (!NET_READY || !playerId) return;
-  setDoc(doc(db, 'presence', playerId), {
-    name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
-    // Presence is a short-lived display signal, not a game deadline. A local millisecond
-    // value avoids the serverTimestamp pending state making a freshly active player look
-    // absent until a second snapshot arrives.
-    at: Date.now(),
-    mode: presenceMode(),
-  }).catch(() => { /* presence is helpful, never essential to play */ });
-}
-
-function startPresence() {
-  writePresence();
-  if (presenceInterval) clearInterval(presenceInterval);
-  presenceInterval = setInterval(writePresence, PRESENCE_HEARTBEAT_MS);
-}
-
-// Polled rather than a live listener. A listener bills a read for every document that
-// changes, to every device listening — with everyone's heartbeat landing independently,
-// that is listeners × heartbeats, and it was the single biggest thing this app wrote to
-// Firestore. Polling bills a listener once per its own poll, for the whole collection,
-// however many other people changed in between — so ten heartbeats between polls still
-// cost one read each, not ten. The trade is a count that can be up to a poll behind,
-// which nothing here needs to the second.
-const PRESENCE_POLL_MS = 20 * 1000;
-
-function pollPresence() {
-  if (!NET_READY) return;
-  getDocs(collection(db, 'presence')).then((snap) => {
-    presenceList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    renderPresence();
-    renderLobbyPeople();
-  }).catch((err) => console.error('presence', err));
-}
-
-function subscribePresence() {
-  if (presencePollTimer) return;
-  pollPresence();
-  presencePollTimer = setInterval(pollPresence, PRESENCE_POLL_MS);
-  renderPresence();
-}
-
-function renderPresence() {
-  const box = $('presence-summary');
-  if (!box) return;
-  const online = presenceList.filter((p) => {
-    const at = stampMs(p.at);
-    return at !== null && Date.now() - at < PRESENCE_TTL_MS;
-  });
-  const playing = online.filter((p) => p.mode === 'playing').length;
-  const lobby = Math.max(0, online.length - playing);
-  box.innerHTML = `<b>Online now: ${online.length}</b><span>Playing: ${playing} · In lobby: ${lobby}</span>`;
-  renderLobbyOnlineCount(online.length);
-}
-
-/**
- * How many people are around, on the Lobby Chat button itself.
- *
- * Hidden at zero rather than showing "0". A button that says nobody is here is a button
- * nobody presses, and the count is only ever this device's own view of it — the presence
- * listener may not have answered yet, and "0" would be a lie for the first second.
- */
-function renderLobbyOnlineCount(n) {
-  const pill = $('lobby-online-count');
-  if (!pill) return;
-  pill.hidden = !n;
-  pill.textContent = n ? `${n} online` : '';
-}
-
-function lobbyPeople() {
-  const cutoff = Date.now() - PRESENCE_TTL_MS;
-  return presenceList
-    .filter((p) => (stampMs(p.at) || 0) >= cutoff)
-    .sort((a, b) => (a.id === playerId ? -1 : b.id === playerId ? 1 : String(a.name).localeCompare(String(b.name))));
-}
-
-function renderLobbyPeople() {
-  const list = $('lobby-people-list');
-  const count = $('lobby-chat-count');
-  if (!list || !count) return;
-  const people = lobbyPeople();
-  count.textContent = String(people.length);
-  list.innerHTML = people.length ? people.map((p) => `
-    <div class="lobby-person">
-      <button class="lobby-person-name" data-person="${esc(p.id)}"><b>${esc(p.name || 'Someone')}</b><small>${p.id === playerId ? 'You · ' : ''}${p.mode === 'playing' ? 'In a game' : 'In lobby'}</small></button>
-      ${lobbySelectedPerson === p.id && p.id !== playerId ? `
-      <button class="lobby-person-act" data-poke="${esc(p.id)}" aria-label="Poke ${esc(p.name || 'Someone')}">
-        <svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      </button>
-      <button class="lobby-person-act" data-dm="${esc(p.id)}" aria-label="Message ${esc(p.name || 'Someone')}">
-        <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3v-5.2A8 8 0 0 1 11 4h2a8 8 0 0 1 8 8Z" fill="currentColor"/></svg>
-      </button>` : ''}
-    </div>`).join('') : '<span class="hint">Nobody is online right now.</span>';
-  for (const b of list.querySelectorAll('[data-person]')) {
-    b.addEventListener('click', () => {
-      lobbySelectedPerson = lobbySelectedPerson === b.dataset.person ? null : b.dataset.person;
-      renderLobbyPeople();
-    });
-  }
-  for (const b of list.querySelectorAll('[data-poke]')) {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      pokePerson(b.dataset.poke);
-    });
-  }
-  for (const b of list.querySelectorAll('[data-dm]')) {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      openDirectMessage(b.dataset.dm, lobbyPeople().find((p) => p.id === b.dataset.dm)?.name);
-    });
-  }
-}
-
-/**
- * The one-to-one channel: a poke, or a message.
- *
- * Everybody watches `notifications/<their own id>/items` from the moment the app opens,
- * whatever screen they are on and whatever they are playing — a four-player table, a game
- * against bots, or nothing at all. That is what makes this work where room chat cannot:
- * room chat lives under a room, and somebody playing the bots has no room.
- *
- * A document with `text` is a message; one without is a poke. Same collection, same
- * listener, so a message costs nothing new to deliver.
- */
-const DM_MAX = 140;
-
-async function sendNotification(target, extra = {}) {
-  return addDoc(collection(db, 'notifications', target, 'items'), {
-    from: playerId,
-    name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
-    at: serverTimestamp(),
-    ...extra,
-  });
-}
-
-async function pokePerson(target) {
-  const person = lobbyPeople().find((p) => p.id === target);
-  if (!person || target === playerId) return;
-  try {
-    await sendNotification(target);
-    toast(`Poke sent to ${person.name || 'Someone'}.`);
-  } catch { toast('Could not send the poke.'); }
-}
-
-let dmTarget = null;
-
-function openDirectMessage(target, name) {
-  if (!NET_READY) return toast('Messaging needs a connection.');
-  if (!target || target === playerId) return;
-  if (!usableName()) return;
-  dmTarget = { id: target, name: name || 'Someone' };
-  $('dm-title').textContent = `Message ${dmTarget.name}`;
-  $('dm-sub').textContent = 'Goes straight to them, wherever they are — it lands in their game chat.';
-  $('dm-input').value = '';
-  sheet('sheet-dm');
-  $('dm-input').focus();
-}
-
-async function sendDirectMessage() {
-  if (!dmTarget) return;
-  const input = $('dm-input');
-  const text = (input.value || '').trim().slice(0, DM_MAX);
-  if (!text) return;
-  const bad = findBadWord(text);
-  if (bad) {
-    toast(`Let's keep it clean — "${bad}" will not send.`);
-    sfx.error();
-    return;
-  }
-  const to = dmTarget;
-  input.value = '';
-  closeSheet();
-  try {
-    await withTimeout(sendNotification(to.id, { text }), 8000);
-    toast(`Message sent to ${to.name}.`);
-  } catch (e) {
-    console.error(e);
-    toast('That message did not send.');
-  }
-}
-
-$('dm-send').addEventListener('click', () => { unlock(); sendDirectMessage(); });
-$('dm-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendDirectMessage(); }
-});
-
-function startNotifications() {
-  if (!NET_READY || !playerId) return;
-  if (unsubNotifications) unsubNotifications();
-  const q = query(collection(db, 'notifications', playerId, 'items'), orderBy('at', 'desc'), limit(20));
-  let first = true;
-  unsubNotifications = onSnapshot(q, (snap) => {
-    if (first) {
-      first = false;
-      return;
-    }
-    for (const change of snap.docChanges()) {
-      if (change.type !== 'added') continue;
-      const item = change.doc.data() || {};
-      const from = item.name || 'Someone';
-      unlock();
-      if (typeof item.text === 'string' && item.text.trim()) {
-        // Into the chat window, and announced exactly the way a message from somebody at
-        // the table is — the point of it is that it should not feel like a different
-        // thing from the game's own chat.
-        receiveDirectMessage(change.doc.id, item, from);
-        continue;
-      }
-      sfx.yourTurn();
-      buzz([45, 85, 55]);
-      toast(`${from} sent you a poke.`);
-    }
-  }, (err) => console.error('notifications', err));
-}
-
-function stopLobbyChat() {
-  if (unsubLobbyChat) { unsubLobbyChat(); unsubLobbyChat = null; }
-  for (const timer of lobbyChatExpiryTimers.values()) clearTimeout(timer);
-  lobbyChatExpiryTimers = new Map();
-  lobbyChatLog = [];
-}
-
-function renderLobbyChatBadge() {
-  const badge = $('lobby-chat-dot');
-  if (!badge) return;
-  badge.hidden = lobbyChatUnread === 0;
-  badge.textContent = lobbyChatUnread > 9 ? '9+' : String(lobbyChatUnread);
-}
-
-function updateLobbyChatUnread(messages) {
-  lobbyChatUnread = messages.filter((message) => {
-    const sentAt = stampMs(message.at);
-    return message.by !== playerId && sentAt !== null && sentAt > lobbyChatSeenAt;
-  }).length;
-  renderLobbyChatBadge();
-}
-
-function markLobbyChatRead(messages = lobbyChatLog) {
-  const latest = Math.max(lobbyChatSeenAt, ...messages.map((message) => stampMs(message.at) || 0));
-  lobbyChatSeenAt = latest || Date.now();
-  localStorage.setItem(LOBBY_CHAT_SEEN_KEY, String(lobbyChatSeenAt));
-  lobbyChatUnread = 0;
-  renderLobbyChatBadge();
-}
-
-function scheduleLobbyChatExpiry(message) {
-  if (lobbyChatExpiryTimers.has(message.id)) return;
-  const sentAt = stampMs(message.at);
-  if (sentAt === null) return;
-  const delay = Math.max(0, sentAt + LOBBY_CHAT_LIFETIME_MS - Date.now());
-  const timer = setTimeout(() => {
-    lobbyChatExpiryTimers.delete(message.id);
-    deleteDoc(doc(db, 'lobbyChat', message.id)).catch(() => {});
-  }, delay);
-  lobbyChatExpiryTimers.set(message.id, timer);
-}
-
-function subscribeLobbyChat() {
-  if (unsubLobbyChat) unsubLobbyChat();
-  const q = query(collection(db, 'lobbyChat'), orderBy('at', 'desc'), limit(CHAT_KEEP));
-  unsubLobbyChat = onSnapshot(q, (snap) => {
-    const messages = snap.docs.map((d) => ({ id: d.id, ref: d.ref, ...d.data() }));
-    for (const message of messages) {
-      const sentAt = stampMs(message.at);
-      if (sentAt !== null && Date.now() - sentAt >= LOBBY_CHAT_LIFETIME_MS) {
-        deleteDoc(message.ref).catch(() => {});
-      } else {
-        scheduleLobbyChatExpiry(message);
-      }
-    }
-    lobbyChatLog = messages
-      .filter((message) => {
-        const sentAt = stampMs(message.at);
-        return sentAt === null || Date.now() - sentAt < LOBBY_CHAT_LIFETIME_MS;
-      })
-      .reverse();
-    const chatWasOpen = openSheet === 'sheet-lobby-chat';
-    if (chatWasOpen) markLobbyChatRead(lobbyChatLog);
-    else updateLobbyChatUnread(lobbyChatLog);
-    if (lobbyChatPrimed && !chatWasOpen) {
-      for (const change of snap.docChanges()) {
-        if (change.type !== 'added' || change.doc.data()?.by === playerId) continue;
-        const sender = change.doc.data()?.name || 'Someone';
-        unlock();
-        sfx.yourTurn();
-        buzz([35]);
-        toast(`${sender} sent a message in Lobby Chat.`);
-      }
-    }
-    lobbyChatPrimed = true;
-    drawLobbyChat();
-  }, (err) => console.error('lobby chat', err));
-}
-
-function drawLobbyChat() {
-  const box = $('lobby-chat-log');
-  if (!box) return;
-  if (!lobbyChatLog.length) {
-    box.innerHTML = '<p class="hint">Nothing said yet. Say hello.</p>';
-    return;
-  }
-  box.innerHTML = lobbyChatLog.map((m) => {
-    const liveName = presenceList.find((p) => p.id === m.by)?.name;
-    const displayName = m.name && m.name !== 'Someone' ? m.name : (liveName || 'Someone');
-    return `
-    <div class="chat-row${m.by === playerId ? ' mine' : ''}" style="--c:#35c4ff">
-      <div class="chat-meta"><span class="chat-who">${esc(displayName)}</span><time class="chat-time">${esc(chatTime(m.at))}</time></div>
-      <span class="chat-text">${chatTextMarkup(m.text, 'lobby')}</span>
-    </div>`;
-  }).join('');
-  box.scrollTop = box.scrollHeight;
-}
-
-function openLobbyChat() {
-  if (!NET_READY) return toast('Lobby Chat needs a connection.');
-  const name = usableName();
-  if (!name) return;
-  localStorage.setItem('hexcolony_name', name);
-  subscribePresence();
-  subscribeLobbyChat();
-  markLobbyChatRead();
-  lobbySelectedPerson = null;
-  renderLobbyPeople();
-  $('lobby-people-list').hidden = true;
-  $('lobby-chat-people').setAttribute('aria-expanded', 'false');
-  sheet('sheet-lobby-chat');
-}
-
-async function sendLobbyChat() {
-  const input = $('lobby-chat-input');
-  const text = (input.value || '').trim().slice(0, CHAT_MAX);
-  if (!text) return;
-  const bad = findBadWord(text);
-  if (bad) {
-    toast(`Let's keep it clean — "${bad}" will not send.`);
-    sfx.error();
-    return;
-  }
-  input.value = '';
-  try {
-    const messageRef = await withTimeout(addDoc(collection(db, 'lobbyChat'), {
-      by: playerId,
-      name: (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
-      text,
-      at: serverTimestamp(),
-    }), 8000);
-    scheduleLobbyChatExpiry({ id: messageRef.id, at: Date.now() });
-  } catch (e) {
-    console.error(e);
-    toast('That message did not send.');
-    input.value = text;
-  }
-}
 
 function showRooms() {
   if (!NET_READY) return toast('Online play needs a connection.');
@@ -1119,14 +733,10 @@ function showRooms() {
   $('rooms-hint').textContent = 'Looking for open tables…';
   $('room-list').innerHTML = '';
   subscribeRoomList();
-  subscribePresence();
-  subscribeLobbyChat();
 }
 
 function leaveRooms() {
   if (unsubRooms) { unsubRooms(); unsubRooms = null; }
-  // The presence listener stays up: the Lobby Chat button on the landing page carries a
-  // head count now, and it cannot be live if the only listener dies on the way home.
   roomList = [];
   showScreen('screen-home');
 }
@@ -1238,19 +848,6 @@ function renderRoomList() {
 $('btn-rooms').addEventListener('click', showRooms);
 $('rooms-back').addEventListener('click', () => { sfx.tap(); leaveRooms(); });
 $('rooms-refresh').addEventListener('click', () => { sfx.tap(); subscribeRoomList(); });
-$('btn-lobby-chat').addEventListener('click', () => { unlock(); sfx.tap(); openLobbyChat(); });
-$('lobby-chat-people').addEventListener('click', () => {
-  const list = $('lobby-people-list');
-  const button = $('lobby-chat-people');
-  list.hidden = !list.hidden;
-  button.setAttribute('aria-expanded', String(!list.hidden));
-  renderLobbyPeople();
-});
-$('lobby-chat-send').addEventListener('click', () => { unlock(); sendLobbyChat(); });
-$('lobby-chat-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendLobbyChat(); }
-});
-setupChatComposer('lobby-chat-input', 'lobby-chat-mentions', 'lobby-chat-emoji', 'lobby-chat-emoji-picker', 'lobby');
 $('btn-rooms-create').addEventListener('click', () => {
   if (unsubRooms) { unsubRooms(); unsubRooms = null; }
   createRoom();
@@ -1352,7 +949,6 @@ function applyRoom(data, fresh) {
   if (guessSeq && Date.now() - guessAt < GUESS_HOLD_MS && (data.game?.seq ?? 0) < guessSeq) return;
   guessSeq = 0;
   room = data;
-  writePresence();
   render();
 }
 
@@ -1565,7 +1161,6 @@ function enterRoom(code) {
   lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
   announcedUp = null;
   resetGuess(); resetTrade();
-  writePresence();
   subscribeChat();
   subscribeRoom();
   subscribePulse();
@@ -1632,7 +1227,6 @@ async function leaveRoom(removeSelf = true) {
   setConnBadge(false);
   stopChat();
   roomCode = null; roomRef = null; pulseRef = null; room = null;
-  writePresence();
   board = null; boardSeed = null;
   resetGuess(); resetTrade();
   localStorage.removeItem('hexcolony_room');
@@ -2196,7 +1790,6 @@ function enterSolo(saved) {
     settings: saved.settings, level: saved.level, bots: saved.bots,
     startedAt: saved.startedAt || null, endedAt: saved.endedAt || null,
   };
-  writePresence();
   boardSeed = null;
   // A resumed game has no start stamp — it was never saved, and holding someone to a
   // deadline that expired while the app was shut would be absurd. The current step
@@ -2252,7 +1845,6 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
     players, order, game: null, settings, level, bots: botCount,
     mapSeeds: [newSeed()], mapIndex: 0,
   };
-  writePresence();
   // Fog hides the map anyway, so flipping through boards first would show everyone
   // exactly what fog is about to hide. Skip the picker and start on the first roll.
   if (settings.fog) startGameWithSeed(mapSeedNow());
@@ -2266,14 +1858,11 @@ function exitSolo() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   solo = false;
   room = null;
-  writePresence();
   board = null; boardSeed = null;
   clearSolo();
   closeSheet();
   keepAwake(false);
   showScreen('screen-home');
-  startPresence();
-  startNotifications();
   refreshResume();
 }
 
@@ -2889,10 +2478,6 @@ const CHAT_POS_KEY = 'hexcolony_chat_position';
 
 let unsubChat = null;
 let chatLog = [];
-// Messages sent to this player from outside the room, kept here rather than in chatLog
-// because chatLog is replaced wholesale by every Firestore snapshot. They live for the
-// session: the notification is the delivery, this is just where it is readable after.
-let directLog = [];
 let chatSeenAt = Number(localStorage.getItem('hexcolony_chat_seen') || 0);
 let chatUnread = 0;
 let chatPrimed = false;
@@ -2900,8 +2485,7 @@ function chatMentionHandle(name) {
   return String(name || '').trim().replace(/[^a-zA-Z0-9_]/g, '').slice(0, 24);
 }
 
-function chatPeople(scope) {
-  if (scope === 'lobby') return lobbyPeople().map((p) => ({ id: p.id, name: p.name || 'Someone' }));
+function chatPeople() {
   return Object.entries(room?.players || {}).map(([id, p]) => ({ id, name: p.name || 'Someone' }));
 }
 
@@ -2911,8 +2495,8 @@ function chatTime(at) {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(ms);
 }
 
-function chatTextMarkup(text, scope) {
-  const handles = new Set(chatPeople(scope).map((p) => chatMentionHandle(p.name).toLowerCase()).filter(Boolean));
+function chatTextMarkup(text) {
+  const handles = new Set(chatPeople().map((p) => chatMentionHandle(p.name).toLowerCase()).filter(Boolean));
   const clean = esc(maskText(text || ''));
   return clean.replace(/(^|[\s])(@[A-Za-z0-9_]{1,24})/g, (all, prefix, mention) => {
     return handles.has(mention.slice(1).toLowerCase())
@@ -2921,13 +2505,13 @@ function chatTextMarkup(text, scope) {
   });
 }
 
-function renderChatMentions(input, menu, scope) {
+function renderChatMentions(input, menu) {
   const caret = input.selectionStart ?? input.value.length;
   const before = input.value.slice(0, caret);
   const match = before.match(/(?:^|\s)@([A-Za-z0-9_]*)$/);
   if (!match) { menu.hidden = true; return; }
   const queryText = match[1].toLowerCase();
-  const people = chatPeople(scope)
+  const people = chatPeople()
     .map((p) => ({ ...p, handle: chatMentionHandle(p.name) }))
     .filter((p) => p.handle && p.handle.toLowerCase().startsWith(queryText))
     .slice(0, 8);
@@ -2954,7 +2538,7 @@ function renderChatMentions(input, menu, scope) {
   }
 }
 
-function setupChatComposer(inputId, mentionsId, emojiId, pickerId, scope) {
+function setupChatComposer(inputId, mentionsId, emojiId, pickerId) {
   const input = $(inputId);
   const mentions = $(mentionsId);
   const emoji = $(emojiId);
@@ -2963,7 +2547,7 @@ function setupChatComposer(inputId, mentionsId, emojiId, pickerId, scope) {
   const resize = () => {
     input.style.height = 'auto';
     input.style.height = `${Math.min(input.scrollHeight, 112)}px`;
-    renderChatMentions(input, mentions, scope);
+    renderChatMentions(input, mentions);
   };
   input.addEventListener('input', resize);
   input.addEventListener('keydown', (e) => { if (e.key === 'Escape') mentions.hidden = true; });
@@ -3027,8 +2611,6 @@ function subscribeChat() {
 function stopChat() {
   if (unsubChat) { unsubChat(); unsubChat = null; }
   chatLog = [];
-  // directLog is NOT cleared. It belongs to the player, not to the room, and leaving a
-  // table is no reason to lose a message somebody sent you while you were at it.
   chatUnread = 0;
   chatPrimed = false;
   countUnread();
@@ -3050,10 +2632,9 @@ function renderChatButton() {
   const btn = $('btn-chat');
   if (!btn) return;
   // Chat is available in the lobby, while players choose a map, and during the game.
-  // Solo has nobody to talk to — until somebody messages you from the lobby, and then
-  // there is something to read whatever you are playing.
+  // Solo has nobody at the table to talk to.
   const inRoom = !solo && !!roomCode && ['lobby', 'map', 'playing', 'over'].includes(room?.state);
-  btn.hidden = !inRoom && !directLog.length;
+  btn.hidden = !inRoom;
   $('chat-dot').hidden = chatUnread === 0;
   $('chat-dot').textContent = chatUnread > 9 ? '9+' : String(chatUnread);
 }
@@ -3120,9 +2701,9 @@ function makeChatDraggable() {
   restoreChatPosition();
 }
 
-/** The room's chat and anything sent straight to this player, in the order it arrived. */
+/** The room's chat, in the order it arrived. */
 function chatRows() {
-  return [...chatLog, ...directLog].sort((x, y) => (stampMs(x.at) || 0) - (stampMs(y.at) || 0));
+  return chatLog;
 }
 
 function drawChat() {
@@ -3136,53 +2717,23 @@ function drawChat() {
     const mine = m.by === playerId;
     const c = m.by && room?.players?.[m.by] ? colorFor(m.by) : '#6b7a8c';
     // Masked here, on the way in, every time it is drawn.
-    return `<div class="chat-row${mine ? ' mine' : ''}${m.dm ? ' dm' : ''}" style="--c:${esc(m.dm ? '#35c4ff' : c)}">
-      <div class="chat-meta"><span class="chat-who">${esc(m.name || 'Someone')}</span>${m.dm
-        ? `<span class="chat-tag">direct</span><button class="chat-reply" data-reply="${esc(m.by)}" data-reply-name="${esc(m.name || 'Someone')}">Reply</button>`
-        : ''}<time class="chat-time">${esc(chatTime(m.at))}</time></div>
-      <span class="chat-text">${chatTextMarkup(m.text, 'game')}</span>
+    return `<div class="chat-row${mine ? ' mine' : ''}" style="--c:${esc(c)}">
+      <div class="chat-meta"><span class="chat-who">${esc(m.name || 'Someone')}</span><time class="chat-time">${esc(chatTime(m.at))}</time></div>
+      <span class="chat-text">${chatTextMarkup(m.text)}</span>
     </div>`;
   }).join('');
-  for (const b of box.querySelectorAll('[data-reply]')) {
-    b.addEventListener('click', () => openDirectMessage(b.dataset.reply, b.dataset.replyName));
-  }
   box.scrollTop = box.scrollHeight;
-}
-
-/**
- * A message that arrived from outside the room.
- *
- * Same sound, same buzz, same toast as the room's own chat, deliberately: whether the
- * sender happens to be sitting at this table is not something the person reading it
- * should have to work out from how it announced itself.
- */
-function receiveDirectMessage(id, item, from) {
-  if (directLog.some((m) => m.id === id)) return;
-  directLog.push({ id, by: item.from || null, name: from, text: item.text, at: item.at, dm: true });
-  if (directLog.length > CHAT_KEEP) directLog = directLog.slice(-CHAT_KEEP);
-  const open = openSheet === 'sheet-chat';
-  if (open) { markChatRead(); drawChat(); }
-  else {
-    countUnread();
-    sfx.yourTurn();
-    buzz([35]);
-    toast(`${from} sent you a message.`);
-  }
-  renderChatButton();
 }
 
 function openChat() {
   markChatRead();
   renderChatButton();
   drawChat();
-  // With no room there is nobody to say it to. The messages are still readable and each
-  // one still has its own Reply, which is the only sending this sheet can honestly offer.
-  const canSend = !solo && !!roomCode;
-  $('chat-send').disabled = !canSend;
-  $('chat-input').disabled = !canSend;
-  $('chat-input').placeholder = canSend ? 'Message the room' : 'Reply to a message to answer it';
+  $('chat-send').disabled = false;
+  $('chat-input').disabled = false;
+  $('chat-input').placeholder = 'Message the room';
   sheet('sheet-chat');
-  if (canSend) $('chat-input').focus();
+  $('chat-input').focus();
 }
 
 async function sendChat() {
@@ -3235,7 +2786,7 @@ $('chat-send').addEventListener('click', () => { unlock(); sendChat(); });
 $('chat-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
 });
-setupChatComposer('chat-input', 'chat-mentions', 'chat-emoji', 'chat-emoji-picker', 'game');
+setupChatComposer('chat-input', 'chat-mentions', 'chat-emoji', 'chat-emoji-picker');
 
 // A continuous loop so the legal-move highlights can pulse and the sea drifts.
 //
@@ -6547,9 +6098,6 @@ window.HEXCOLONY = {
 
   showScreen('screen-home');
   refreshResume();
-  startPresence();
-  startNotifications();
-  if (NET_READY) { subscribePresence(); subscribeLobbyChat(); }
   if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
 
   if (!NET_READY) {

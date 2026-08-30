@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.41">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.42">
 </head>
 <body>
 
@@ -74,15 +74,6 @@
         <span class="btn-sub">See who is waiting for players</span>
       </button>
 
-      <button class="btn btn-ghost" id="btn-lobby-chat">
-        <!-- The head count sits on the label, not in the sub-line: whether anybody is in
-             there is the thing that decides whether the button is worth pressing, and it
-             has to be readable without reading the sentence under it. -->
-        <span class="btn-label">Lobby Chat<i class="btn-count" id="lobby-online-count" hidden></i></span>
-        <span class="btn-sub">Chat with people browsing and waiting</span>
-        <i class="chat-dot lobby-chat-dot" id="lobby-chat-dot" hidden></i>
-      </button>
-
       <div class="or-split"><span>or play alone</span></div>
 
       <button class="btn btn-key" id="btn-resume" hidden>
@@ -117,54 +108,10 @@
   </header>
 
   <div class="lobby-scroll">
-    <div class="presence-summary" id="presence-summary">
-      <b>Online now: —</b><span>Playing: — · In lobby: —</span>
-    </div>
     <div class="room-list" id="room-list"></div>
     <p class="hint" id="rooms-hint"></p>
   </div>
 </section>
-
-<div class="sheet sheet-full" id="sheet-lobby-chat">
-  <div class="lobby-chat-head">
-    <button class="icon-btn lobby-people-btn" id="lobby-chat-people" aria-label="People in Lobby Chat" aria-expanded="false">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 19c.5-3 2.5-5 6-5s5.5 2 6 5M16 5.5a2.5 2.5 0 0 1 0 5M17 14c2.3.3 3.6 2 4 4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-      <span id="lobby-chat-count">0</span>
-    </button>
-    <h3 class="sheet-title">Lobby Chat</h3>
-    <button class="icon-btn" data-close aria-label="Close Lobby Chat">&#10005;</button>
-  </div>
-  <div class="lobby-people-list" id="lobby-people-list" hidden></div>
-  <p class="sheet-sub">A shared chat for people browsing and waiting for a game.</p>
-  <div class="chat-log" id="lobby-chat-log"></div>
-  <div class="chat-send">
-    <div class="chat-input-wrap">
-      <textarea id="lobby-chat-input" class="text-input" maxlength="2000" rows="1"
-                autocomplete="off" autocapitalize="sentences" placeholder="Message the lobby"></textarea>
-      <div class="chat-mentions" id="lobby-chat-mentions" hidden></div>
-    </div>
-    <div class="chat-emoji-wrap">
-      <button class="chat-emoji" id="lobby-chat-emoji" type="button" aria-label="Add emoji">😊</button>
-      <div class="emoji-picker" id="lobby-chat-emoji-picker" hidden></div>
-    </div>
-    <button class="btn btn-go" id="lobby-chat-send">Send</button>
-  </div>
-  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
-</div>
-
-<!-- One message to one person, wherever they are. Its own sheet rather than a mode on
-     the lobby chat box, because "who is this going to" is the whole difference between
-     this and the room full of people behind it, and a mode does not say that loudly. -->
-<div class="sheet" id="sheet-dm">
-  <h3 class="sheet-title" id="dm-title">Message</h3>
-  <p class="sheet-sub" id="dm-sub"></p>
-  <textarea id="dm-input" class="text-input" maxlength="140" rows="3"
-            autocomplete="off" autocapitalize="sentences" placeholder="Say something"></textarea>
-  <div class="sheet-actions">
-    <button class="btn btn-ghost" data-close>Cancel</button>
-    <button class="btn btn-go" id="dm-send">Send</button>
-  </div>
-</div>
 
 <!-- ============================== LOBBY ============================== -->
 <section class="screen" id="screen-lobby">
@@ -837,7 +784,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.30.41"></script>
-<script type="module" src="app.js?v=2026.08.30.41"></script>
+<script src="iro.min.js?v=2026.08.30.42"></script>
+<script type="module" src="app.js?v=2026.08.30.42"></script>
 </body>
 </html>
