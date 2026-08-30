@@ -113,15 +113,31 @@ function myResources(g, board, pid) {
 }
 
 /**
+ * Under fog, whether this bot actually knows what a hex is. A hex with a building on
+ * one of its corners has necessarily been discovered — settling anywhere on it reveals
+ * every hex the vertex touches — so this only ever withholds hexes nobody has reached
+ * yet, exactly what a human player would be blind to as well.
+ */
+function hexKnown(g, hi, board) {
+  if (!g.fog) return true;
+  return board.tiles[hi].terrain === 'desert' || (g.discovered || []).includes(hi);
+}
+
+/**
  * What a corner is worth to this player. Production is the base, but a spot that adds
  * a resource you cannot otherwise make is worth far more than its dots suggest — a
  * player with no brick or ore cannot build anything at all, which is the single most
  * common way a promising opening dies.
+ *
+ * Under fog, a hex nobody has settled next to yet contributes nothing: the bot cannot
+ * see its number or resource, so it cannot weigh a spot on a hex it has not scouted any
+ * more than a human at the same table could.
  */
 function vertexScore(g, board, v, pid, have) {
   let score = 0;
   const kinds = new Set();
   for (const h of VERTS[v].hexes) {
+    if (!hexKnown(g, h, board)) continue;
     const t = board.tiles[h];
     score += pips(t.num);
     if (t.res) kinds.add(t.res);
