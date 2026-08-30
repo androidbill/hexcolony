@@ -5752,6 +5752,7 @@ $('btn-again').addEventListener('click', async () => {
   } catch { toast('Could not reset the room.'); }
 });
 $('btn-home').addEventListener('click', () => leaveRoom(true));
+$('btn-recap').addEventListener('click', () => { sfx.tap(); shareRecap(); });
 $('btn-rematch-yes').addEventListener('click', () => answerRematch(true));
 $('btn-rematch-no').addEventListener('click', () => answerRematch(false));
 
@@ -5951,6 +5952,121 @@ async function fullRefresh() {
 }
 
 /** Hand the app to the phone's own share sheet. */
+/**
+ * The two extra facts a bare scoreboard cannot tell you: who traded the most cards in
+ * one deal, and who spent the game getting robbed. Both read off the same shared log
+ * everything else in the recap comes from — nothing tracked separately during play.
+ */
+function recapStats(g) {
+  let biggestTrade = null;
+  let robbedCount = {};
+  for (const e of g.log || []) {
+    if (e.t === 'trade' && e.give) {
+      const n = Object.values(e.give).reduce((a, b) => a + b, 0)
+        + Object.values(e.want || {}).reduce((a, b) => a + b, 0);
+      if (!biggestTrade || n > biggestTrade.n) biggestTrade = { n, p: e.p, with: e.with };
+    }
+    if (e.t === 'steal' && e.from) robbedCount[e.from] = (robbedCount[e.from] || 0) + 1;
+  }
+  const mostRobbed = Object.entries(robbedCount).sort((a, b) => b[1] - a[1])[0];
+  return {
+    biggestTrade,
+    mostRobbed: mostRobbed ? { pid: mostRobbed[0], n: mostRobbed[1] } : null,
+  };
+}
+
+/**
+ * The end-of-game card, drawn on an offscreen canvas rather than built from the sheet's
+ * own DOM: a screenshot of the sheet would carry the veil, the buttons and whatever
+ * screen size happened to take it, where a purpose-drawn card is the same shareable
+ * shape on every phone.
+ */
+function drawRecapCard(g) {
+  const cv = document.createElement('canvas');
+  const W = 900, H = 1200;
+  cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+
+  const grad = c.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#0d2338');
+  grad.addColorStop(1, '#071a2c');
+  c.fillStyle = grad;
+  c.fillRect(0, 0, W, H);
+
+  c.textAlign = 'center';
+  c.fillStyle = '#7fd4ff';
+  c.font = '700 34px ui-rounded, "Segoe UI", system-ui, sans-serif';
+  c.fillText('HEXCOLONY', W / 2, 90);
+
+  const win = g.winner;
+  c.fillStyle = colorFor(win);
+  c.font = '800 64px ui-rounded, "Segoe UI", system-ui, sans-serif';
+  c.fillText(`${nameFor(win)} wins!`, W / 2, 180);
+
+  c.fillStyle = 'rgba(255,255,255,0.75)';
+  c.font = '600 28px ui-rounded, "Segoe UI", system-ui, sans-serif';
+  const turns = g.turn.num;
+  c.fillText(`${R.totalVP(g, win)} victory points · ${turns} turn${turns === 1 ? '' : 's'}`, W / 2, 224);
+
+  // Final standings.
+  const rows = g.seats.slice().sort((a, b) => R.totalVP(g, b) - R.totalVP(g, a));
+  let y = 320;
+  c.textAlign = 'left';
+  for (const [i, pid] of rows.entries()) {
+    c.fillStyle = colorFor(pid);
+    c.beginPath(); c.arc(90, y - 12, 16, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#fff';
+    c.font = '700 32px ui-rounded, "Segoe UI", system-ui, sans-serif';
+    c.fillText(`${i + 1}. ${nameFor(pid)}`, 128, y);
+    c.textAlign = 'right';
+    c.fillText(String(R.totalVP(g, pid)), W - 90, y);
+    c.textAlign = 'left';
+    y += 64;
+  }
+
+  // Two stray facts, if the game produced them.
+  const { biggestTrade, mostRobbed } = recapStats(g);
+  y += 30;
+  c.font = '600 26px ui-rounded, "Segoe UI", system-ui, sans-serif';
+  c.fillStyle = 'rgba(255,255,255,0.65)';
+  if (biggestTrade) {
+    c.fillText(`Biggest trade: ${nameFor(biggestTrade.p)} ↔ ${nameFor(biggestTrade.with)} `
+      + `(${biggestTrade.n} card${biggestTrade.n === 1 ? '' : 's'})`, 90, y);
+    y += 44;
+  }
+  if (mostRobbed) {
+    c.fillText(`Most robbed: ${nameFor(mostRobbed.pid)} (${mostRobbed.n}×)`, 90, y);
+  }
+
+  return cv;
+}
+
+async function shareRecap() {
+  const g = game();
+  if (!g || g.phase !== 'over') return;
+  let blob;
+  try {
+    const cv = drawRecapCard(g);
+    blob = await new Promise((resolve) => cv.toBlob(resolve, 'image/png'));
+  } catch { toast('Could not make the recap image.'); return; }
+  if (!blob) { toast('Could not make the recap image.'); return; }
+
+  const file = new File([blob], 'hexcolony-recap.png', { type: 'image/png' });
+  try {
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: 'HexColony', text: 'How the game went.' });
+      return;
+    }
+  } catch { return; /* the player dismissed the share sheet */ }
+
+  // No file-sharing on this browser: hand it over as a download instead.
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'hexcolony-recap.png';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
 async function shareApp() {
   const url = location.origin + location.pathname;
   const inRoom = !!roomCode && !solo;
