@@ -171,6 +171,13 @@ function shoutout(msg, accent, duration = 2000) {
   const lines = Array.isArray(msg) ? msg : [msg];
   card.replaceChildren();
   for (const content of lines) {
+    if (content?.bigResource) {
+      const big = document.createElement('span');
+      big.className = 'shoutout-bigcard';
+      big.innerHTML = resCard(content.bigResource, { size: 'xl' });
+      card.append(big);
+      continue;
+    }
     const line = document.createElement('span');
     line.className = 'shoutout-line';
     if (typeof content === 'string') {
@@ -3745,6 +3752,17 @@ function reactToLog(g) {
         }
         break;
       case 'playDev': sfx.card(); break;
+      // Monopoly is the one dev card that can flip the whole table's hand at once, so it
+      // gets the biggest announcement in the game: the resource itself, shown large,
+      // rather than the small inline icon a steal gets.
+      case 'mono':
+        sfx.card();
+        shoutout([
+          `${e.p === playerId ? 'You' : nameFor(e.p)} played`,
+          'Monopoly',
+          { bigResource: e.res },
+        ], colorFor(e.p), 2800);
+        break;
       case 'offer':
         // The chime is what makes you look down at the strip, so it has to agree with it:
         // an offer you cannot pay for is not shown and is declined on the spot, and a

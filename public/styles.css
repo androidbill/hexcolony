@@ -1679,6 +1679,8 @@ button {
 .rcard--xs .rcard-face { border-radius: 4px; }
 .rcard--sm { width: 42px; height: 56px; border-radius: 8px; }
 .rcard--lg { width: 62px; height: 84px; }
+.rcard--xl { width: 108px; height: 146px; border-radius: 14px; }
+.rcard--xl .rcard-face { border-radius: 11px; }
 
 /* The count sits in the corner the way it does on a real card. */
 .rcard-count {
@@ -2325,6 +2327,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 .shoutout-resource { display: inline-flex; align-items: center; height: 40px; }
 .shoutout-resource .rcard-wrap { transform: scale(0.82); transform-origin: center; }
+.shoutout-bigcard { display: block; margin: 6px 0 2px; }
 .shoutout-card.show { animation: shoutout 3s ease forwards; }
 
 @keyframes shoutout {
