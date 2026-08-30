@@ -12,7 +12,7 @@
 // Firebase comes through fb.js rather than a direct import: it has to be loadable
 // through Discord's proxy, and a failure there must not stop solo play from running.
 import {
-  db, NET_READY, doc, getDoc, getDocFromServer, setDoc, updateDoc, onSnapshot,
+  db, NET_READY, doc, getDoc, getDocs, getDocFromServer, setDoc, updateDoc, onSnapshot,
   deleteField, deleteDoc, serverTimestamp, runTransaction,
   collection, query, where, limit, orderBy, addDoc,
   disableNetwork, enableNetwork,
@@ -101,19 +101,17 @@ function showScreen(id) {
   $('kebab-wrap').hidden = id === 'screen-game';
   closeKebab();
   if (id === 'screen-game') {
-    // The presence collection is every player in every room, unfiltered — nobody is
-    // looking at a head count once they're on the board, so there is no reason to keep
-    // mirroring the whole thing (and every other heartbeat writing to it) onto this
-    // device for as long as the game runs. Lobby Chat is the same: a pre-game feature
-    // with its own listener, worth nothing once play has started.
-    if (unsubPresence) { unsubPresence(); unsubPresence = null; }
+    // Nobody is looking at a head count once they're on the board, so there is no
+    // reason to keep polling presence (or listening to Lobby Chat, a pre-game feature)
+    // for as long as the game runs.
+    if (presencePollTimer) { clearInterval(presencePollTimer); presencePollTimer = null; }
     if (unsubLobbyChat) { unsubLobbyChat(); unsubLobbyChat = null; }
     // Size it now, then again after layout settles. The second pass catches the real
     // box once flex has run; the first means a throttled requestAnimationFrame — a
     // backgrounded tab, a hidden window — can never leave the board unsized.
     view.resize();
     requestAnimationFrame(() => view.resize());
-  } else if (NET_READY && !unsubPresence) {
+  } else if (NET_READY && !presencePollTimer) {
     subscribePresence();
     subscribeLobbyChat();
   }
@@ -740,7 +738,7 @@ const PRESENCE_TTL_MS = 90 * 1000;
 const LOBBY_CHAT_LIFETIME_MS = 60 * 1000;
 let unsubRooms = null;
 let roomList = [];
-let unsubPresence = null;
+let presencePollTimer = null;
 let presenceList = [];
 let presenceInterval = null;
 let unsubLobbyChat = null;
@@ -776,13 +774,28 @@ function startPresence() {
   presenceInterval = setInterval(writePresence, PRESENCE_HEARTBEAT_MS);
 }
 
-function subscribePresence() {
-  if (unsubPresence) unsubPresence();
-  unsubPresence = onSnapshot(collection(db, 'presence'), (snap) => {
+// Polled rather than a live listener. A listener bills a read for every document that
+// changes, to every device listening — with everyone's heartbeat landing independently,
+// that is listeners × heartbeats, and it was the single biggest thing this app wrote to
+// Firestore. Polling bills a listener once per its own poll, for the whole collection,
+// however many other people changed in between — so ten heartbeats between polls still
+// cost one read each, not ten. The trade is a count that can be up to a poll behind,
+// which nothing here needs to the second.
+const PRESENCE_POLL_MS = 20 * 1000;
+
+function pollPresence() {
+  if (!NET_READY) return;
+  getDocs(collection(db, 'presence')).then((snap) => {
     presenceList = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderPresence();
     renderLobbyPeople();
-  }, (err) => console.error('presence', err));
+  }).catch((err) => console.error('presence', err));
+}
+
+function subscribePresence() {
+  if (presencePollTimer) return;
+  pollPresence();
+  presencePollTimer = setInterval(pollPresence, PRESENCE_POLL_MS);
   renderPresence();
 }
 
