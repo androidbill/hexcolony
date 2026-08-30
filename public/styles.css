@@ -1545,6 +1545,7 @@ button {
 .trade-filter-row .tog { flex: 0 0 auto; }
 
 .chip {
+  position: relative;
   display: flex; align-items: center; gap: 6px;
   width: 100%;
   padding: 4px 8px;
@@ -1562,16 +1563,26 @@ button {
    whole window on your own turn — that ring only ever shows on the active player's own
    screen, so this is the one place everyone else at the table gets the same cue, in the
    same language. Narrower than the screen ring, though: 5px reads clearly on a pill
-   this small without swallowing it the way 8px did. */
+   this small without swallowing it the way 8px did.
+   The ring itself is a static box-shadow, on the chip and on a ::after sitting over it
+   with the brighter version baked in — only the ::after's opacity animates. Animating
+   box-shadow directly repaints the chip on every frame of every turn, all game; opacity
+   is compositor-only, so the same pulse costs nothing once it's past the first paint. */
 .chip.up {
   opacity: 1;
   transform: translateY(-1px);
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, .34), 0 0 12px 5px rgba(255, 255, 255, .17), 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+.chip.up::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 5px #fff, 0 0 12px 5px rgba(255, 255, 255, .5), 0 3px 10px rgba(0, 0, 0, 0.4);
+  opacity: 0;
   animation: chip-turn-pulse 1.15s ease-in-out infinite;
+  pointer-events: none;
 }
-@keyframes chip-turn-pulse {
-  0%, 100% { box-shadow: 0 0 0 5px rgba(255, 255, 255, .34), 0 0 12px 5px rgba(255, 255, 255, .17), 0 3px 10px rgba(0, 0, 0, 0.4); }
-  50%      { box-shadow: 0 0 0 5px #fff, 0 0 12px 5px rgba(255, 255, 255, .5), 0 3px 10px rgba(0, 0, 0, 0.4); }
-}
+@keyframes chip-turn-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 .chip-body {
   display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 2px 5px;
   flex: 1 1 auto;
@@ -1786,15 +1797,23 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 /* Whose turn it is, on the one part of the screen your thumbs are already resting on —
    moved here from a ring around the whole window, which nobody looking at their own
-   hand of cards was actually seeing. Same white, same pulse. */
+   hand of cards was actually seeing. Same white, same pulse.
+   Same fix as the chip's turn ring: a static box-shadow plus a ::after with the bright
+   version baked in, only its opacity animating, so the pulse repaints nothing for as
+   long as it runs — which for this one is the whole time it's your turn. */
 .tray.my-turn {
   z-index: 6;
+  box-shadow: inset 0 0 0 5px rgba(255, 255, 255, .34), 0 0 20px 2px rgba(255, 255, 255, .25);
+}
+.tray.my-turn::after {
+  content: '';
+  position: absolute; inset: 0;
+  box-shadow: inset 0 0 0 5px #fff, 0 0 26px 4px rgba(255, 255, 255, .55);
+  opacity: 0;
   animation: tray-turn-pulse 1.15s ease-in-out infinite;
+  pointer-events: none;
 }
-@keyframes tray-turn-pulse {
-  0%, 100% { box-shadow: inset 0 0 0 5px rgba(255, 255, 255, .34), 0 0 20px 2px rgba(255, 255, 255, .25); }
-  50%      { box-shadow: inset 0 0 0 5px #fff, 0 0 26px 4px rgba(255, 255, 255, .55); }
-}
+@keyframes tray-turn-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 
 .hand {
   display: flex; gap: 12px; justify-content: center; align-items: flex-end;
@@ -2390,9 +2409,10 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   @keyframes award-take-in { from { opacity: 0; transform: none; } }
   @keyframes award-in { from { opacity: 0; transform: none; } }
   @keyframes award-out { to { opacity: 0; transform: none; } }
-  /* Still there, still your colour, just not flashing. */
-  @keyframes chip-turn-pulse { 0%, 100% { box-shadow: 0 0 0 5px #fff, 0 0 12px 5px rgba(255, 255, 255, .5), 0 3px 10px rgba(0, 0, 0, 0.4); } }
-  @keyframes tray-turn-pulse { 0%, 100% { box-shadow: inset 0 0 0 5px #fff, 0 0 26px 4px rgba(255, 255, 255, .55); } }
+  /* Still there, still your colour, just not flashing — the ::after's bright ring held
+     fully visible rather than fading in and out. */
+  @keyframes chip-turn-pulse { 0%, 100% { opacity: 1; } }
+  @keyframes tray-turn-pulse { 0%, 100% { opacity: 1; } }
 }
 
 /* Over the map, under the status row.
@@ -2455,6 +2475,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
    is easy to miss on a phone — the tray is where a player's eyes and thumbs already
    are, so anything the game is waiting on has to be said here too. */
 .act-prompt {
+  position: relative;
   flex: 1;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   border-radius: 13px;
@@ -2463,9 +2484,19 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   background: linear-gradient(180deg, rgba(227, 186, 87, 0.22), rgba(227, 186, 87, 0.1));
   border: 1px solid rgba(227, 186, 87, 0.5);
   color: var(--gold);
-  animation: prompt-pulse 1.7s ease-in-out infinite;
 }
-@keyframes prompt-pulse { 50% { border-color: rgba(227, 186, 87, 0.95); } }
+/* Same fix as the turn ring: the brighter border lives on a ::after, cross-fading in on
+   opacity, so the animation doesn't repaint the prompt on every frame while it's shown. */
+.act-prompt::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(227, 186, 87, 0.95);
+  opacity: 0;
+  animation: prompt-pulse 1.7s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes prompt-pulse { 50% { opacity: 1; } }
 .act-prompt .act-ico { flex: 0 0 auto; }
 
 /* ------------------------------------------------------------ kebab menu */
