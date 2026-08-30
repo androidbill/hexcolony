@@ -1423,18 +1423,18 @@ button {
   opacity: 0.72;
   transition: opacity .18s, box-shadow .18s, transform .18s;
 }
-/* Whose turn it is: full strength with a gold ring, rather than a different colour —
-   the colour is spoken for. It pulses the same way the border around the whole window
-   does on your own turn — that ring only ever shows on the active player's own screen,
-   so this is the one place everyone else at the table gets the same unmissable cue. */
+/* Whose turn it is: full strength with the same white ring, the same 8px, and the same
+   pulse as the border around the whole window on your own turn — that ring only ever
+   shows on the active player's own screen, so this is the one place everyone else at
+   the table gets the same cue, in the same language. */
 .chip.up {
   opacity: 1;
   transform: translateY(-1px);
   animation: chip-turn-pulse 1.15s ease-in-out infinite;
 }
 @keyframes chip-turn-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--gold), 0 3px 10px rgba(0, 0, 0, 0.4); }
-  50% { box-shadow: 0 0 0 3px var(--gold), 0 0 12px 3px rgba(227, 186, 87, 0.65), 0 3px 10px rgba(0, 0, 0, 0.4); }
+  0%, 100% { box-shadow: 0 0 0 8px rgba(255, 255, 255, .34), 0 0 12px 8px rgba(255, 255, 255, .17), 0 3px 10px rgba(0, 0, 0, 0.4); }
+  50%      { box-shadow: 0 0 0 8px #fff, 0 0 12px 8px rgba(255, 255, 255, .5), 0 3px 10px rgba(0, 0, 0, 0.4); }
 }
 .chip-body {
   display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 2px 5px;
@@ -2198,7 +2198,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   @keyframes award-out { to { opacity: 0; transform: none; } }
   /* Still there, still your colour, just not flashing. */
   @keyframes turn-ring-pulse { 0%, 100% { opacity: .85; } }
-  @keyframes chip-turn-pulse { 0%, 100% { box-shadow: 0 0 0 2px var(--gold), 0 3px 10px rgba(0, 0, 0, 0.4); } }
+  @keyframes chip-turn-pulse { 0%, 100% { box-shadow: 0 0 0 8px #fff, 0 0 12px 8px rgba(255, 255, 255, .5), 0 3px 10px rgba(0, 0, 0, 0.4); } }
 }
 
 /* Over the map, under the status row.
