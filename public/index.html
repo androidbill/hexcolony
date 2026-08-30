@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.14">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.15">
 </head>
 <body>
 
@@ -491,6 +491,15 @@
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
 
+<div class="sheet" id="sheet-leave-confirm">
+  <h3 class="sheet-title">Leave game?</h3>
+  <p class="sheet-sub">Your buildings stay on the board. You can't rejoin this game once you leave.</p>
+  <div class="sheet-actions">
+    <button class="btn btn-danger" id="leave-confirm-yes">Leave game</button>
+    <button class="btn btn-ghost" data-close>Cancel</button>
+  </div>
+</div>
+
 <div class="sheet" id="sheet-pause">
   <h3 class="sheet-title">Pause game</h3>
   <p class="sheet-sub" id="pause-sub">Choose how long to pause. Everyone at the table must accept.</p>
@@ -796,7 +805,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.30.14"></script>
-<script type="module" src="app.js?v=2026.08.30.14"></script>
+<script src="iro.min.js?v=2026.08.30.15"></script>
+<script type="module" src="app.js?v=2026.08.30.15"></script>
 </body>
 </html>

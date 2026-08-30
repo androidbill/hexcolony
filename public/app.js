@@ -5644,7 +5644,8 @@ $('menu-history').addEventListener('click', openHistory);
 $('menu-pause').addEventListener('click', openPause);
 $('menu-how').addEventListener('click', openHow);
 $('menu-settings').addEventListener('click', openSettings);
-$('menu-leave').addEventListener('click', () => { closeSheet(); leaveRoom(true); });
+$('menu-leave').addEventListener('click', () => { sheet('sheet-leave-confirm'); });
+$('leave-confirm-yes').addEventListener('click', () => { closeSheet(); leaveRoom(true); });
 $('btn-how').addEventListener('click', openHow);
 $('btn-settings').addEventListener('click', openSettings);
 
