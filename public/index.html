@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.20">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.21">
 </head>
 <body>
 
@@ -331,6 +331,7 @@
          Fixed to the viewport rather than the board — the pills it starts and ends at
          live in the header, above the board entirely. -->
     <div class="trade-stage" id="trade-stage" aria-hidden="true" hidden></div>
+    <div class="reaction-stage" id="reaction-stage" aria-hidden="true" hidden></div>
     <div class="board-hud">
       <div class="board-badge" id="turn-badge"></div>
       <div class="turn-timer" id="turn-timer" hidden><span id="timer-secs">0</span></div>
@@ -361,6 +362,11 @@
         </button>
         <button class="board-fab" id="btn-recenter" aria-label="Recentre board">
           <svg viewBox="0 0 24 24"><path d="M12 3v3m0 12v3M3 12h3m12 0h3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="4.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+        </button>
+        <!-- Closest to the handle: a reaction is the one thing here worth reaching for
+             more than once a turn. -->
+        <button class="board-fab" id="btn-react" aria-label="Throw a reaction">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="10" r="1.15" fill="currentColor"/><circle cx="15" cy="10" r="1.15" fill="currentColor"/><path d="M8 14.5c1 1.3 2.4 2 4 2s3-.7 4-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
         <button class="board-fab" id="game-log-btn" aria-label="Game log">
           <svg viewBox="0 0 24 24"><path d="M5 5h14M5 10h14M5 15h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -621,6 +627,11 @@
      answer to "how does this game work"; mid-game the question is only ever "what does a
      city cost", and nine paragraphs is the wrong shape of answer to that. Same grid, same
      source, opened from the board. -->
+<div class="sheet" id="sheet-react">
+  <h3 class="sheet-title">React</h3>
+  <div class="react-grid" id="react-grid"></div>
+</div>
+
 <div class="sheet" id="sheet-costs">
   <h3 class="sheet-title">Build costs</h3>
   <div class="how-costs" id="costs-grid"></div>
@@ -810,7 +821,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.30.20"></script>
-<script type="module" src="app.js?v=2026.08.30.20"></script>
+<script src="iro.min.js?v=2026.08.30.21"></script>
+<script type="module" src="app.js?v=2026.08.30.21"></script>
 </body>
 </html>

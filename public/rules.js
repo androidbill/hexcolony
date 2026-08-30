@@ -88,7 +88,10 @@ export const LOG_KEEP = 80;
  * and "what did I just miss" becomes the one question the log cannot answer.
  */
 const LOG_RECENT = 24;
-const LOG_ROUTINE = new Set(['turn', 'roll', 'produce', 'nothing', 'shortfall', 'discard', 'robber', 'noloot']);
+const LOG_ROUTINE = new Set(['turn', 'roll', 'produce', 'nothing', 'shortfall', 'discard', 'robber', 'noloot', 'react']);
+
+/** The reactions a player can throw at the board. A fixed, small set — not chat. */
+export const REACTIONS = ['👍', '😂', '😮', '😡', '🎉', '🔥'];
 
 /**
  * Seats at a table.
@@ -1352,6 +1355,17 @@ export function applyMove(state, pid, move, rng = Math.random) {
       // Re-entered from the original state so the move is credited to, and validated
       // against, the player who actually owed it.
       return applyMove(state, auto.pid, auto.move, rng);
+    }
+
+    /**
+     * A reaction thrown at the board — no state to change, just a moment worth telling
+     * everyone about. Allowed any time, on anyone's turn, unlike everything else here:
+     * there is no game state a reaction could race with.
+     */
+    case 'react': {
+      if (!REACTIONS.includes(move.emoji)) return fail('Not a reaction.');
+      note(g, events, { t: 'react', p: pid, emoji: move.emoji });
+      return ok();
     }
 
     default:

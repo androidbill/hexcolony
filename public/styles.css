@@ -674,6 +674,43 @@ button {
   100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.6); opacity: 0; }
 }
 
+/* The reaction picker: big, tappable, six choices and nothing to read — the whole point
+   is that it costs less than typing. */
+.react-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+  margin-top: 4px;
+}
+.react-grid button {
+  font-size: 34px; line-height: 1;
+  padding: 16px 0;
+  border-radius: var(--r-sm);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+}
+.react-grid button:active { background: rgba(255, 255, 255, 0.14); transform: scale(0.94); }
+
+/* A thrown reaction, rising off the sender's own pill so it reads as coming from them
+   rather than from the middle of the board. Fixed to the viewport, same as a trade's
+   flying cards, for the same reason: the pills it starts at live in the header. */
+.reaction-stage {
+  position: fixed; inset: 0;
+  z-index: 92;
+  pointer-events: none;
+}
+.reaction-float {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  font-size: 30px;
+  animation: reaction-rise 1.5s ease-out forwards;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+@keyframes reaction-rise {
+  0% { transform: translate(-50%, -50%) scale(.4); opacity: 0; }
+  18% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  32% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, calc(-50% - 100px)) scale(1); opacity: 0; }
+}
+
 /* ------------------------------------------------------------ what you were paid
    The cards a roll gave you, shown at a size you cannot miss and then put away into your
    hand. Before this the only sign you had been paid was a badge quietly counting up in
@@ -2243,6 +2280,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   @keyframes gain-away { to { opacity: 0; transform: none; } }
   @keyframes gain-stolen { to { opacity: 0; transform: none; } }
   @keyframes trade-fly { 0%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
+  @keyframes reaction-rise { 0% { opacity: 0; transform: none; } 18%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
   @keyframes award-take-in { from { opacity: 0; transform: none; } }
   @keyframes award-in { from { opacity: 0; transform: none; } }
   @keyframes award-out { to { opacity: 0; transform: none; } }

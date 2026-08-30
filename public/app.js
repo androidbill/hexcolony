@@ -318,7 +318,7 @@ let seenLogAt = 0;
 const PREDICTABLE = new Set([
   'setupSettlement', 'setupRoad', 'build', 'buyDev', 'playDev', 'discard',
   'bankTrade', 'offerTrade', 'replyTrade', 'acceptTrade', 'cancelTrade', 'expireTrade',
-  'endTurn',
+  'endTurn', 'react',
 ]);
 
 // Longer than the transaction's own timeout, so in the ordinary failure the move
@@ -2760,13 +2760,26 @@ $('board-tools-btn').addEventListener('click', (e) => {
   unlock(); sfx.tap();
   setBoardTools(!$('board-tools').classList.contains('open'));
 });
-for (const id of ['btn-how-board', 'btn-trade-filter', 'btn-recenter', 'game-log-btn']) {
+for (const id of ['btn-how-board', 'btn-trade-filter', 'btn-recenter', 'btn-react', 'game-log-btn']) {
   $(id).addEventListener('click', () => setBoardTools(false));
 }
 // The costs alone, not the whole How to Play. Mid-game the question is "what does a city
 // cost", and nine paragraphs of rules is the wrong shape of answer to that; the full text
 // is still one tap away under the menu.
 $('btn-how-board').addEventListener('click', () => { unlock(); sfx.tap(); openCosts(); });
+
+// A fixed six, not chat — the point is that it costs one tap. Built once from the same
+// list the engine validates against, so the choices on screen can never drift from what
+// a reaction is actually allowed to be.
+$('react-grid').innerHTML = R.REACTIONS.map((em) => `<button data-react="${em}">${em}</button>`).join('');
+$('btn-react').addEventListener('click', () => { unlock(); sfx.tap(); sheet('sheet-react'); });
+$('react-grid').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-react]');
+  if (!b) return;
+  sfx.tap();
+  closeSheet();
+  send({ type: 'react', emoji: b.dataset.react });
+});
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#board-tools')) setBoardTools(false);
 });
@@ -3691,6 +3704,7 @@ function reactToLog(g) {
         if (e.p !== playerId && !tradeRejectFrom.has(e.p) && canPay(g, e.want)) sfx.card();
         break;
       case 'trade': sfx.trade(); playTradeSwap(e); break;
+      case 'react': playReaction(e.p, e.emoji); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
       case 'buyDev': if (e.p === playerId) sfx.card(); break;
       // Both awards are two points changing hands, which is the biggest single swing in
@@ -3859,6 +3873,22 @@ function playTradeSwap(e) {
 
   stage.hidden = false;
   tradeTimers.push(setTimeout(() => { stage.hidden = true; stage.innerHTML = ''; }, TRADE_FLY_MS + i * 60 + 100));
+}
+
+/** A thrown reaction, rising off the sender's own pill so everyone can see who sent it. */
+function playReaction(pid, emoji) {
+  const chip = document.querySelector(`.chip[data-pid="${pid}"]`);
+  const stage = $('reaction-stage');
+  if (!chip || !stage || !emoji) return;
+  const r = chip.getBoundingClientRect();
+  const el = document.createElement('span');
+  el.className = 'reaction-float';
+  el.textContent = emoji;
+  el.style.left = `${r.left + r.width / 2}px`;
+  el.style.top = `${r.top}px`;
+  el.addEventListener('animationend', () => el.remove(), { once: true });
+  stage.hidden = false;
+  stage.appendChild(el);
 }
 
 /**
@@ -5342,6 +5372,7 @@ function logLine(e) {
       break;
     }
     case 'nothing': text = `<span class="r">Nobody produced on ${e.roll}</span>`; break;
+    case 'react': text = `<b>${who(e.p)}</b> reacted ${e.emoji}`; break;
     case 'shortfall': text = `<span class="r">The bank ran short of ${e.res}${e.partial ? ' — partial payout' : ' — nobody paid'}</span>`; break;
     case 'build': text = `<b>${who(e.p)}</b> built a ${e.what}${e.free ? ' (free)' : ''}`; break;
     case 'buyDev': text = `<b>${who(e.p)}</b> bought a development card`; break;
