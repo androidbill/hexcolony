@@ -1921,10 +1921,11 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 .pcard-top { display: flex; align-items: center; gap: 9px; }
 .pcard-name { flex: 1; font-weight: 700; }
-/* The score, on a little card face of its own rather than a bare number — a playing
-   card with the game's own mark watermarked into it, so the number that matters most
-   on this sheet looks like something dealt rather than printed. */
-.pcard-vp {
+.pcard-vp { font-weight: 800; font-size: 17px; }
+/* How many cards are in hand, on a little card face of its own rather than a bare
+   number — a playing card with the game's own mark watermarked into it, so the count
+   reads as an actual stack of cards rather than a stat among the pills below. */
+.pcard-hand {
   position: relative;
   flex: 0 0 auto;
   width: 34px; height: 46px;
@@ -1935,13 +1936,13 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
   overflow: hidden;
 }
-.pcard-vp::before {
+.pcard-hand::before {
   content: '';
   position: absolute; inset: 0;
   background: url('icons/icon-192.png') center / 65% no-repeat;
   opacity: 0.3;
 }
-.pcard-vp-n {
+.pcard-hand-n {
   position: relative;
   font-weight: 800;
   font-size: 21px;

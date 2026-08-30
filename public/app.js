@@ -5164,7 +5164,6 @@ function openPlayers() {
     const p = g.players[pid];
     const ports = R.portsOwned(g, board, pid);
     const stats = [
-      `<span class="pstat">${R.handSize(p)} cards</span>`,
       `<span class="pstat">${R.devCount(p)} dev</span>`,
       `<span class="pstat">${icon('army', { size: 14 })} ${p.knights}</span>`,
       `<span class="pstat">${icon('road', { size: 14 })} ${p.roadLen}</span>`,
@@ -5181,7 +5180,8 @@ function openPlayers() {
     return `<div class="pcard" style="--c:${esc(colorFor(pid))}">
       <div class="pcard-top">
         <span class="pcard-name">${esc(nameFor(pid))}${pid === playerId ? ' (you)' : ''}</span>
-        <span class="pcard-vp"><span class="pcard-vp-n">${R.publicVP(g, pid)}</span></span>
+        <span class="pcard-hand"><span class="pcard-hand-n">${R.handSize(p)}</span></span>
+        <span class="pcard-vp">${R.publicVP(g, pid)}</span>
       </div>
       <div class="pcard-stats">${stats.join('')}</div>
     </div>`;
