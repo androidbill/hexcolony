@@ -279,6 +279,7 @@ export class BoardView {
     this.rolled = null;                // the number the dice just showed, and when
     this.zoom = null;                  // this frame's reading of that, set in draw()
     this.built = new Map();            // vertex -> when a piece landed on it
+    this.flipped = new Map();          // hex index -> when fog lifted off it
     this.now = 0;                      // this frame's timestamp, for the pops
     this.sea = seaAt(SEA_DEFAULT);
     this.colorOf = () => '#888';       // pid -> css colour, injected by the app
@@ -303,8 +304,22 @@ export class BoardView {
     }
   }
 
-  setBoard(board) { this.board = board; this.built.clear(); this.fit(); }
-  setGame(game) { this.game = game; }
+  setBoard(board) { this.board = board; this.built.clear(); this.flipped.clear(); this.fit(); }
+  /**
+   * A hex going from fogged to known gets a flip rather than an instant swap. Detected
+   * here, once per state update, by diffing against what was discovered a moment ago —
+   * not on every animation frame, and not on the very first read of a game (a resumed
+   * or just-joined game should not replay every reveal that already happened).
+   */
+  setGame(game) {
+    if (this.game && game?.fog && this.game.seed === game.seed) {
+      const prev = new Set(this.game.discovered || []);
+      for (const hi of (game.discovered || [])) {
+        if (!prev.has(hi)) this.flipped.set(hi, this.now);
+      }
+    }
+    this.game = game;
+  }
   setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [], cities: [] }; }
   setSea(key) { this.sea = seaAt(key); }
   /** `{ hexes, spots: [{ v, colour, city }], until }`, or null for nothing to show. */
@@ -750,13 +765,37 @@ export class BoardView {
     return !g.discovered?.includes(tile.i);
   }
 
+  /** How far into its reveal flip this hex is (0-1), or null if it isn't flipping. */
+  flipProgress(tile) {
+    const start = this.flipped.get(tile.i);
+    if (start === undefined) return null;
+    const FLIP_MS = 650;
+    const p = (this.now - start) / FLIP_MS;
+    if (p >= 1) { this.flipped.delete(tile.i); return null; }
+    return Math.max(0, p);
+  }
+
   drawHex(tile) {
     const c = this.ctx;
-    const fogged = this.isFogged(tile);
+    const flip = this.flipProgress(tile);
+    // Fog for the first half of the flip, the real tile for the second — by the time it
+    // is discovered the game already treats it as known, so the second half shows the
+    // truth rather than holding the mystery a beat longer than the state actually does.
+    const fogged = flip !== null ? flip < 0.5 : this.isFogged(tile);
     const terrain = fogged ? 'fog' : tile.terrain;
     const st = TERRAIN_STYLE[terrain];
     const [cx, cy] = this.toScreen(tile.x, tile.y);
     const R = this.scale;
+
+    if (flip !== null) {
+      // A card turning over: squashed to nothing at the midpoint, back to full width by
+      // the end. Everything below is drawn in absolute screen space already, so this
+      // transform — centred on the hex, applied before any of it — is what does the work.
+      c.save();
+      c.translate(cx, cy);
+      c.scale(Math.max(0.03, Math.abs(Math.cos(flip * Math.PI))), 1);
+      c.translate(-cx, -cy);
+    }
 
     // One shape, used four times over: the flat fill, the mask the art sits inside, the
     // inside border and the outer hairline are all this same hexagon.
@@ -789,6 +828,7 @@ export class BoardView {
     c.stroke(path);
 
     if (!fogged && tile.num && tile.num !== this.zoom?.num) this.drawToken(tile, cx, cy, R);
+    if (flip !== null) c.restore();
   }
 
   /** The mark on a fogged tile — no number, no pips, nothing to read off it. */
