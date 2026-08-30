@@ -1616,10 +1616,12 @@ button {
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 0 0 1.5px var(--gold);
   flex: 0 0 auto;
+  /* A fixed dark ink of its own — the disc is always white, whatever the chip's own ink
+     is doing, so the glyph on it needs a colour of its own too. Left to inherit, a
+     player whose chip ink is white drew a white glyph on this white disc and vanished. */
+  color: #0d1b28;
 }
 .chip-crown + .chip-crown { margin-left: 2px; }
-/* The award glyph inherits the chip's ink, so it dims with the chip instead of staying
-   at full strength the way a coloured emoji did. */
 .chip-crown svg { display: block; }
 /* The awards live in their own span so the chip can be updated in place, but they should
    sit in the chip's flex row exactly as they did when they were written straight into it —
