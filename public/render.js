@@ -540,26 +540,27 @@ export class BoardView {
     const [wx, wy] = this.toWorld(px, py);
     const h = this.highlights;
 
-    if (h.verts?.length || h.cities?.length) {
-      let best = null, bestD = 0.42, kind = 'vertex';
-      for (const v of h.verts || []) {
-        const d = Math.hypot(VERTS[v].x - wx, VERTS[v].y - wy);
-        if (d < bestD) { bestD = d; best = v; kind = 'vertex'; }
-      }
-      for (const v of h.cities || []) {
-        const d = Math.hypot(VERTS[v].x - wx, VERTS[v].y - wy);
-        if (d < bestD) { bestD = d; best = v; kind = 'city'; }
-      }
-      if (best !== null) return { kind, id: best };
+    // Verts/cities and edges are scored against their own radius and compared as a
+    // fraction of it, not by raw distance — a vertex's radius is wider than an edge's
+    // (it needs to be, to stay easy to tap), so scoring by raw distance would let a tap
+    // aimed at an edge near its endpoint keep losing to the vertex sitting right there.
+    const VERT_R = 0.42, EDGE_R = 0.34;
+    let vBest = null, vScore = 1, vKind = 'vertex';
+    for (const v of h.verts || []) {
+      const d = Math.hypot(VERTS[v].x - wx, VERTS[v].y - wy) / VERT_R;
+      if (d < vScore) { vScore = d; vBest = v; vKind = 'vertex'; }
     }
-    if (h.edges?.length) {
-      let best = null, bestD = 0.34;
-      for (const e of h.edges) {
-        const d = Math.hypot(EDGES[e].x - wx, EDGES[e].y - wy);
-        if (d < bestD) { bestD = d; best = e; }
-      }
-      if (best !== null) return { kind: 'edge', id: best };
+    for (const v of h.cities || []) {
+      const d = Math.hypot(VERTS[v].x - wx, VERTS[v].y - wy) / VERT_R;
+      if (d < vScore) { vScore = d; vBest = v; vKind = 'city'; }
     }
+    let eBest = null, eScore = 1;
+    for (const e of h.edges || []) {
+      const d = Math.hypot(EDGES[e].x - wx, EDGES[e].y - wy) / EDGE_R;
+      if (d < eScore) { eScore = d; eBest = e; }
+    }
+    if (vBest !== null && (eBest === null || vScore <= eScore)) return { kind: vKind, id: vBest };
+    if (eBest !== null) return { kind: 'edge', id: eBest };
     if (h.hexes?.length) {
       let best = null, bestD = 0.95;
       for (const i of h.hexes) {
