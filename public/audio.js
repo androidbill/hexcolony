@@ -85,9 +85,25 @@ export function unlock() {
 
       noiseBuf = makeNoise();
     }
-    if (ctx.state === 'suspended') ctx.resume();
+    // Not just 'suspended': iOS can leave a context 'interrupted' — after a phone call,
+    // Siri, or the screen simply locking — and a context stuck there never comes back on
+    // its own. Anything other than already running is worth a resume attempt, and a
+    // rejected one (a state resume genuinely cannot leave, or a closed context) is not an
+    // error worth surfacing — the next sound just stays silent instead of throwing.
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
   } catch { /* no audio on this device — everything below degrades to silence */ }
 }
+
+// The interruption itself can land while nothing is trying to play a sound — the app
+// goes to the background for a minute and the context suspends behind its back. Without
+// this, audio stays dead until whatever the next cue happens to be, which on a slow turn
+// can be a long silent stretch that reads as "the sound broke" rather than "it will catch
+// up on the next knock". Catching the tab becoming visible again resumes it immediately.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running') {
+    ctx.resume().catch(() => {});
+  }
+});
 
 /** A panner, or a plain gain where StereoPannerNode is missing (older Safari). */
 function panner(pan) {
