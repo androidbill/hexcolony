@@ -1410,7 +1410,7 @@ button {
 .trade-filter-row .tog { flex: 0 0 auto; }
 
 .chip {
-  display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 2px 5px;
+  display: flex; align-items: center; gap: 6px;
   width: 100%;
   padding: 4px 8px;
   border-radius: 999px;
@@ -1430,6 +1430,11 @@ button {
   box-shadow: 0 0 0 2px var(--gold), 0 3px 10px rgba(0, 0, 0, 0.4);
   transform: translateY(-1px);
 }
+.chip-body {
+  display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 2px 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 /* The name owns a full line. It may wrap, but it never becomes an unhelpful ellipsis. */
 .chip-name {
   flex: 1 0 100%;
@@ -1438,7 +1443,26 @@ button {
   line-height: 1.1;
   font-weight: 700;
 }
-.chip-vp { font-weight: 800; margin-right: 2px; }
+/* The score, the same chit used for a tile's number token on the board — a cream disc,
+   dark serif-weight digits — so the number reads as the same kind of number wherever it
+   shows up. Stretched to the chip's own height and kept a perfect circle by its
+   aspect-ratio, so it just fills the pill rather than floating inside it at some
+   arbitrary size. */
+.chip-vp {
+  align-self: stretch;
+  aspect-ratio: 1 / 1;
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: #f3e6cb;
+  color: #3b2f1c;
+  border: 1.5px solid rgba(60, 44, 20, 0.55);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  font-family: ui-rounded, "Segoe UI", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.35em;
+  line-height: 1;
+}
 .chip-cards { font-size: 11.5px; opacity: 0.8; }
 /* Who holds the two awards, on the chip that already carries their name and score.
    It was a bare emoji at eleven pixels sitting on the player's own colour, which is
@@ -1897,7 +1921,32 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 .pcard-top { display: flex; align-items: center; gap: 9px; }
 .pcard-name { flex: 1; font-weight: 700; }
-.pcard-vp { font-weight: 800; font-size: 17px; }
+/* The score, on a little card face of its own rather than a bare number — a playing
+   card with the game's own mark watermarked into it, so the number that matters most
+   on this sheet looks like something dealt rather than printed. */
+.pcard-vp {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px; height: 46px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(155deg, #f6ecd6, #e2d2a6);
+  border: 1px solid rgba(60, 44, 20, 0.55);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.pcard-vp::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: url('icons/icon-192.png') center / 65% no-repeat;
+  opacity: 0.3;
+}
+.pcard-vp-n {
+  position: relative;
+  font-weight: 800;
+  font-size: 21px;
+  color: #3b2f1c;
+}
 .pcard-stats {
   display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px;
 }

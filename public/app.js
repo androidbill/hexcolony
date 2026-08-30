@@ -3858,10 +3858,12 @@ function renderScoreStrip(g) {
   if (strip.dataset.seats !== seatKey) {
     strip.dataset.seats = seatKey;
     strip.innerHTML = g.seats.map(() => '<button class="chip" data-pcard>'
-      + '<span class="chip-name"></span>'
       + '<span class="chip-vp"></span>'
+      + '<span class="chip-body">'
+      + '<span class="chip-name"></span>'
       + '<span class="chip-cards"></span>'
       + '<span class="chip-awards"></span>'
+      + '</span>'
       + '</button>').join('');
   }
 
@@ -3879,7 +3881,8 @@ function renderScoreStrip(g) {
     const name = nameFor(pid);
     const vp = String(R.publicVP(g, pid));
     const cards = R.handSize(p);
-    const [nameEl, vpEl, cardsEl, awardsEl] = el.children;
+    const [vpEl, bodyEl] = el.children;
+    const [nameEl, cardsEl, awardsEl] = bodyEl.children;
     if (nameEl.textContent !== name) nameEl.textContent = name;
     if (vpEl.textContent !== vp) vpEl.textContent = vp;
     // innerHTML rather than textContent: the count carries a card glyph beside it now.
@@ -5178,7 +5181,7 @@ function openPlayers() {
     return `<div class="pcard" style="--c:${esc(colorFor(pid))}">
       <div class="pcard-top">
         <span class="pcard-name">${esc(nameFor(pid))}${pid === playerId ? ' (you)' : ''}</span>
-        <span class="pcard-vp">${R.publicVP(g, pid)}</span>
+        <span class="pcard-vp"><span class="pcard-vp-n">${R.publicVP(g, pid)}</span></span>
       </div>
       <div class="pcard-stats">${stats.join('')}</div>
     </div>`;
