@@ -4351,6 +4351,9 @@ function actBtn(id, ico, label, opts = {}) {
     <span class="act-ico">${ico}</span><span>${esc(label)}</span>${badge}</button>`;
 }
 
+// Set the instant Roll is tapped, cleared once the move resolves either way. See onAction.
+let rollPending = false;
+
 function renderActions(g) {
   const mine = R.isTurn(g, playerId);
   const p = g.players[playerId];
@@ -4418,7 +4421,7 @@ function renderActions(g) {
   if (g.phase === 'roll') {
     bar.innerHTML =
       utility() +
-      actBtn('roll', icon('roll'), 'Roll', { primary: true, wide: true }); return;
+      actBtn('roll', icon('roll'), rollPending ? 'Rolling…' : 'Roll', { primary: true, wide: true, disabled: rollPending }); return;
   }
 
   // build phase
@@ -4461,7 +4464,20 @@ function onAction(id) {
   if (!g) return;
   sfx.tap();
   switch (id) {
-    case 'roll': send({ type: 'roll' }); break;
+    case 'roll': {
+      if (rollPending) break;
+      // Online, a roll cannot be guessed locally — it waits on the server for the dice —
+      // so on a slow connection nothing changes on screen for however long that takes.
+      // That silence reads as a missed tap, and the second tap was landing on End turn
+      // the moment the first one finally came back. Disabling the button the instant it
+      // is pressed gives an answer to that first tap immediately, and there is nothing
+      // left to mis-tap while the real one is still in flight.
+      rollPending = true;
+      renderActions(g);
+      send({ type: 'roll' }).then(() => { rollPending = false; });
+      break;
+    }
+    case 'end': send({ type: 'endTurn' }); break;
     case 'end': send({ type: 'endTurn' }); break;
     case 'trade': startTrade(); break;
     case 'dev': openDev(g); break;
