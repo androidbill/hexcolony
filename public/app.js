@@ -3625,6 +3625,7 @@ function render() {
   drawTimer();
   renderScoreStrip(g);
   renderTurnBadge(g);
+  renderTrayRing(g);
   if (pauseBlocksGame()) drawPauseCountdown();
   renderDice(g);
   settlePay(g);
@@ -4147,6 +4148,18 @@ function renderTurnBadge(g) {
   }
   badge.innerHTML = text;
   badge.classList.toggle('mine', !!mine);
+}
+
+/**
+ * The pulsing white ring on your turn, moved here from around the whole window: the
+ * tray is the one thing your thumbs are already resting on, so the cue and the place
+ * you act sit in the same spot instead of the edges of a screen you are not looking at.
+ */
+function renderTrayRing(g) {
+  const tray = $('tray');
+  if (!tray) return;
+  const mine = !!g && g.phase !== 'over' && R.isTurn(g, playerId) && !!g.players[playerId];
+  tray.classList.toggle('my-turn', mine && !pauseBlocksGame());
 }
 
 /**
