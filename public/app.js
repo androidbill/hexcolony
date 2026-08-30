@@ -3592,6 +3592,20 @@ function render() {
   if (g.phase === 'over') renderOver(g);
 }
 
+/**
+ * A player crossing the halfway mark to victory, the moment it happens rather than on
+ * every point after. `delta` is the VP this specific event just added, so "before" is
+ * worked out by subtracting it back off the current total rather than needing a stored
+ * history of anybody's score.
+ */
+function maybeHalfway(g, pid, delta) {
+  const half = Math.ceil((g.target || 10) / 2);
+  const now = R.publicVP(g, pid);
+  if (now - delta < half && now >= half) {
+    shoutout(`${pid === playerId ? 'You are' : `${nameFor(pid)} is`} halfway to ${g.target}`, colorFor(pid));
+  }
+}
+
 // Sound and flourish are driven off the shared log, not off local move results, so
 // every player hears the same dice and the same robber.
 function reactToLog(g) {
@@ -3618,14 +3632,38 @@ function reactToLog(g) {
    */
   for (const e of entries) {
     switch (e.t) {
-      case 'roll': sfx.dice(); playRoll(e.dice); view.setRolled(e.roll); break;
-      case 'build':
+      case 'roll':
+        sfx.dice(); playRoll(e.dice); view.setRolled(e.roll);
+        // The one number that changes the rules of the turn, the first time it shows
+        // up. Every 7 after the first is just the game working as designed.
+        if (e.roll === 7 && !g.log.some((x) => x.t === 'roll' && x.roll === 7 && x.i < e.i)) {
+          shoutout('First 7 of the game!', 'var(--danger)');
+        }
+        // Three of the same roll running — called the moment the streak reaches three,
+        // not on every roll after: a fourth in a row is the same streak, not new news.
+        {
+          const prior = g.log.filter((x) => x.t === 'roll' && x.i < e.i).map((x) => x.roll);
+          const n = prior.length;
+          if (n >= 2 && prior[n - 1] === e.roll && prior[n - 2] === e.roll
+            && !(n >= 3 && prior[n - 3] === e.roll)) {
+            shoutout(`Three ${e.roll}s in a row!`, 'var(--gold)');
+          }
+        }
+        break;
+      case 'build': {
         e.what === 'city' ? sfx.city() : e.what === 'road' ? sfx.road() : sfx.build();
         // Houses and cities jump as they land. Roads have no `v` and get no jump: they
         // are a thin bar between two corners, and scaling one up reads as a mistake
         // rather than as a flourish.
         if (e.v !== undefined) view.setBuilt(Number(e.v));
+        // The first city of the game, same rarity budget as a steal or an award — it
+        // happens exactly once, unlike every other build this switch stays quiet about.
+        if (e.what === 'city' && !g.log.some((x) => x.t === 'build' && x.what === 'city' && x.i < e.i)) {
+          shoutout(`${e.p === playerId ? 'You built' : `${nameFor(e.p)} built`} the first city!`, colorFor(e.p));
+        }
+        if (e.what === 'settlement' || e.what === 'city') maybeHalfway(g, e.p, 1);
         break;
+      }
       case 'robber': sfx.robber(); break;
       case 'steal':
         sfx.steal();
@@ -3658,8 +3696,8 @@ function reactToLog(g) {
       // Both awards are two points changing hands, which is the biggest single swing in
       // the game outside somebody winning — so each is shown as the card it is, named in
       // the taker's own colour, for two seconds.
-      case 'longest': playAward('road', e.p); break;
-      case 'army': playAward('army', e.p); break;
+      case 'longest': playAward('road', e.p); maybeHalfway(g, e.p, 2); break;
+      case 'army': playAward('army', e.p); maybeHalfway(g, e.p, 2); break;
       case 'turn':
         if (e.p === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }
         break;
