@@ -1732,6 +1732,9 @@ async function beginMapChoice() {
   if (!solo && stillChoosing().length) {
     return toast(`Still waiting on a colour from ${stillChoosing().map(nameFor).join(', ')}.`);
   }
+  // Fog hides the map anyway, so flipping through boards first would show everyone
+  // exactly what fog is about to hide. Skip the picker and start on the first roll.
+  if (room.settings?.fog) return startGameWithSeed(newSeed());
   const patch = { state: 'map', mapSeeds: [newSeed()], mapIndex: 0 };
   if (solo) { Object.assign(room, patch); render(); return; }
   try { await updateDoc(roomRef, patch); }
@@ -1767,6 +1770,11 @@ async function acceptMap() {
   if (!isHost()) return;
   const seed = mapSeedNow();
   if (seed === null) return;
+  return startGameWithSeed(seed);
+}
+
+/** Shared by the map picker's Accept and by fog's straight-to-first-board start. */
+async function startGameWithSeed(seed) {
   sfx.yourTurn();
 
   if (solo) {
@@ -2139,7 +2147,10 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
     mapSeeds: [newSeed()], mapIndex: 0,
   };
   writePresence();
-  render();
+  // Fog hides the map anyway, so flipping through boards first would show everyone
+  // exactly what fog is about to hide. Skip the picker and start on the first roll.
+  if (settings.fog) startGameWithSeed(mapSeedNow());
+  else render();
   return true;
 }
 
