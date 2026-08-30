@@ -3587,7 +3587,12 @@ function reactToLog(g) {
       case 'steal':
         sfx.steal();
         // Only the two of them are told what it was, so only the two of them see it.
-        if (e.p === playerId || e.from === playerId) playSteal(e.res, e.p === playerId);
+        if (e.p === playerId || e.from === playerId) {
+          playSteal(e.res, e.p === playerId);
+          const thief = e.p === playerId ? 'You' : nameFor(e.p);
+          const victim = e.from === playerId ? 'you' : nameFor(e.from);
+          shoutout({ parts: [`${thief} stole `, { resource: e.res }, ` from ${victim}`] }, colorFor(e.p));
+        }
         break;
       case 'produce':
         // Held back behind the dice: the cards are the answer to the roll, and they
