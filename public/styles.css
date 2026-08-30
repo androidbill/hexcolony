@@ -2158,6 +2158,21 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .history-player { padding: 3px 7px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font-size: 12px; }
 .history-player.winner { background: rgba(227, 186, 87, 0.18); color: var(--gold); }
 
+/* The career card: a handful of stat tiles above the ordinary win-totals list, present
+   only once there are enough games on this device for any of it to mean something. */
+.my-stats:empty { display: none; }
+.my-stats { margin-bottom: 18px; }
+.my-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.my-stat {
+  display: flex; flex-direction: column; gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 10px 12px;
+}
+.my-stat b { font-size: 20px; color: var(--sky); }
+.my-stat span { font-size: 11px; color: var(--dim); }
+
 .toggle-row {
   display: flex; align-items: center; gap: 12px;
   padding: 12px 0; border-top: 1px solid var(--line);

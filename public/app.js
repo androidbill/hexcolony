@@ -5586,6 +5586,29 @@ function historyNameKey(name) {
   return String(name || 'Someone').trim().toLowerCase();
 }
 
+/**
+ * What this device's own player did in the game, read off the shared log the same way
+ * the recap card is. Only ever computed for playerId — a career card is about your own
+ * table history, not everyone's.
+ */
+function myGameStats(g) {
+  let robbed = 0;
+  const res = {};
+  for (const e of g.log || []) {
+    if (e.t === 'steal' && e.from === playerId) robbed += 1;
+    if (e.t === 'produce' && e.gains?.[playerId]) {
+      for (const [r, n] of Object.entries(e.gains[playerId])) res[r] = (res[r] || 0) + n;
+    }
+  }
+  return {
+    won: g.winner === playerId,
+    vp: R.publicVP(g, playerId),
+    turns: g.turn.num,
+    robbed,
+    res,
+  };
+}
+
 /** Save one finished game once on every device that saw it finish. */
 function recordHistory(g) {
   if (!room || g?.phase !== 'over' || !g.winner) return;
@@ -5604,13 +5627,48 @@ function recordHistory(g) {
     winner: g.winner,
     winnerName: nameFor(g.winner),
     players,
+    // Only present when this device was actually seated — a spectating or long-since-left
+    // device has nothing of its own to add to a career card.
+    me: g.players[playerId] ? myGameStats(g) : null,
   });
   try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_KEEP))); }
   catch { /* history is helpful, never essential to play */ }
 }
 
+/**
+ * A career card, built from whatever games on this device carry a `me` — only games
+ * played since this was added, since nothing was tracked before it. Silently absent
+ * rather than an empty state when there is nothing yet: a device's first finished game
+ * has one data point, which is not a card worth showing.
+ */
+function renderMyStats(history) {
+  const mine = history.filter((g) => g.me);
+  const box = $('my-stats');
+  if (mine.length < 2) { box.innerHTML = ''; return; }
+
+  const wins = mine.filter((g) => g.me.won).length;
+  const longest = mine.reduce((a, b) => (b.me.turns > a.me.turns ? b : a));
+  const mostRobbed = mine.reduce((a, b) => (b.me.robbed > a.me.robbed ? b : a));
+  const totalRes = {};
+  for (const g of mine) for (const [r, n] of Object.entries(g.me.res || {})) totalRes[r] = (totalRes[r] || 0) + n;
+  const favourite = Object.entries(totalRes).sort((a, b) => b[1] - a[1])[0];
+
+  const cells = [
+    { label: 'Games played', value: String(mine.length) },
+    { label: 'Win rate', value: `${Math.round((wins / mine.length) * 100)}%` },
+    { label: 'Longest game', value: `${longest.me.turns} turns` },
+  ];
+  if (mostRobbed.me.robbed > 0) cells.push({ label: 'Most robbed in one game', value: `${mostRobbed.me.robbed}×` });
+  if (favourite) cells.push({ label: 'Favourite resource', value: `${favourite[1]} ${RES_ICON[favourite[0]] || ''}` });
+
+  box.innerHTML = `<div class="history-heading">Your stats</div>
+    <div class="my-stats-grid">${cells.map((c) => `
+      <div class="my-stat"><b>${esc(c.value)}</b><span>${esc(c.label)}</span></div>`).join('')}</div>`;
+}
+
 function openHistory() {
   const history = loadHistory();
+  renderMyStats(history);
   const totals = new Map();
   for (const game of history) {
     for (const player of game.players || []) {
