@@ -3690,7 +3690,7 @@ function reactToLog(g) {
         // sound for one would point at something that is not there.
         if (e.p !== playerId && !tradeRejectFrom.has(e.p) && canPay(g, e.want)) sfx.card();
         break;
-      case 'trade': sfx.trade(); break;
+      case 'trade': sfx.trade(); playTradeSwap(e); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
       case 'buyDev': if (e.p === playerId) sfx.card(); break;
       // Both awards are two points changing hands, which is the biggest single swing in
@@ -3810,6 +3810,55 @@ function playGain(gains) {
     // The badges tick up as the cards land on them.
     bumpCards(got);
   }, GAIN_HOLD_MS + GAIN_FLY_MS + last));
+}
+
+/**
+ * A completed trade, seen happening rather than just landing in two hand counts a
+ * moment later. Both sides fly at once — what the offerer gave, from their pill to the
+ * acceptor's, and what they got back, the other way — because a trade is one exchange,
+ * not two separate gifts. Public knowledge already (the offer sheet shows both sides to
+ * everyone), so this plays for the whole table, unlike a steal.
+ */
+const TRADE_FLY_MS = 600;
+let tradeTimers = [];
+
+function playTradeSwap(e) {
+  if (!e.give || !e.want || !e.p || !e.with) return;
+  const stage = $('trade-stage');
+  if (!stage) return;
+  const fromEl = document.querySelector(`.chip[data-pid="${e.p}"]`);
+  const toEl = document.querySelector(`.chip[data-pid="${e.with}"]`);
+  if (!fromEl || !toEl) return;
+  for (const t of tradeTimers) clearTimeout(t);
+  tradeTimers = [];
+
+  const centre = (el) => {
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  };
+  const a = centre(fromEl), b = centre(toEl);
+
+  stage.innerHTML = '';
+  let i = 0;
+  const spawn = (resources, from, to) => {
+    for (const [res, n] of Object.entries(resources)) {
+      const el = document.createElement('div');
+      el.className = 'trade-card';
+      el.innerHTML = resCard(res, { size: 'xs', count: n > 1 ? n : null, stack: false });
+      el.style.left = `${from.x}px`;
+      el.style.top = `${from.y}px`;
+      el.style.setProperty('--dx', `${to.x - from.x}px`);
+      el.style.setProperty('--dy', `${to.y - from.y}px`);
+      el.style.setProperty('--d', `${i * 60}ms`);
+      i += 1;
+      stage.appendChild(el);
+    }
+  };
+  spawn(e.give, a, b);
+  spawn(e.want, b, a);
+
+  stage.hidden = false;
+  tradeTimers.push(setTimeout(() => { stage.hidden = true; stage.innerHTML = ''; }, TRADE_FLY_MS + i * 60 + 100));
 }
 
 /**
@@ -3960,6 +4009,7 @@ function renderScoreStrip(g) {
     if (!el) return;
     const p = g.players[pid];
 
+    if (el.dataset.pid !== pid) el.dataset.pid = pid;
     // Only written when different: assigning an identical value to style or textContent is
     // cheap, but it is not free, and this runs on every message the room sends.
     const c = colorFor(pid), ink = inkFor(pid);

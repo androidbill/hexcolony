@@ -652,6 +652,28 @@ button {
   100% { transform: translate(0, 0) scale(1) rotate(-360deg); opacity: 1; }
 }
 
+/* ------------------------------------------------------------ a trade crossing the table
+   Two sets of cards, each starting at one player's pill and flying to the other's, so a
+   completed trade is seen happening rather than just reflected in two hand counts a
+   moment later. Trades are public knowledge already — the offer sheet shows both
+   sides — so unlike a steal this plays for everyone, not just the two traders. */
+.trade-stage {
+  position: fixed; inset: 0;
+  z-index: 91;
+  pointer-events: none;
+}
+.trade-card {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  animation: trade-fly .6s cubic-bezier(.3, 0, .7, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes trade-fly {
+  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.6); opacity: 0; }
+}
+
 /* ------------------------------------------------------------ what you were paid
    The cards a roll gave you, shown at a size you cannot miss and then put away into your
    hand. Before this the only sign you had been paid was a badge quietly counting up in
@@ -2220,6 +2242,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   @keyframes gain-in { from { opacity: 0; } to { opacity: 1; transform: none; } }
   @keyframes gain-away { to { opacity: 0; transform: none; } }
   @keyframes gain-stolen { to { opacity: 0; transform: none; } }
+  @keyframes trade-fly { 0%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
   @keyframes award-take-in { from { opacity: 0; transform: none; } }
   @keyframes award-in { from { opacity: 0; transform: none; } }
   @keyframes award-out { to { opacity: 0; transform: none; } }

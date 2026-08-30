@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.19">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.20">
 </head>
 <body>
 
@@ -326,6 +326,11 @@
         </div>
       </div>
     </div>
+
+    <!-- A completed trade's cards, flying from each trader's own pill to the other's.
+         Fixed to the viewport rather than the board — the pills it starts and ends at
+         live in the header, above the board entirely. -->
+    <div class="trade-stage" id="trade-stage" aria-hidden="true" hidden></div>
     <div class="board-hud">
       <div class="board-badge" id="turn-badge"></div>
       <div class="turn-timer" id="turn-timer" hidden><span id="timer-secs">0</span></div>
@@ -805,7 +810,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.30.19"></script>
-<script type="module" src="app.js?v=2026.08.30.19"></script>
+<script src="iro.min.js?v=2026.08.30.20"></script>
+<script type="module" src="app.js?v=2026.08.30.20"></script>
 </body>
 </html>
