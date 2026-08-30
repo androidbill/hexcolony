@@ -4428,9 +4428,18 @@ function renderActions(g) {
 // re-rendered and nothing re-bound. Every button in the bar therefore worked exactly
 // once per render — tap Trade, wave the sheet away, and Trade was dead. So were Build,
 // Cards and End turn. A listener on the container survives the buttons being replaced.
+// A fast double-tap on Roll was landing its second tap on End turn: rolling swaps the
+// bar's primary button in place, and a phone's second tap can arrive after that swap but
+// still read as a click on whatever is now under it. A short lockout after every action
+// tap absorbs that — real, separate taps are never this close together.
+let lastActionTapAt = 0;
 $('actions').addEventListener('click', (e) => {
   const b = e.target.closest('[data-act]');
-  if (b && !b.disabled) onAction(b.dataset.act);
+  if (!b || b.disabled) return;
+  const now = Date.now();
+  if (now - lastActionTapAt < 400) return;
+  lastActionTapAt = now;
+  onAction(b.dataset.act);
 });
 document.addEventListener('click', (e) => {
   if (e.target.closest('[data-pcard]')) openPlayers();
