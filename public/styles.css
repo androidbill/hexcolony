@@ -2053,6 +2053,28 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 
 /* ------------------------------------------------------------ log */
 .log-list { display: flex; flex-direction: column-reverse; gap: 6px; max-height: 56vh; overflow-y: auto; }
+.log-scrub {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px;
+}
+.log-scrub-btn {
+  width: 34px; height: 34px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  display: grid; place-items: center;
+  flex: 0 0 auto;
+}
+.log-scrub-btn svg { width: 18px; height: 18px; }
+.log-scrub-btn:disabled { opacity: 0.3; pointer-events: none; }
+.log-scrub-label {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  font-size: 13px; font-weight: 700; text-align: center;
+}
+.log-scrub-label:active { background: rgba(255, 255, 255, 0.12); }
 .log-row {
   font-size: 13px; padding: 8px 11px;
   border-radius: var(--r-sm);

@@ -5408,16 +5408,71 @@ function logLine(e) {
   return `<div class="log-row" style="--c:${esc(c)}">${text}</div>`;
 }
 
+// null shows the whole log; a number narrows it to one turn. Reset every time the sheet
+// is freshly opened, so it never opens already scrubbed to wherever it was last left.
+let logTurn = null;
+
+/**
+ * The list of turn numbers actually present in the log, oldest first. Read fresh each
+ * render rather than cached — the log itself is capped and prunes its older entries, so
+ * the set of turns worth stepping through shrinks as a long game goes on.
+ */
+function logTurns(g) {
+  return [...new Set((g.log || []).map((e) => e.n ?? 0))].sort((a, b) => a - b);
+}
+
+function renderLogList(g) {
+  const turns = logTurns(g);
+  const scrub = $('log-scrub');
+  scrub.hidden = turns.length < 2;
+
+  const all = (g.log || []).slice().reverse();
+  const rows = logTurn === null ? all : all.filter((e) => (e.n ?? 0) === logTurn);
+  $('log-list').innerHTML = rows.map(logLine).join('') || '<p class="hint">Nothing yet.</p>';
+
+  // "All" sits just past the newest turn: stepping back from it lands on the most
+  // recent turn, and there is nothing further forward to step to.
+  $('log-scrub-label').textContent = logTurn === null ? 'All turns' : `Turn ${logTurn}`;
+  const idx = logTurn === null ? turns.length : turns.indexOf(logTurn);
+  $('log-scrub-prev').disabled = idx <= 0;
+  $('log-scrub-next').disabled = logTurn === null;
+}
+
 function openLog(g) {
-  // Newest first. It read oldest-first, so the answer to "what did I just miss" was at
-  // the bottom of a list that is now a hundred and sixty entries long.
-  const rows = (g.log || []).slice().reverse().map(logLine).join('');
-  $('log-list').innerHTML = rows || '<p class="hint">Nothing yet.</p>';
+  logTurn = null;
+  renderLogList(g);
   $('log-dot').hidden = true;
   syncLogDot();
   seenLogAt = Date.now();
   sheet('sheet-log');
 }
+
+$('log-scrub-label').addEventListener('click', () => {
+  const g = game();
+  if (!g || logTurn === null) return;
+  sfx.tap();
+  logTurn = null;
+  renderLogList(g);
+});
+$('log-scrub-prev').addEventListener('click', () => {
+  const g = game();
+  if (!g) return;
+  const turns = logTurns(g);
+  const idx = logTurn === null ? turns.length : turns.indexOf(logTurn);
+  if (idx <= 0) return;
+  sfx.tap();
+  logTurn = turns[idx - 1];
+  renderLogList(g);
+});
+$('log-scrub-next').addEventListener('click', () => {
+  const g = game();
+  if (!g || logTurn === null) return;
+  const turns = logTurns(g);
+  const idx = turns.indexOf(logTurn);
+  sfx.tap();
+  logTurn = idx >= turns.length - 1 ? null : turns[idx + 1];
+  renderLogList(g);
+});
 
 function rematchNeedsAnswer() {
   const request = room?.rematch;

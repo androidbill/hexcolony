@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.23">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.24">
 </head>
 <body>
 
@@ -470,6 +470,17 @@
 
 <div class="sheet" id="sheet-log">
   <h3 class="sheet-title">Game log</h3>
+  <!-- Step through one turn at a time, or tap the label to snap back to everything.
+       Only appears once there is more than one turn to step through. -->
+  <div class="log-scrub" id="log-scrub" hidden>
+    <button class="log-scrub-btn" id="log-scrub-prev" aria-label="Previous turn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+    <button class="log-scrub-label" id="log-scrub-label">All turns</button>
+    <button class="log-scrub-btn" id="log-scrub-next" aria-label="Next turn">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
   <div class="log-list" id="log-list"></div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
@@ -823,7 +834,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.30.23"></script>
-<script type="module" src="app.js?v=2026.08.30.23"></script>
+<script src="iro.min.js?v=2026.08.30.24"></script>
+<script type="module" src="app.js?v=2026.08.30.24"></script>
 </body>
 </html>
