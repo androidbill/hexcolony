@@ -3591,7 +3591,7 @@ function reactToLog(g) {
           playSteal(e.res, e.p === playerId);
           const thief = e.p === playerId ? 'You' : nameFor(e.p);
           const victim = e.from === playerId ? 'you' : nameFor(e.from);
-          shoutout({ parts: [`${thief} stole `, { resource: e.res }, ` from ${victim}`] }, colorFor(e.p));
+          shoutout([{ parts: [`${thief} stole `, { resource: e.res }] }, `from ${victim}`], colorFor(e.p));
         }
         break;
       case 'produce':
