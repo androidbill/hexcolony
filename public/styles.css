@@ -29,6 +29,7 @@
      were both chosen against dark blue; on white they sit at about 1.8:1 and 3:1, which
      is a colour you can see but not a colour you can read at a glance across a table. */
   --gold-ink: #7a5a10;
+  --gold-shade: #8a651c; /* the lip the raised gold buttons sit on, to match --sky-shade */
   --danger-ink: #b8262b;
 
   --app-height: 100vh;
@@ -254,18 +255,37 @@ button {
   box-shadow: 0 4px 0 var(--sky-shade);
 }
 
-/* The launch and room-setup surfaces use one clear blue action language. */
-#screen-home .btn,
+/* The room-setup surface's own clear blue action language. */
 #screen-lobby .btn {
   background: linear-gradient(180deg, var(--sky) 0%, var(--sky-2) 100%);
   border: 1px solid rgba(255, 255, 255, 0.16);
   color: var(--sky-ink);
   box-shadow: 0 5px 0 var(--sky-shade), 0 12px 24px rgba(0, 0, 0, 0.25);
 }
-#screen-home .btn:active,
 #screen-lobby .btn:active { box-shadow: 0 2px 0 var(--sky-shade), 0 6px 14px rgba(0, 0, 0, 0.25); }
-#screen-home .btn .btn-sub,
 #screen-lobby .btn .btn-sub { color: var(--sky-ink); opacity: 0.78; }
+
+/* The launch surface goes back to gold — the colour it had before every surface leaned
+   on the icon's blue. How to Play and Settings are excluded: they are not a way into a
+   game like everything else on this screen, so they keep the app's usual blue. */
+#screen-home .btn {
+  background: linear-gradient(180deg, var(--gold) 0%, var(--gold-2) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: var(--gold-ink);
+  box-shadow: 0 5px 0 var(--gold-shade), 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+#screen-home .btn:active { box-shadow: 0 2px 0 var(--gold-shade), 0 6px 14px rgba(0, 0, 0, 0.25); }
+#screen-home .btn .btn-sub { color: var(--gold-ink); opacity: 0.78; }
+#screen-home #btn-how,
+#screen-home #btn-settings {
+  background: linear-gradient(180deg, var(--sky) 0%, var(--sky-2) 100%);
+  color: var(--sky-ink);
+  box-shadow: 0 5px 0 var(--sky-shade), 0 12px 24px rgba(0, 0, 0, 0.25);
+}
+#screen-home #btn-how:active,
+#screen-home #btn-settings:active { box-shadow: 0 2px 0 var(--sky-shade), 0 6px 14px rgba(0, 0, 0, 0.25); }
+#screen-home #btn-how .btn-sub,
+#screen-home #btn-settings .btn-sub { color: var(--sky-ink); opacity: 0.78; }
 #screen-lobby .icon-btn,
 #screen-lobby .step-b,
 #screen-lobby .seg {
