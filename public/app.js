@@ -3915,7 +3915,7 @@ function playTradeSwap(e) {
     .map(([res, n]) => resCard(res, { count: n > 1 ? n : null, stack: false }))
     .join('');
   const side = (pid, resources) => `
-    <div class="trade-duel-side" style="--c:${esc(colorFor(pid))}">
+    <div class="trade-duel-side">
       <div class="trade-duel-name">${esc(nameFor(pid))}</div>
       <div class="trade-duel-cards">${cards(resources)}</div>
     </div>`;

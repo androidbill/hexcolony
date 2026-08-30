@@ -677,7 +677,7 @@ button {
 }
 .trade-duel-name {
   font-weight: 800; font-size: 14px;
-  color: var(--c, #fff);
+  color: #fff;
   text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
   text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%;
