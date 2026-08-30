@@ -101,11 +101,21 @@ function showScreen(id) {
   $('kebab-wrap').hidden = id === 'screen-game';
   closeKebab();
   if (id === 'screen-game') {
+    // The presence collection is every player in every room, unfiltered — nobody is
+    // looking at a head count once they're on the board, so there is no reason to keep
+    // mirroring the whole thing (and every other heartbeat writing to it) onto this
+    // device for as long as the game runs. Lobby Chat is the same: a pre-game feature
+    // with its own listener, worth nothing once play has started.
+    if (unsubPresence) { unsubPresence(); unsubPresence = null; }
+    if (unsubLobbyChat) { unsubLobbyChat(); unsubLobbyChat = null; }
     // Size it now, then again after layout settles. The second pass catches the real
     // box once flex has run; the first means a throttled requestAnimationFrame — a
     // backgrounded tab, a hidden window — can never leave the board unsized.
     view.resize();
     requestAnimationFrame(() => view.resize());
+  } else if (NET_READY && !unsubPresence) {
+    subscribePresence();
+    subscribeLobbyChat();
   }
   // The chat button is fixed to the window rather than to a screen, so whether it belongs
   // here is a question every screen change has to re-ask — a message can arrive while you
@@ -722,8 +732,11 @@ $('btn-discord-join').addEventListener('click', () => { unlock(); joinDiscordRoo
 // that fails until somebody does that is a query that fails in production. Fifty rooms
 // is a small enough list to sort here.
 const ROOM_LIST_MAX = 50;
-const PRESENCE_TTL_MS = 45 * 1000;
-const PRESENCE_HEARTBEAT_MS = 15 * 1000;
+// Doubled from 15s — the "browsing/playing" count only needs to be roughly right, not
+// second-perfect. TTL is doubled with it, to keep the same three-beats-of-grace before
+// somebody quietly drops off the count.
+const PRESENCE_HEARTBEAT_MS = 30 * 1000;
+const PRESENCE_TTL_MS = 90 * 1000;
 const LOBBY_CHAT_LIFETIME_MS = 60 * 1000;
 let unsubRooms = null;
 let roomList = [];
@@ -1273,7 +1286,11 @@ const clockTrusted = () => solo || clockReady();
 // wedge the Firestore stream and freeze that phone on a stale turn. One device beats
 // every few seconds, so a healthy phone MUST receive a server snapshot on that cadence.
 // Going quiet is proof this phone's stream is broken, and it repairs itself.
-const PULSE_MS = 4000;
+// Doubled from 4s/2s — the read/write cost of a live room scales with how often this
+// beats, for as long as the room exists, game in progress or not. Every threshold below
+// is scaled by the same factor so the safety margins between them (how many missed
+// beats it takes to call a stream broken, or a leader gone) are exactly what they were.
+const PULSE_MS = 8000;
 const HEALTH_MS = 2000;
 
 // A room used to close itself after two minutes with one person in it, on the grounds
@@ -1282,10 +1299,10 @@ const HEALTH_MS = 2000;
 // it when you are the last one in it, which covers the ordinary case. Orphans from a
 // killed app are swept from outside — scripts/sweep-rooms.mjs — and roomIsStale keeps
 // them out of the browse list meanwhile.
-const STALE_RESUB_MS = 11000;
-const STALE_PULL_MS = 17000;
-const STALE_RESET_MS = 26000;
-const TAKEOVER_MS = 12000;
+const STALE_RESUB_MS = 22000;
+const STALE_PULL_MS = 34000;
+const STALE_RESET_MS = 52000;
+const TAKEOVER_MS = 24000;
 
 let unsubPulse = null;
 let pulseMode = 'doc';
