@@ -3173,10 +3173,9 @@ function renderPauseSheet() {
   if (!p || p.status === 'ended' || (p.status === 'active' && !pauseIsActive(p))) {
     sub.textContent = 'Choose how long to pause. Everyone at the table must accept.';
     options.innerHTML = `
-      <button class="btn btn-ghost" data-pause-duration="30">30 seconds</button>
-      <button class="btn btn-ghost" data-pause-duration="60">60 seconds</button>
-      <button class="btn btn-ghost" data-pause-duration="90">90 seconds</button>
-      <button class="btn btn-ghost" data-pause-duration="120">120 seconds</button>`;
+      <button class="btn btn-ghost" data-pause-duration="60">1 minute</button>
+      <button class="btn btn-ghost" data-pause-duration="180">3 minutes</button>
+      <button class="btn btn-ghost" data-pause-duration="300">5 minutes</button>`;
     for (const b of options.querySelectorAll('[data-pause-duration]')) {
       b.addEventListener('click', () => requestPause(Number(b.dataset.pauseDuration)));
     }
@@ -3209,7 +3208,8 @@ function renderPauseSheet() {
   const accepted = p.accepted || {};
   const names = ids.map((id) => `${esc(nameFor(id))}${accepted[id] ? ' ✓' : ' …'}`).join(' · ');
   const waiting = !accepted[playerId];
-  sub.textContent = `${esc(nameFor(p.requestedBy))} requested a ${p.duration}-second pause. Everyone must accept.`;
+  const mins = Math.round(p.duration / 60);
+  sub.textContent = `${esc(nameFor(p.requestedBy))} requested a ${mins}-minute pause. Everyone must accept.`;
   options.innerHTML = `
     <div class="pause-status"><strong>${Object.keys(accepted).filter((id) => accepted[id]).length}/${ids.length}</strong><small>Players accepted</small></div>
     <div class="pause-accepts">${names}</div>

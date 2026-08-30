@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.09">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.10">
 </head>
 <body>
 
@@ -486,10 +486,9 @@
   <h3 class="sheet-title">Pause game</h3>
   <p class="sheet-sub" id="pause-sub">Choose how long to pause. Everyone at the table must accept.</p>
   <div class="pause-options" id="pause-options">
-    <button class="btn btn-ghost" data-pause-duration="30">30 seconds</button>
-    <button class="btn btn-ghost" data-pause-duration="60">60 seconds</button>
-    <button class="btn btn-ghost" data-pause-duration="90">90 seconds</button>
-    <button class="btn btn-ghost" data-pause-duration="120">120 seconds</button>
+    <button class="btn btn-ghost" data-pause-duration="60">1 minute</button>
+    <button class="btn btn-ghost" data-pause-duration="180">3 minutes</button>
+    <button class="btn btn-ghost" data-pause-duration="300">5 minutes</button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
