@@ -1902,6 +1902,54 @@ function markSoloDeadlines(before, after) {
   room.tradeDeadlines = marks;
 }
 
+/**
+ * A few seconds' grace to take back your own last build — solo only, and scoped to the
+ * one shape of move that can never race with anything else: a build made in your own
+ * build phase never changes whose turn it is, so there is no bot move and no later step
+ * of setup that an undo could ever land behind. `undoSnapshot` is the actual game object
+ * from before the move, which R.applyMove never mutates — so restoring it is exact, not
+ * a replay.
+ */
+const UNDO_MS = 5000;
+let undoSnapshot = null;
+let undoTimer = null;
+
+function clearUndo() {
+  undoSnapshot = null;
+  clearTimeout(undoTimer);
+  const bar = $('undo-bar');
+  if (bar) bar.hidden = true;
+}
+
+function armUndo(prevGame, label) {
+  undoSnapshot = prevGame;
+  clearTimeout(undoTimer);
+  const bar = $('undo-bar');
+  if (!bar) return;
+  $('undo-label').textContent = label;
+  bar.hidden = false;
+  undoTimer = setTimeout(clearUndo, UNDO_MS);
+}
+
+const UNDO_LABEL = { road: 'Built a road', settlement: 'Built a settlement', city: 'Built a city' };
+
+$('undo-bar').addEventListener('click', () => {
+  const g = room?.game;
+  // Stale the moment anything else has moved the game on — same turn, still the build
+  // phase the snapshot was taken from. Anything else and this quietly does nothing
+  // rather than putting the board back to a turn that has already moved past it.
+  if (!undoSnapshot || !solo || !g || g.phase !== 'build'
+    || g.turn.seat !== undoSnapshot.turn.seat || g.turn.num !== undoSnapshot.turn.num) {
+    clearUndo();
+    return;
+  }
+  room.game = undoSnapshot;
+  clearUndo();
+  saveSolo();
+  sfx.tap();
+  render();
+});
+
 function sendLocal(move, opts = {}) {
   const g = room?.game;
   if (!g) return false;
@@ -1911,6 +1959,8 @@ function sendLocal(move, opts = {}) {
     if (!opts.quiet) { toast(res.error); sfx.error(); }
     return false;
   }
+  const undoable = move.type === 'build' && g.phase === 'build' && res.game.phase === 'build'
+    && res.game.turn.seat === g.turn.seat && res.game.turn.num === g.turn.num;
   room.game = res.game;
   if (res.game.phase === 'over' && !room.endedAt) room.endedAt = Date.now();
   // The local clock is authoritative in solo: there is no other device to disagree with
@@ -1920,6 +1970,7 @@ function sendLocal(move, opts = {}) {
   saveSolo();
   render();
   scheduleBots();
+  if (undoable) armUndo(g, UNDO_LABEL[move.what] || 'Built'); else clearUndo();
   return true;
 }
 
@@ -2039,6 +2090,9 @@ function runBot(pid) {
   }
   if (!res.ok) { console.error('bot could not act at all in phase', g.phase); return; }
   room.game = res.game;
+  // Any bot move — even a trade reply that leaves the turn where it was — moves the
+  // game on from whatever an armed undo was a snapshot of.
+  clearUndo();
   // A bot winning is how most solo games end, and this path is not sendLocal — so
   // without this the game had no end time and the results could not say how long it took.
   if (res.game.phase === 'over' && !room.endedAt) room.endedAt = Date.now();
@@ -2114,6 +2168,7 @@ function lastBotNames() {
 function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7, reuseBotNames = null) {
   const name = usableName();
   if (!name) return false;
+  clearUndo();
   const bots = makeBots(botCount, level, myColorIdx,
     reuseBotNames ? [] : lastBotNames(), reuseBotNames);
   localStorage.setItem(LAST_BOT_NAMES_KEY, JSON.stringify(bots.map((b) => b.name)));
@@ -2156,6 +2211,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
 
 function exitSolo() {
   $('turn-ring').hidden = true;
+  clearUndo();
   clearTimeout(soloTimer);
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   solo = false;

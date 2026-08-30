@@ -674,6 +674,33 @@ button {
   100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.6); opacity: 0; }
 }
 
+/* A few seconds to take back your own last build. Floats just above the tray, the same
+   way the trade layer does, so it never sits under your own thumb. */
+.undo-bar {
+  position: fixed;
+  left: 50%; bottom: calc(var(--tray-h, 0px) + 10px);
+  transform: translateX(-50%);
+  z-index: 61;
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 9px 9px 16px;
+  border-radius: 999px;
+  background: rgba(8, 24, 40, 0.94);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+  color: var(--text);
+  font-size: 13px; font-weight: 600;
+  animation: undo-in .2s cubic-bezier(.2, 1.2, .4, 1) both;
+}
+.undo-bar:active { background: rgba(8, 24, 40, 1); }
+.undo-cta {
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--sky);
+  color: var(--sky-ink);
+  font-weight: 800;
+}
+@keyframes undo-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } }
+
 /* The reaction picker: big, tappable, six choices and nothing to read — the whole point
    is that it costs less than typing. */
 .react-grid {
@@ -2318,6 +2345,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   @keyframes gain-stolen { to { opacity: 0; transform: none; } }
   @keyframes trade-fly { 0%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
   @keyframes reaction-rise { 0% { opacity: 0; transform: none; } 18%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
+  @keyframes undo-in { from { opacity: 0; transform: translateX(-50%); } }
   @keyframes award-take-in { from { opacity: 0; transform: none; } }
   @keyframes award-in { from { opacity: 0; transform: none; } }
   @keyframes award-out { to { opacity: 0; transform: none; } }
