@@ -3875,52 +3875,44 @@ function playGain(gains) {
 }
 
 /**
- * A completed trade, seen happening rather than just landing in two hand counts a
- * moment later. Both sides fly at once — what the offerer gave, from their pill to the
- * acceptor's, and what they got back, the other way — because a trade is one exchange,
- * not two separate gifts. Public knowledge already (the offer sheet shows both sides to
- * everyone), so this plays for the whole table, unlike a steal.
+ * A completed trade, laid out like the two hands that just met across the table: each
+ * player's name over the cards they gave up, large enough to actually read, with the
+ * double-headed trade icon between them standing in for the exchange itself. Public
+ * knowledge already (the offer sheet shows both sides to everyone), so this plays for
+ * the whole table, unlike a steal.
  */
-const TRADE_FLY_MS = 600;
-let tradeTimers = [];
+const TRADE_SHOW_MS = 2400;
+const TRADE_LEAVE_MS = 280;
+let tradeTimer = null;
+let tradeLeaveTimer = null;
 
 function playTradeSwap(e) {
   if (!e.give || !e.want || !e.p || !e.with) return;
   const stage = $('trade-stage');
   if (!stage) return;
-  const fromEl = document.querySelector(`.chip[data-pid="${e.p}"]`);
-  const toEl = document.querySelector(`.chip[data-pid="${e.with}"]`);
-  if (!fromEl || !toEl) return;
-  for (const t of tradeTimers) clearTimeout(t);
-  tradeTimers = [];
+  clearTimeout(tradeTimer);
+  clearTimeout(tradeLeaveTimer);
 
-  const centre = (el) => {
-    const r = el.getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-  };
-  const a = centre(fromEl), b = centre(toEl);
+  const cards = (resources) => Object.entries(resources)
+    .map(([res, n]) => resCard(res, { count: n > 1 ? n : null, stack: false }))
+    .join('');
+  const side = (pid, resources) => `
+    <div class="trade-duel-side" style="--c:${esc(colorFor(pid))}">
+      <div class="trade-duel-name">${esc(nameFor(pid))}</div>
+      <div class="trade-duel-cards">${cards(resources)}</div>
+    </div>`;
 
-  stage.innerHTML = '';
-  let i = 0;
-  const spawn = (resources, from, to) => {
-    for (const [res, n] of Object.entries(resources)) {
-      const el = document.createElement('div');
-      el.className = 'trade-card';
-      el.innerHTML = resCard(res, { size: 'xs', count: n > 1 ? n : null, stack: false });
-      el.style.left = `${from.x}px`;
-      el.style.top = `${from.y}px`;
-      el.style.setProperty('--dx', `${to.x - from.x}px`);
-      el.style.setProperty('--dy', `${to.y - from.y}px`);
-      el.style.setProperty('--d', `${i * 60}ms`);
-      i += 1;
-      stage.appendChild(el);
-    }
-  };
-  spawn(e.give, a, b);
-  spawn(e.want, b, a);
-
+  stage.innerHTML = `
+    <div class="trade-duel">
+      ${side(e.p, e.give)}
+      <div class="trade-duel-arrows">${icon('trade', { size: 34 })}</div>
+      ${side(e.with, e.want)}
+    </div>`;
   stage.hidden = false;
-  tradeTimers.push(setTimeout(() => { stage.hidden = true; stage.innerHTML = ''; }, TRADE_FLY_MS + i * 60 + 100));
+  tradeTimer = setTimeout(() => {
+    stage.querySelector('.trade-duel')?.classList.add('is-leaving');
+    tradeLeaveTimer = setTimeout(() => { stage.hidden = true; stage.innerHTML = ''; }, TRADE_LEAVE_MS);
+  }, TRADE_SHOW_MS);
 }
 
 /** A thrown reaction, rising off the sender's own pill so everyone can see who sent it. */

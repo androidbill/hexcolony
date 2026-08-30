@@ -627,26 +627,53 @@ button {
 }
 
 /* ------------------------------------------------------------ a trade crossing the table
-   Two sets of cards, each starting at one player's pill and flying to the other's, so a
-   completed trade is seen happening rather than just reflected in two hand counts a
-   moment later. Trades are public knowledge already — the offer sheet shows both
+   Both hands laid out at once, each player's name over the cards they gave up, so a
+   completed trade reads as the exchange it was rather than just two hand counts changing
+   a moment later. Trades are public knowledge already — the offer sheet shows both
    sides — so unlike a steal this plays for everyone, not just the two traders. */
 .trade-stage {
   position: fixed; inset: 0;
   z-index: 91;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
   pointer-events: none;
 }
-.trade-card {
-  position: fixed;
-  transform: translate(-50%, -50%);
-  animation: trade-fly .6s cubic-bezier(.3, 0, .7, 1) both;
-  animation-delay: var(--d, 0ms);
+.trade-duel {
+  display: flex; align-items: center; gap: 18px;
+  padding: 20px 24px;
+  border-radius: 20px;
+  background: rgba(4, 11, 19, .94);
+  border: 1px solid rgba(255, 255, 255, .16);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, .5), 0 24px 70px rgba(0, 0, 0, .7);
+  backdrop-filter: blur(10px);
+  animation: trade-duel-in .3s cubic-bezier(.2, 1, .3, 1) both;
 }
-@keyframes trade-fly {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
-  70% { opacity: 1; }
-  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.6); opacity: 0; }
+.trade-duel.is-leaving { animation: trade-duel-out .28s ease both; }
+.trade-duel-side {
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  width: auto; max-width: 160px;
 }
+.trade-duel-name {
+  font-weight: 800; font-size: 14px;
+  color: var(--c, #fff);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .6);
+  text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
+}
+.trade-duel-cards {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 160px;
+}
+.trade-duel .rcard { width: 68px; height: 92px; border-radius: 11px; }
+.trade-duel .rcard-face { border-radius: 8px; }
+.trade-duel .rcard-count { top: -7px; right: -7px; min-width: 24px; height: 24px; line-height: 24px; font-size: 13px; }
+.trade-duel-arrows {
+  color: var(--gold);
+  display: grid; place-items: center;
+  animation: trade-duel-pulse 1s ease-in-out infinite;
+}
+@keyframes trade-duel-in { from { opacity: 0; transform: scale(.82) translateY(10px); } }
+@keyframes trade-duel-out { to { opacity: 0; transform: scale(.9); } }
+@keyframes trade-duel-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
 
 /* A few seconds to take back your own last build. Floats just above the tray, the same
    way the trade layer does, so it never sits under your own thumb. */
@@ -2328,7 +2355,9 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   @keyframes gain-in { from { opacity: 0; } to { opacity: 1; transform: none; } }
   @keyframes gain-away { to { opacity: 0; transform: none; } }
   @keyframes gain-stolen { to { opacity: 0; transform: none; } }
-  @keyframes trade-fly { 0%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
+  @keyframes trade-duel-in { from { opacity: 0; transform: none; } }
+  @keyframes trade-duel-out { to { opacity: 0; transform: none; } }
+  @keyframes trade-duel-pulse { 0%, 100% { transform: none; } }
   @keyframes reaction-rise { 0% { opacity: 0; transform: none; } 18%, 70% { opacity: 1; transform: none; } 100% { opacity: 0; transform: none; } }
   @keyframes undo-in { from { opacity: 0; transform: translateX(-50%); } }
   @keyframes award-take-in { from { opacity: 0; transform: none; } }
