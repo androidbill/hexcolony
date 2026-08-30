@@ -3885,8 +3885,9 @@ function renderScoreStrip(g) {
     const [nameEl, cardsEl, awardsEl] = bodyEl.children;
     if (nameEl.textContent !== name) nameEl.textContent = name;
     if (vpEl.textContent !== vp) vpEl.textContent = vp;
-    // innerHTML rather than textContent: the count carries a card glyph beside it now.
-    const cardsHtml = `${cards}${icon('card', { size: 12 })}`;
+    // innerHTML rather than textContent: the count carries a little card face beside it,
+    // the game's own mark watermarked in, rather than a plain glyph.
+    const cardsHtml = `<span class="chip-cards-n">${cards}</span><span class="chip-cards-card"></span>`;
     if (cardsEl.dataset.n !== String(cards)) { cardsEl.dataset.n = String(cards); cardsEl.innerHTML = cardsHtml; }
 
     // One badge each rather than two emoji run together, so each can say what it is.
@@ -5164,6 +5165,7 @@ function openPlayers() {
     const p = g.players[pid];
     const ports = R.portsOwned(g, board, pid);
     const stats = [
+      `<span class="pstat">${R.handSize(p)} cards</span>`,
       `<span class="pstat">${R.devCount(p)} dev</span>`,
       `<span class="pstat">${icon('army', { size: 14 })} ${p.knights}</span>`,
       `<span class="pstat">${icon('road', { size: 14 })} ${p.roadLen}</span>`,
@@ -5180,7 +5182,6 @@ function openPlayers() {
     return `<div class="pcard" style="--c:${esc(colorFor(pid))}">
       <div class="pcard-top">
         <span class="pcard-name">${esc(nameFor(pid))}${pid === playerId ? ' (you)' : ''}</span>
-        <span class="pcard-hand"><span class="pcard-hand-n">${R.handSize(p)}</span></span>
         <span class="pcard-vp">${R.publicVP(g, pid)}</span>
       </div>
       <div class="pcard-stats">${stats.join('')}</div>
