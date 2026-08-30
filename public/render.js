@@ -1143,7 +1143,39 @@ export class BoardView {
       const grow = 1 + k * (BUILD_PEAK - 1);
       const spin = this.spinPieces && b.p === activePid;
       b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, spin) : this.drawSettlement(x, y, this.colorOf(b.p), grow, spin);
+      const at = this.built.get(v);
+      if (at !== undefined) this.drawBuildDust(x, y, this.now - at, v);
     }
+  }
+
+  /**
+   * A scatter of dust kicked up from under a piece as it lands — a beat behind the jump
+   * itself, so the piece is already in the air before anything settles back down around
+   * its base. Each speck's angle and size come off the vertex id rather than Math.random,
+   * so the same landing looks the same on every frame instead of flickering.
+   */
+  drawBuildDust(x, y, elapsedMs, seed) {
+    const DUST_MS = 480;
+    if (elapsedMs < 0 || elapsedMs > DUST_MS) return;
+    const c = this.ctx;
+    const R = this.scale;
+    const p = elapsedMs / DUST_MS;
+    const n = 7;
+    c.save();
+    for (let i = 0; i < n; i++) {
+      const j = ((Math.sin((seed + 1) * 12.9898 + i * 78.233) * 43758.5453) % 1 + 1) % 1;
+      const angle = (i / n) * Math.PI * 2 + j * 0.7;
+      const dist = R * (0.22 + j * 0.4) * p * 1.6;
+      const dx = Math.cos(angle) * dist;
+      const dy = Math.sin(angle) * dist * 0.55 - R * 0.14 * p;
+      const size = R * (0.09 + j * 0.06) * (1 - p * 0.4) * 1.6;
+      c.globalAlpha = Math.max(0, (1 - p) * 0.65);
+      c.fillStyle = '#e8dcc0';
+      c.beginPath();
+      c.arc(x + dx, y + dy, Math.max(0.5, size), 0, Math.PI * 2);
+      c.fill();
+    }
+    c.restore();
   }
 
   /** The piece outlines, for anything outside the renderer that wants them. */
