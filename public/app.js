@@ -1540,7 +1540,6 @@ function enterRoom(code) {
 }
 
 async function leaveRoom(removeSelf = true) {
-  $('turn-ring').hidden = true;
   if (solo) { exitSolo(); return; }
   const wasPlaying = room?.state === 'playing' && game();
   const ref = roomRef;
@@ -2210,7 +2209,6 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
 }
 
 function exitSolo() {
-  $('turn-ring').hidden = true;
   clearUndo();
   clearTimeout(soloTimer);
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
@@ -2594,27 +2592,6 @@ function renderLobby() {
     ? 'Share the code — players can join until you start.'
     : 'You can change your name and colour on the home screen.';
   renderChatButton();
-}
-
-/**
- * The frame that says it is your go.
- *
- * Forgetting your turn is the complaint this answers, and the badge at the top of the
- * board was not loud enough to stop it — it is small, it is inside the board, and it is
- * the same shape whether the turn is yours or somebody else's. A pulse around the whole
- * window is visible from across a room and cannot be mistaken for anything else.
- *
- * Only on your own turn. A ring that lit up for everybody would be moving almost all of
- * the time, and something that is always on says nothing. It is white rather than the
- * player's colour: white is the one thing that stands off every sea in the list without
- * being reasoned about, and there is only ever one ring on screen, so it has nothing to
- * be told apart from.
- */
-function renderTurnRing(g) {
-  const ring = $('turn-ring');
-  if (!ring) return;
-  const mine = !!g && g.phase !== 'over' && R.isTurn(g, playerId) && !!g.players[playerId];
-  ring.hidden = !mine || pauseBlocksGame();
 }
 
 // ---------------------------------------------------------------- board plumbing
@@ -3648,7 +3625,6 @@ function render() {
   drawTimer();
   renderScoreStrip(g);
   renderTurnBadge(g);
-  renderTurnRing(g);
   if (pauseBlocksGame()) drawPauseCountdown();
   renderDice(g);
   settlePay(g);
