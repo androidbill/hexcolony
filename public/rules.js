@@ -196,6 +196,14 @@ function pay(g, p, cost) {
   for (const [r, n] of Object.entries(cost)) { p.res[r] -= n; g.bank[r] += n; }
 }
 
+/** Fog of war: reveal every hex touching a newly built settlement, for good, for everyone. */
+function discoverHexes(g, v) {
+  if (!g.fog) return;
+  for (const hi of VERTS[v].hexes) {
+    if (!g.discovered.includes(hi)) g.discovered.push(hi);
+  }
+}
+
 // ---------------------------------------------------------------- setup
 function shuffle(list, rng) {
   const out = list.slice();
@@ -239,19 +247,29 @@ export function newGame(seats, settings, rng = Math.random) {
   // With the robber switched off no tile is ever blocked, so nothing sits on the
   // desert and a 7 becomes purely a raid: take a card from whoever you like.
   const useRobber = settings.useRobber !== false;
+  const mode = settings.boardMode || 'random';
+  const startBoard = makeBoard(seed, mode, layout);
+
+  // Fog of war: every hex starts hidden except the desert, which pays nothing and so
+  // has nothing to hide. A hex is discovered for good the moment any settlement is
+  // built against it — see discoverHexes below — and stays that way for everyone.
+  const fog = !!settings.fog;
+  const discovered = fog ? startBoard.tiles.filter((t) => t.terrain === 'desert').map((t) => t.i) : [];
 
   return {
     seed,
-    mode: settings.boardMode || 'random',
+    mode,
     layout,
     useRobber,
+    fog,
+    discovered,
     target: settings.targetVP || 10,
     discardLimit: settings.discardLimit || 7,
     seats: seats.slice(),
     players,
     bldg: {},
     roads: {},
-    robber: useRobber ? makeBoard(seed, settings.boardMode || 'random', layout).robber : -1,
+    robber: useRobber ? startBoard.robber : -1,
     bank: Object.fromEntries(RESOURCES.map((r) => [r, info.bank])),
     deck: shuffle(devBag(info), rng),
     vpNames: shuffle(VP_NAMES, rng),
@@ -823,6 +841,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!legalSettlements(g, pid, true).includes(v)) return fail('You cannot build there.');
       g.bldg[v] = { t: 's', p: pid };
       me.left.settlement -= 1;
+      discoverHexes(g, v);
       g.setup.need = 'r';
       g.setup.lastV = v;
       startClock(g, SETUP_SECONDS, true);
@@ -984,6 +1003,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         pay(g, me, COSTS.settlement);
         g.bldg[move.v] = { t: 's', p: pid };
         me.left.settlement -= 1;
+        discoverHexes(g, move.v);
         note(g, events, { t: 'build', p: pid, what: 'settlement', v: move.v });
         bumpClock(g);
         // A new settlement can cut an opponent's road, so awards are rechecked.

@@ -2123,6 +2123,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   const settings = {
     targetVP, discardLimit, boardMode: 'random', layout, useRobber,
     turnSeconds: soloTurnSeconds, sea: soloSea, discardSeconds: R.DISCARD_SECONDS,
+    fog: soloFog,
   };
 
   // Straight to the map picker: solo has a host too, and it is you.
@@ -2178,6 +2179,7 @@ let soloBots = Number(localStorage.getItem('hexcolony_solo_bots') || 3);
 let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
 let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'classic';
 let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
+let soloFog = localStorage.getItem('hexcolony_solo_fog') === 'on';
 let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
 let soloSea = localStorage.getItem('hexcolony_solo_sea') || SEA_DEFAULT;
@@ -2197,6 +2199,12 @@ function drawSoloSheet() {
     b.classList.toggle('on', Number(b.dataset.soloDynsize) === soloDyn);
   }
   $('solo-layout-blurb').textContent = LAYOUT_INFO[soloLayout]?.blurb || '';
+  for (const b of document.querySelectorAll('[data-solo-fog]')) {
+    b.classList.toggle('on', (b.dataset.soloFog === 'on') === soloFog);
+  }
+  $('solo-fog-blurb').textContent = soloFog
+    ? 'Every tile hidden but the desert, until a settlement touches it.'
+    : 'Every tile shown from the start.';
   for (const b of document.querySelectorAll('[data-solo-robber]')) {
     b.classList.toggle('on', (b.dataset.soloRobber === 'on') === soloRobber);
   }
@@ -2253,6 +2261,14 @@ for (const b of document.querySelectorAll('[data-solo-robber]')) {
   b.addEventListener('click', () => {
     soloRobber = b.dataset.soloRobber === 'on';
     localStorage.setItem('hexcolony_solo_robber', soloRobber ? 'on' : 'off');
+    sfx.tap();
+    drawSoloSheet();
+  });
+}
+for (const b of document.querySelectorAll('[data-solo-fog]')) {
+  b.addEventListener('click', () => {
+    soloFog = b.dataset.soloFog === 'on';
+    localStorage.setItem('hexcolony_solo_fog', soloFog ? 'on' : 'off');
     sfx.tap();
     drawSoloSheet();
   });
@@ -2349,6 +2365,12 @@ for (const b of document.querySelectorAll('[data-timer]')) {
 for (const b of document.querySelectorAll('[data-robber]')) {
   b.addEventListener('click', () => {
     if (setSetting({ 'settings.useRobber': b.dataset.robber === 'on' })) sfx.tap();
+  });
+}
+
+for (const b of document.querySelectorAll('[data-fog]')) {
+  b.addEventListener('click', () => {
+    if (setSetting({ 'settings.fog': b.dataset.fog === 'on' })) sfx.tap();
   });
 }
 
@@ -2476,6 +2498,14 @@ function renderLobby() {
     b.classList.toggle('on', Number(b.dataset.dynsize) === dyn);
   }
   $('layout-blurb').textContent = LAYOUT_INFO[layout]?.blurb || '';
+
+  const fog = !!s.fog;
+  for (const b of document.querySelectorAll('[data-fog]')) {
+    b.classList.toggle('on', (b.dataset.fog === 'on') === fog);
+  }
+  $('fog-blurb').textContent = fog
+    ? 'Every tile hidden but the desert, until a settlement touches it.'
+    : 'Every tile shown from the start.';
 
   const sea = s.sea;
   drawSeaRow('sea-row', sea, pickSea);
@@ -2650,9 +2680,11 @@ view.onPick = (hit) => {
     const t = board.tiles[hit.id];
     const tip = $('tile-tip');
     const robbed = g.robber === hit.id ? ' · robber here' : '';
-    tip.textContent = t.res
-      ? `${TERRAIN[t.terrain].label} · ${t.num} · ${TERRAIN[t.terrain].short}${robbed}`
-      : `${TERRAIN[t.terrain].label} — produces nothing${robbed}`;
+    tip.textContent = view.isFogged(t)
+      ? 'Not discovered yet'
+      : t.res
+        ? `${TERRAIN[t.terrain].label} · ${t.num} · ${TERRAIN[t.terrain].short}${robbed}`
+        : `${TERRAIN[t.terrain].label} — produces nothing${robbed}`;
     tip.hidden = false;
     clearTimeout(tip._t);
     tip._t = setTimeout(() => { tip.hidden = true; }, 2400);

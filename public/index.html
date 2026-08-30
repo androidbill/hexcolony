@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.10">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.11">
 </head>
 <body>
 
@@ -219,6 +219,15 @@
           <button class="seg" data-dynsize="52">52</button>
         </div>
         <em class="opt-note" id="layout-blurb">19 tiles. The standard island, best for 3 or 4 players.</em>
+      </div>
+
+      <div class="opt-row col">
+        <span class="opt-l">Fog of war</span>
+        <div class="seg-row">
+          <button class="seg on" data-fog="off">Off</button>
+          <button class="seg" data-fog="on">On</button>
+        </div>
+        <em class="opt-note" id="fog-blurb">Every tile shown from the start.</em>
       </div>
 
       <div class="opt-row col">
@@ -522,6 +531,15 @@
   </div>
 
   <div class="opt-row col">
+    <span class="opt-l">Fog of war</span>
+    <div class="seg-row">
+      <button class="seg on" data-solo-fog="off">Off</button>
+      <button class="seg" data-solo-fog="on">On</button>
+    </div>
+    <em class="opt-note" id="solo-fog-blurb">Every tile shown from the start.</em>
+  </div>
+
+  <div class="opt-row col">
     <div class="sea-row" id="solo-sea-row"></div>
   </div>
 
@@ -778,7 +796,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.27.08"></script>
-<script type="module" src="app.js?v=2026.08.27.08"></script>
+<script src="iro.min.js?v=2026.08.30.11"></script>
+<script type="module" src="app.js?v=2026.08.30.11"></script>
 </body>
 </html>

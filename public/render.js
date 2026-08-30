@@ -17,6 +17,9 @@ const TERRAIN_STYLE = {
   fields:    { a: '#e3ba57', b: '#c9963a', ink: '#8a6320' },
   mountains: { a: '#8d94a8', b: '#5f6678', ink: '#3b4152' },
   desert:    { a: '#ddc48d', b: '#c2a469', ink: '#8a734a' },
+  // Fog of war: a hex nobody has settled next to yet, drawn as an unlit slate rather
+  // than any resource colour — it must not read as a guessable terrain.
+  fog:       { a: '#3c4a5a', b: '#252f3b', ink: '#1a222b' },
 };
 
 // A bright band just inside each hex's edge, in that tile's own resource colour. On an
@@ -35,6 +38,7 @@ const TERRAIN_EDGE = {
   fields:    '#ffd34d',   // wheat
   mountains: '#c7d2e4',   // ore
   desert:    '#f0d9a0',   // pays nothing, so it gets its own sand rather than a resource
+  fog:       '#6c7f95',   // undiscovered — a rim that reads as "unknown", not a resource
 };
 
 const RES_COLOR = {
@@ -736,9 +740,21 @@ export class BoardView {
     c.restore();
   }
 
+  /**
+   * Fog of war: true for a hex the game is hiding from everyone still — the desert is
+   * exempt, since it pays nothing and so has nothing to hide.
+   */
+  isFogged(tile) {
+    const g = this.game;
+    if (!g?.fog || tile.terrain === 'desert') return false;
+    return !g.discovered?.includes(tile.i);
+  }
+
   drawHex(tile) {
     const c = this.ctx;
-    const st = TERRAIN_STYLE[tile.terrain];
+    const fogged = this.isFogged(tile);
+    const terrain = fogged ? 'fog' : tile.terrain;
+    const st = TERRAIN_STYLE[terrain];
     const [cx, cy] = this.toScreen(tile.x, tile.y);
     const R = this.scale;
 
@@ -749,19 +765,20 @@ export class BoardView {
     // The flat colour goes down first either way: it is what shows through the
     // gaps if an illustration has transparent corners, and it is the whole tile
     // when there is no illustration.
-    c.fillStyle = this.terrainGrad(tile.terrain, cx, cy, R);
+    c.fillStyle = this.terrainGrad(terrain, cx, cy, R);
     c.fill(path);
 
-    const art = artImages[tile.terrain];
+    const art = fogged ? null : artImages[tile.terrain];
     c.save();
     c.clip(path);
     if (art && art.naturalWidth) this.drawTerrainArt(art, cx, cy, R);
+    else if (fogged) this.drawFogGlyph(cx, cy, R);
     else this.drawTerrainMotif(tile, cx, cy, R, st);
 
     // Still inside the clip, which is what makes this an inside border: the stroke is
     // drawn at twice its intended width and the outer half is clipped away, leaving a
     // band that hugs the edge exactly instead of straddling it.
-    c.strokeStyle = TERRAIN_EDGE[tile.terrain] || st.a;
+    c.strokeStyle = TERRAIN_EDGE[terrain] || st.a;
     c.lineWidth = Math.max(2, R * 0.15);
     c.globalAlpha = 0.9;
     c.stroke(path);
@@ -771,7 +788,19 @@ export class BoardView {
     c.lineWidth = Math.max(1, R * 0.035);
     c.stroke(path);
 
-    if (tile.num && tile.num !== this.zoom?.num) this.drawToken(tile, cx, cy, R);
+    if (!fogged && tile.num && tile.num !== this.zoom?.num) this.drawToken(tile, cx, cy, R);
+  }
+
+  /** The mark on a fogged tile — no number, no pips, nothing to read off it. */
+  drawFogGlyph(cx, cy, R) {
+    const c = this.ctx;
+    c.save();
+    c.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    c.font = `800 ${R * 0.9}px ui-rounded, "Segoe UI", system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText('?', cx, cy);
+    c.restore();
   }
 
   /**
@@ -929,7 +958,7 @@ export class BoardView {
     const full = 0.86 / 0.30;               // token radius at rest is 0.30 of the hex
     const grow = 1 + k * (full - 1);
     for (const tile of this.board.tiles) {
-      if (tile.num !== this.zoom.num) continue;
+      if (tile.num !== this.zoom.num || this.isFogged(tile)) continue;
       const [cx, cy] = this.toScreen(tile.x, tile.y);
       this.drawToken(tile, cx, cy, this.scale, grow);
     }
