@@ -198,6 +198,9 @@ export function canAfford(p, cost) {
 function pay(g, p, cost) {
   for (const [r, n] of Object.entries(cost)) { p.res[r] -= n; g.bank[r] += n; }
 }
+function unpay(g, p, cost) {
+  for (const [r, n] of Object.entries(cost)) { p.res[r] += n; g.bank[r] -= n; }
+}
 
 /** Fog of war: reveal every hex touching a newly built settlement, for good, for everyone. */
 function discoverHexes(g, v) {
@@ -1030,6 +1033,41 @@ export function applyMove(state, pid, move, rng = Math.random) {
         return ok();
       }
       return fail('Unknown build.');
+    }
+
+    // Take back your own last build, but only while nothing else has happened since: the
+    // log entry right before this one must still be exactly that build. Any other move —
+    // even a reaction — leaves the log looking different, so a stale undo just fails
+    // instead of unwinding state that something else has already built on.
+    case 'undo': {
+      if (!myTurn) return fail('Not your turn.');
+      if (g.phase !== 'build') return fail('Nothing to undo.');
+      const last = g.log[g.log.length - 1];
+      if (!last || last.t !== 'build' || last.p !== pid) return fail('Nothing to undo.');
+      if (last.what === 'road') {
+        if (g.roads[last.e] !== pid) return fail('Nothing to undo.');
+        delete g.roads[last.e];
+        me.left.road += 1;
+        if (last.free) g.turn.freeRoads += 1; else unpay(g, me, COSTS.road);
+      } else if (last.what === 'settlement') {
+        const b = g.bldg[last.v];
+        if (!b || b.p !== pid || b.t !== 's') return fail('Nothing to undo.');
+        delete g.bldg[last.v];
+        me.left.settlement += 1;
+        unpay(g, me, COSTS.settlement);
+      } else if (last.what === 'city') {
+        const b = g.bldg[last.v];
+        if (!b || b.p !== pid || b.t !== 'c') return fail('Nothing to undo.');
+        b.t = 's';
+        me.left.city += 1;
+        me.left.settlement -= 1;
+        unpay(g, me, COSTS.city);
+      } else {
+        return fail('Nothing to undo.');
+      }
+      g.log.pop();
+      refreshAwards(g, events);
+      return ok();
     }
 
     case 'buyDev': {

@@ -316,7 +316,7 @@ let seenLogAt = 0;
 // Showing a guessed die and then correcting it is worse than a short wait, so those go
 // the long way round.
 const PREDICTABLE = new Set([
-  'setupSettlement', 'setupRoad', 'build', 'buyDev', 'playDev', 'discard',
+  'setupSettlement', 'setupRoad', 'build', 'undo', 'buyDev', 'playDev', 'discard',
   'bankTrade', 'offerTrade', 'replyTrade', 'acceptTrade', 'cancelTrade', 'expireTrade',
   'endTurn', 'react',
 ]);
@@ -1642,12 +1642,21 @@ function send(move, opts = {}) {
   move = clone(move);
   if (solo) return Promise.resolve(sendLocal(move, opts));
   if (!roomRef) return Promise.resolve(false);
+  const g = room?.game;
+  const undoable = move.type === 'build' && g && g.phase === 'build';
   const drew = drawGuess(move);
   const era = sendEra;
   const run = sendChain.then(() => postMove(move, opts, drew, era));
   // The chain must survive a failed move, or every later tap queues behind a rejection
   // that already resolved.
   sendChain = run.then(() => {}, () => {});
+  // A reaction is the one move that can land after a build without meaning anything
+  // changed, so it is the one thing that does not retire a pending undo.
+  run.then((okRes) => {
+    if (!okRes) return;
+    if (undoable) armUndo(UNDO_LABEL[move.what] || 'Built');
+    else if (move.type !== 'react') clearUndo();
+  });
   return run;
 }
 
@@ -1902,26 +1911,30 @@ function markSoloDeadlines(before, after) {
 }
 
 /**
- * A few seconds' grace to take back your own last build — solo only, and scoped to the
- * one shape of move that can never race with anything else: a build made in your own
- * build phase never changes whose turn it is, so there is no bot move and no later step
- * of setup that an undo could ever land behind. `undoSnapshot` is the actual game object
- * from before the move, which R.applyMove never mutates — so restoring it is exact, not
- * a replay.
+ * A few seconds' grace to take back your own last build. Solo restores the exact prior
+ * game object (`undoSnapshot`, which R.applyMove never mutates, so it's a snapshot, not a
+ * replay) straight onto the local room. Online there is no safe local snapshot to fall
+ * back to — another device could have written since — so the tap instead sends an
+ * `undo` move that the rules engine only honours while the log's last entry is still
+ * exactly that build; anything else that happened meanwhile (even a reaction) makes it
+ * fail quietly instead of unwinding state something else has already built on.
  */
 const UNDO_MS = 5000;
 let undoSnapshot = null;
+let undoArmed = false;
 let undoTimer = null;
 
 function clearUndo() {
   undoSnapshot = null;
+  undoArmed = false;
   clearTimeout(undoTimer);
   const bar = $('undo-bar');
   if (bar) bar.hidden = true;
 }
 
-function armUndo(prevGame, label) {
-  undoSnapshot = prevGame;
+function armUndo(label, prevGame) {
+  undoSnapshot = prevGame || null;
+  undoArmed = true;
   clearTimeout(undoTimer);
   const bar = $('undo-bar');
   if (!bar) return;
@@ -1933,11 +1946,13 @@ function armUndo(prevGame, label) {
 const UNDO_LABEL = { road: 'Built a road', settlement: 'Built a settlement', city: 'Built a city' };
 
 $('undo-bar').addEventListener('click', () => {
+  if (!undoArmed) return;
+  if (!solo) { clearUndo(); send({ type: 'undo' }); return; }
   const g = room?.game;
   // Stale the moment anything else has moved the game on — same turn, still the build
   // phase the snapshot was taken from. Anything else and this quietly does nothing
   // rather than putting the board back to a turn that has already moved past it.
-  if (!undoSnapshot || !solo || !g || g.phase !== 'build'
+  if (!undoSnapshot || !g || g.phase !== 'build'
     || g.turn.seat !== undoSnapshot.turn.seat || g.turn.num !== undoSnapshot.turn.num) {
     clearUndo();
     return;
@@ -1969,7 +1984,7 @@ function sendLocal(move, opts = {}) {
   saveSolo();
   render();
   scheduleBots();
-  if (undoable) armUndo(g, UNDO_LABEL[move.what] || 'Built'); else clearUndo();
+  if (undoable) armUndo(UNDO_LABEL[move.what] || 'Built', g); else clearUndo();
   return true;
 }
 
