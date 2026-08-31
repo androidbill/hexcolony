@@ -4050,7 +4050,10 @@ function updatePayout(g) {
   if (!board || !roll || roll === 7) { view.setPayout(null); return; }
 
   const hexes = (board.byNumber[roll] || [])
-    .filter((i) => g.useRobber === false || i !== g.robber);
+    .filter((i) => g.useRobber === false || i !== g.robber)
+    // Under fog, a tile nobody has reached yet shows nothing at all — not even that
+    // this roll paid it — or the glow would give its number away before its resource.
+    .filter((i) => !g.fog || (g.discovered || []).includes(i));
   if (!hexes.length) { view.setPayout(null); return; }
 
   const spots = [];
