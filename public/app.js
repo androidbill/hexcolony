@@ -980,7 +980,7 @@ function dropGuess() {
 
 function applyPulse(data, fresh) {
   if (fresh) markFresh();
-  const ms = typeof data?.at?.toMillis === 'function' ? data.at.toMillis() : 0;
+  const ms = stampMs(data?.at) ?? 0;
   // Only a newly arrived beat is a usable clock sample; re-reading an old one would
   // look like a hugely delayed beat and drag the measurement off.
   if (ms > lastPulseServerMs) {
