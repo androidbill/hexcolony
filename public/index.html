@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.44">
+<link rel="stylesheet" href="styles.css?v=2026.08.31.01">
 </head>
 <body>
 
@@ -68,14 +68,6 @@
         <span class="btn-label">Create a Room</span>
         <span class="btn-sub">Open a table and let people join</span>
       </button>
-
-      <!-- Only shown once Realtime Database is actually configured for this project —
-           see RTDB_READY in fb.js. Whoever creates a room picks its database; everyone
-           who joins by code just plays, whichever one it turned out to be. -->
-      <div class="seg-row backend-row" id="backend-row" hidden>
-        <button class="seg on" data-backend="firestore">Firestore</button>
-        <button class="seg" data-backend="rtdb">Realtime DB</button>
-      </div>
 
       <button class="btn btn-ghost" id="btn-rooms">
         <span class="btn-label">Browse Rooms</span>
@@ -701,6 +693,11 @@
     <button id="kebab-history" role="menuitem"><span>🏆</span>Game history</button>
     <button id="kebab-share" role="menuitem"><span>&#128228;</span>Share</button>
     <button id="kebab-about" role="menuitem"><span>&#8505;&#65039;</span>About</button>
+    <!-- Only shown on the landing page, and only once Realtime Database is actually
+         configured for this project — see RTDB_READY in fb.js. Whoever creates a room
+         picks its database; everyone who joins by code just plays, whichever one it
+         turned out to be. -->
+    <button id="kebab-database" role="menuitem" hidden><span>&#128190;</span>Database: <b id="kebab-database-val">Firestore</b></button>
   </div>
 </div>
 
@@ -792,7 +789,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.30.44"></script>
-<script type="module" src="app.js?v=2026.08.30.44"></script>
+<script src="iro.min.js?v=2026.08.31.01"></script>
+<script type="module" src="app.js?v=2026.08.31.01"></script>
 </body>
 </html>

@@ -312,7 +312,6 @@ button {
 #screen-home .btn-sub { font-size: 11px; }
 #screen-home .or-split { margin: 7px 0; }
 #screen-home .home-row { gap: 8px; }
-.backend-row { margin: 8px 0 4px; }
 /* Browse Rooms used to be the first thing in the panel and so needed nothing above it.
    Create a Room sits there now, and the two were left touching. */
 #screen-home #btn-rooms { margin-top: 8px; }

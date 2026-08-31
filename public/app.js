@@ -101,6 +101,8 @@ function showScreen(id) {
   // The game screen's top bar already occupies both corners, so the kebab steps aside
   // there; its three entries live in that screen's own menu instead.
   $('kebab-wrap').hidden = id === 'screen-game';
+  // The database choice only matters before a room exists to create.
+  $('kebab-database').hidden = !(RTDB_READY && id === 'screen-home');
   closeKebab();
   if (id === 'screen-game') {
     // Size it now, then again after layout settles. The second pass catches the real
@@ -918,14 +920,9 @@ $('btn-rooms-create').addEventListener('click', () => {
 // the default: it is what every room has always used, and RTDB is the fallback for the
 // day Firestore's own quota runs out from under a room already being created.
 let createBackend = 'firestore';
-if (RTDB_READY) $('backend-row').hidden = false;
-$('backend-row').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-backend]');
-  if (!b) return;
-  createBackend = b.dataset.backend;
-  for (const seg of $('backend-row').querySelectorAll('[data-backend]')) {
-    seg.classList.toggle('on', seg === b);
-  }
+$('kebab-database').addEventListener('click', () => {
+  createBackend = createBackend === 'firestore' ? 'rtdb' : 'firestore';
+  $('kebab-database-val').textContent = createBackend === 'rtdb' ? 'Realtime DB' : 'Firestore';
   sfx.tap();
 });
 $('room-list').addEventListener('click', (e) => {
