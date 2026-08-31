@@ -466,8 +466,10 @@ function drawColourGrid() {
     : waiting.length
       ? `Still choosing: ${waiting.join(', ')}.`
       : 'Everyone has a colour. Tap another to swap, while the game has not started.';
-  // While you have no colour there is nothing to go back to, so there is no way out.
+  // While you have no colour, Close (staying seatless) makes no sense — offer Back
+  // (leaving the room) instead, so this is never a dead end.
   $('colour-close').hidden = needsColour();
+  $('colour-back').hidden = !needsColour();
 }
 
 async function pickColour(idx) {
@@ -531,6 +533,7 @@ function openColourPicker() {
   drawColourGrid();
   sheet('sheet-colour');
 }
+$('colour-back').addEventListener('click', () => { sfx.tap(); leaveRoom(true); });
 
 /**
  * Bring the picker up for somebody who has just walked in without a colour, and keep the
