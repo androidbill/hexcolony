@@ -632,16 +632,18 @@ async function createRoom() {
   try {
     // A cellular handoff can make the previous create look failed even after it was
     // actually accepted. Rejoin the remembered room before creating another — whichever
-    // database it turns out to be on, read straight off its own code shape.
+    // database it turns out to be on, read straight off its own code shape. A finished
+    // game does not count: there is nothing left in it worth recovering, and it is
+    // exactly the room a fresh "Create a Room" tap should never land back in.
     const remembered = localStorage.getItem('hexcolony_room');
     if (remembered) {
       try {
         const data = await getRoomData(remembered, 5000);
-        if (data && !roomIsStale(data) && data.players?.[playerId]) {
+        if (data && !roomIsStale(data) && data.state !== 'over' && data.players?.[playerId]) {
           enterRoom(remembered);
           return;
         }
-        if (!data || roomIsStale(data)) localStorage.removeItem('hexcolony_room');
+        if (!data || roomIsStale(data) || data.state === 'over') localStorage.removeItem('hexcolony_room');
       } catch {
         // Preserve the remembered code when offline; the normal room listener
         // will reconnect and recover it instead of creating a duplicate.
@@ -6252,12 +6254,14 @@ window.HEXCOLONY = {
   }
 
   // Rejoin the room this device was last in — a locked phone killing the tab mid-game
-  // should not cost you your settlements.
+  // should not cost you your settlements. A finished game is excluded: it has nothing
+  // left to rejoin, and silently pulling somebody back into it is exactly wrong the
+  // moment they are trying to get into a different room instead.
   const last = localStorage.getItem('hexcolony_room');
   if (!last) return;
   try {
     const data = await getRoomData(last, 5000);
-    if (data && !roomIsStale(data) && data.players?.[playerId]) {
+    if (data && !roomIsStale(data) && data.state !== 'over' && data.players?.[playerId]) {
       enterRoom(last);
       toast(`Back in room ${last}`);
     } else {
