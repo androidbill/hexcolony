@@ -2907,6 +2907,7 @@ async function sendChat() {
     // Anything this device sent is by definition already read.
     chatSeenAt = Date.now();
     localStorage.setItem('hexcolony_chat_seen', String(chatSeenAt));
+    if (openSheet === 'sheet-chat') closeSheetAndRestoreResults();
   } catch (e) {
     console.error(e);
     toast('That message did not send.');
