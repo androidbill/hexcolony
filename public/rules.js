@@ -9,7 +9,7 @@
 // The engine is deliberately strict — it re-validates everything, because the client
 // that sends a move is the same untrusted device that drew the buttons.
 
-import { HEXES, VERTS, EDGES, RESOURCES, makeBoard, hexNeighbours, LAYOUT_INFO, layoutInfo, pips } from './board.js';
+import { HEXES, VERTS, EDGES, RESOURCES, makeBoard, hexNeighbours, hexDistance, LAYOUT_INFO, layoutInfo, pips } from './board.js';
 
 export const COSTS = {
   road:       { wood: 1, brick: 1 },
@@ -402,6 +402,10 @@ export function legalSettlements(g, pid, setupMode = false) {
     // to build a road off of — Newfoundland's desert being the one board that has this
     // at all. Never reachable again once placed, so never offered in the first place.
     if (v.hexes.length === 1 && hexNeighbours(v.hexes[0]).length === 0) continue;
+    // Newfoundland starts everyone on its inner wood ring, not wherever a road has not
+    // yet reached — the whole rest of the island is still fog at that point anyway.
+    if (setupMode && g.layout === 'newfoundland'
+      && !v.hexes.some((hi) => hexDistance(HEXES[hi].q, HEXES[hi].r) === 2)) continue;
     out.push(v.i);
   }
   return out;

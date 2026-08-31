@@ -451,7 +451,7 @@ function hexRing(radius) {
   return out;
 }
 
-function hexDistance(q, r) {
+export function hexDistance(q, r) {
   return (Math.abs(q) + Math.abs(q + r) + Math.abs(r)) / 2;
 }
 
