@@ -587,6 +587,10 @@ function normalizeRtdbGame(game) {
   game.pending.discard ||= {};
   game.pending.stealFrom ||= [];
   for (const p of Object.values(game.players || {})) p.vpCards ||= [];
+  // Same pruning, one level in: a trade nobody has answered yet has an empty `replies`,
+  // which is exactly the state it is in the instant it is made and everyone else's
+  // client first has to render it.
+  for (const t of game.trades) t.replies ||= {};
   return game;
 }
 
