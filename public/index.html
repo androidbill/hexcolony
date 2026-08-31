@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.31.01">
+<link rel="stylesheet" href="styles.css?v=2026.08.31.03">
 </head>
 <body>
 
@@ -137,7 +137,8 @@
         <div class="seg-row grid2">
           <button class="seg on" data-layout="classic">Classic &middot; 19</button>
           <button class="seg" data-layout="expansion">Expansion &middot; 30</button>
-          <button class="seg span2" data-layout="dynamic">Dynamic</button>
+          <button class="seg" data-layout="newfoundland">Newfoundland &middot; 31</button>
+          <button class="seg" data-layout="dynamic">Dynamic</button>
         </div>
         <!-- Only up when Dynamic is the choice: a size picker for a board nobody has
              picked is a row explaining itself to no one. -->
@@ -498,7 +499,8 @@
     <div class="seg-row grid2">
       <button class="seg on" data-solo-layout="classic">Classic &middot; 19</button>
       <button class="seg" data-solo-layout="expansion">Expansion &middot; 30</button>
-      <button class="seg span2" data-solo-layout="dynamic">Dynamic</button>
+      <button class="seg" data-solo-layout="newfoundland">Newfoundland &middot; 31</button>
+      <button class="seg" data-solo-layout="dynamic">Dynamic</button>
     </div>
     <div class="seg-row sub" id="solo-dyn-size-row" hidden>
       <button class="seg" data-solo-dynsize="30">30</button>
@@ -787,7 +789,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.31.01"></script>
-<script type="module" src="app.js?v=2026.08.31.01"></script>
+<script src="iro.min.js?v=2026.08.31.03"></script>
+<script type="module" src="app.js?v=2026.08.31.03"></script>
 </body>
 </html>

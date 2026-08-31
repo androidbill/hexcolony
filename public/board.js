@@ -284,6 +284,18 @@ export const LAYOUT_INFO = {
     bank: 24,
     dev: { knight: 20, vp: 6, road: 3, plenty: 3, mono: 2 },
   },
+  newfoundland: {
+    key: 'newfoundland',
+    label: 'Newfoundland',
+    tiles: 55,
+    blurb: 'A lone desert island ringed by open water, then two rings of forest with six '
+      + 'wood ports on their shore. Past the treeline stays foggy until someone reaches it.',
+    terrain: { forest: 30, hills: 6, pasture: 6, fields: 6, mountains: 6, desert: 1 },
+    tokens: { 2: 3, 3: 6, 4: 6, 5: 6, 6: 6, 8: 6, 9: 6, 10: 6, 11: 6, 12: 3 },
+    ports: 6,
+    bank: 33,
+    dev: { knight: 34, vp: 8, road: 6, plenty: 6, mono: 3 },
+  },
   // One entry per dynamic size. The bags and decks still come from dynamicInfo, which
   // works them out from the tile count; these exist so a picker, a room list and a blurb
   // can treat a dynamic board exactly like a fixed one.
@@ -419,9 +431,41 @@ function walkCoast(edges, vertices, coastEdges, coastSet) {
   return ring;
 }
 
+// ---------------------------------------------------------------- Newfoundland
+// A fixed shape, not a random one: a lone desert island, a ring of open water around
+// it, two rings of forest showing on the box, and one more ring the fog hides. See
+// newfoundlandTerrain/newfoundlandPorts below for how the rest of the board is decided.
+const RING_DIRS = [[1, 0], [1, -1], [0, -1], [-1, 0], [-1, 1], [0, 1]];
+
+/** Every hex exactly `radius` steps from the origin, walked ring by ring. */
+function hexRing(radius) {
+  if (radius === 0) return [{ q: 0, r: 0 }];
+  const out = [];
+  let q = RING_DIRS[4][0] * radius, r = RING_DIRS[4][1] * radius;
+  for (const [dq, dr] of RING_DIRS) {
+    for (let step = 0; step < radius; step++) {
+      out.push({ q, r });
+      q += dq; r += dr;
+    }
+  }
+  return out;
+}
+
+function hexDistance(q, r) {
+  return (Math.abs(q) + Math.abs(q + r) + Math.abs(r)) / 2;
+}
+
+// Ring 1 is left out on purpose: that gap of open water is what strands the desert on
+// its own island, and it is exactly where the forest ring's own six ports end up
+// floating, on the shore that actually borders it.
+function newfoundlandCoords() {
+  return [...hexRing(0), ...hexRing(2), ...hexRing(3), ...hexRing(4)];
+}
+
 const TOPOS = {
   classic: buildTopology(planCoords(ROW_PLANS.classic)),
   expansion: buildTopology(planCoords(ROW_PLANS.expansion)),
+  newfoundland: buildTopology(newfoundlandCoords()),
 };
 
 // These are `let` on purpose. Exported `let` bindings are live, so switching the layout
@@ -585,6 +629,48 @@ function classicBoard() {
 }
 
 /**
+ * The desert island and the two forest rings are fixed by the shape itself; only which
+ * of the four remaining resources falls where under the fog is drawn per seed.
+ */
+function newfoundlandTerrain(info, rng) {
+  const terrain = [];
+  const mysterySlots = [];
+  for (const h of HEXES) {
+    const dist = hexDistance(h.q, h.r);
+    if (dist === 0) terrain[h.i] = 'desert';
+    else if (dist === 2 || dist === 3) terrain[h.i] = 'forest';
+    else mysterySlots.push(h.i);
+  }
+  const { hills, pasture, fields, mountains } = info.terrain;
+  const bag = shuffled(terrainBag({ terrain: { hills, pasture, fields, mountains } }), rng);
+  mysterySlots.forEach((i, k) => { terrain[i] = bag[k]; });
+  return terrain;
+}
+
+/**
+ * Six ports evenly spaced along the shore the inner forest ring shares with the water
+ * around the desert island — not on the island's own tiny coast. That inner shore is
+ * its own closed loop, exactly like the outer coastline `placePorts` walks, so it is
+ * found and sampled the same way: every coastal edge belonging to a ring-2 hex is
+ * inward-facing by construction (a ring-2 hex's outward side always meets ring 3), so
+ * collecting them and walking the loop needs no direction test at all.
+ */
+function newfoundlandPorts() {
+  const innerEdges = HEXES
+    .filter((h) => hexDistance(h.q, h.r) === 2)
+    .flatMap((h) => h.edges)
+    .filter((edgeId) => EDGES[edgeId].hexes.length === 1);
+  const ring = walkCoast(EDGES, VERTS, innerEdges, new Set(innerEdges));
+  const count = Math.min(6, ring.length);
+  const slots = [];
+  for (let i = 0; i < count; i++) slots.push(ring[Math.round((i * ring.length) / count) % ring.length]);
+  return slots.map((edgeId) => {
+    const e = EDGES[edgeId];
+    return { edge: edgeId, a: e.a, b: e.b, kind: 'wood' };
+  });
+}
+
+/**
  * Build the full playing board from a seed. Deterministic: the same seed, mode and
  * layout produce byte-identical output on every device, which is why only those three
  * values travel over the wire.
@@ -619,15 +705,20 @@ function buildBoard(seed, mode, layout) {
   const info = layoutInfo(key, seed);
   const rng = mulberry32(seed);
 
-  let terrain, numbers;
-  // The fixed arrangement only exists for the classic island.
-  if (mode === 'classic' && key === 'classic') {
+  let terrain, numbers, ports;
+  if (key === 'newfoundland') {
+    terrain = newfoundlandTerrain(info, rng);
+    numbers = dealTokens(terrain, rng, info);
+    ports = newfoundlandPorts();
+  } else if (mode === 'classic' && key === 'classic') {
+    // The fixed arrangement only exists for the classic island.
     ({ terrain, numbers } = classicBoard());
+    ports = placePorts(rng, info);
   } else {
     terrain = shuffled(terrainBag(info), rng);
     numbers = dealTokens(terrain, rng, info);
+    ports = placePorts(rng, info);
   }
-  const ports = placePorts(rng, info);
   const robber = terrain.indexOf('desert');
 
   const tiles = HEXES.map((h) => ({

@@ -2095,6 +2095,11 @@ for (const b of document.querySelectorAll('[data-solo-layout]')) {
   b.addEventListener('click', () => {
     soloLayout = b.dataset.soloLayout === 'dynamic' ? `dyn${DYNAMIC_DEFAULT}` : b.dataset.soloLayout;
     localStorage.setItem('hexcolony_solo_layout', soloLayout);
+    // The whole point of Newfoundland is not knowing what is past the treeline yet.
+    if (soloLayout === 'newfoundland') {
+      soloFog = true;
+      localStorage.setItem('hexcolony_solo_fog', 'on');
+    }
     sfx.tap();
     drawSoloSheet();
   });
@@ -2249,7 +2254,10 @@ for (const b of document.querySelectorAll('[data-layout]')) {
     // "Dynamic" is not a layout on its own — it is three, one per size. Tapping it lands
     // on the middle one, and the size row underneath moves between them.
     const layout = b.dataset.layout === 'dynamic' ? `dyn${DYNAMIC_DEFAULT}` : b.dataset.layout;
-    if (setSetting({ 'settings.layout': layout })) sfx.tap();
+    const patch = { 'settings.layout': layout };
+    // The whole point of Newfoundland is not knowing what is past the treeline yet.
+    if (layout === 'newfoundland') patch['settings.fog'] = true;
+    if (setSetting(patch)) sfx.tap();
   });
 }
 

@@ -259,8 +259,16 @@ export function newGame(seats, settings, rng = Math.random) {
   // Fog of war: every hex starts hidden except the desert, which pays nothing and so
   // has nothing to hide. A hex is discovered for good the moment any settlement is
   // built against it — see discoverHexes below — and stays that way for everyone.
+  //
+  // Newfoundland is the one board where more than the desert is known going in: its two
+  // forest rings are the whole point of the picture on the box, not a surprise, so they
+  // start revealed too — only the mixed ring past them stays under the fog.
   const fog = !!settings.fog;
-  const discovered = fog ? startBoard.tiles.filter((t) => t.terrain === 'desert').map((t) => t.i) : [];
+  const discovered = fog
+    ? startBoard.tiles
+      .filter((t) => t.terrain === 'desert' || (layout === 'newfoundland' && t.terrain === 'forest'))
+      .map((t) => t.i)
+    : [];
 
   return {
     seed,
@@ -374,6 +382,10 @@ export function legalSettlements(g, pid, setupMode = false) {
     if (v.adj.some((n) => g.bldg[n])) continue;
     // Outside setup a settlement must touch one of your own roads.
     if (!setupMode && !v.edges.some((e) => g.roads[e] === pid)) continue;
+    // A vertex whose one hex has no hexes of its own touches an island with no shore
+    // to build a road off of — Newfoundland's desert being the one board that has this
+    // at all. Never reachable again once placed, so never offered in the first place.
+    if (v.hexes.length === 1 && hexNeighbours(v.hexes[0]).length === 0) continue;
     out.push(v.i);
   }
   return out;
