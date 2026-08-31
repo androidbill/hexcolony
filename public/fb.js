@@ -18,6 +18,9 @@ const SDK = 'https://www.gstatic.com/firebasejs/10.12.2';
 let db = null;
 let online = false;
 let fs = null;
+let rtdb = null;
+let rtdbMod = null;
+let rtdbOnline = false;
 
 try {
   // Install the proxy patches first: once Firestore opens a connection it is too late,
@@ -43,6 +46,23 @@ try {
 
   db = fsMod.initializeFirestore(app, settings);
   online = true;
+
+  // The Realtime Database side of the room-level backend switch. Optional and
+  // independent of Firestore: a project that has never turned RTDB on in the console
+  // has no `databaseURL`, and that is not an error — it just means every room stays on
+  // Firestore, same as before this existed. Reuses the Firestore `app` instance; RTDB
+  // is a second product under the same project, not a second project.
+  if (firebaseConfig.databaseURL) {
+    try {
+      const rtdbUrl = await remap(`${SDK}/firebase-database.js`);
+      rtdbMod = await import(rtdbUrl);
+      rtdb = rtdbMod.getDatabase(app, firebaseConfig.databaseURL);
+      rtdbOnline = true;
+    } catch (e) {
+      console.warn('HexColony: Realtime Database unavailable — the backend switch will '
+        + 'only offer Firestore.', e);
+    }
+  }
 } catch (e) {
   console.warn('HexColony: Firebase unavailable — online rooms are disabled, solo play '
     + 'still works.', e);
@@ -50,7 +70,9 @@ try {
 
 /** True when rooms can actually be created and joined. */
 export const NET_READY = online;
-export { db, IN_DISCORD };
+/** True when a room can be created on the Realtime Database side of the switch. */
+export const RTDB_READY = rtdbOnline;
+export { db, rtdb, IN_DISCORD };
 
 // Stand-ins used when Firebase never loaded. They reject rather than throw, because
 // every call site already handles a rejected promise but not a synchronous throw.
@@ -81,3 +103,20 @@ export const deleteField = fs ? fs.deleteField : (() => null);
 export const serverTimestamp = fs ? fs.serverTimestamp : (() => Date.now());
 export const disableNetwork = fs ? fs.disableNetwork : offline;
 export const enableNetwork = fs ? fs.enableNetwork : offline;
+
+// ---------------------------------------------------------------- realtime database
+// Named distinctly from their Firestore counterparts above (rtdbRef vs doc, rtdbGet vs
+// getDoc, ...) rather than overloaded, because a handful of call sites need to reach for
+// either one depending on which backend a given room is on — two same-named imports
+// from the same module would shadow each other.
+export const rtdbRef = rtdbMod ? rtdbMod.ref : (() => null);
+export const rtdbPush = rtdbMod ? rtdbMod.push : offline;
+export const rtdbGet = rtdbMod ? rtdbMod.get : offline;
+export const rtdbSet = rtdbMod ? rtdbMod.set : offline;
+export const rtdbUpdate = rtdbMod ? rtdbMod.update : offline;
+export const rtdbRemove = rtdbMod ? rtdbMod.remove : offline;
+export const rtdbOnValue = rtdbMod ? rtdbMod.onValue : noop();
+export const rtdbRunTransaction = rtdbMod ? rtdbMod.runTransaction : offline;
+export const rtdbServerTimestamp = rtdbMod ? rtdbMod.serverTimestamp : (() => Date.now());
+export const rtdbGoOffline = rtdbMod ? () => rtdbMod.goOffline(rtdb) : offline;
+export const rtdbGoOnline = rtdbMod ? () => rtdbMod.goOnline(rtdb) : offline;

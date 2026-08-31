@@ -16,6 +16,8 @@ import {
   deleteField, deleteDoc, serverTimestamp, runTransaction,
   collection, query, where, limit, orderBy, addDoc,
   disableNetwork, enableNetwork,
+  rtdb, RTDB_READY, rtdbRef, rtdbGet, rtdbSet, rtdbUpdate, rtdbRemove, rtdbPush,
+  rtdbOnValue, rtdbRunTransaction, rtdbServerTimestamp,
 } from './fb.js';
 import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { findBadWord, maskText } from './clean.js';
@@ -482,17 +484,35 @@ async function pickColour(idx) {
   }
 
   try {
-    await withTimeout(runTransaction(db, async (tx) => {
-      const snap = await tx.get(roomRef);
-      if (!snap.exists()) throw new Error('gone');
-      const players = snap.data().players || {};
-      // The whole reason this is a transaction: two phones can tap the same square in
-      // the same instant, and a plain write would let both of them have it.
-      for (const [id, p] of Object.entries(players)) {
-        if (id !== playerId && p.colorIdx === idx) throw new Error('taken');
-      }
-      tx.update(roomRef, { [`players.${playerId}.colorIdx`]: idx });
-    }), 8000);
+    if (roomRef.backend === 'rtdb') {
+      // The update function's return value is what decides the outcome here, not a
+      // thrown error — RTDB's own transaction runner treats a throw from inside as
+      // "abort silently", not "reject the promise with this", so the reason has to
+      // travel out through a variable the closure can see instead.
+      let colourRejected = null;
+      await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
+        if (!data) { colourRejected = 'gone'; return; }
+        const players = data.players || {};
+        for (const [id, p] of Object.entries(players)) {
+          if (id !== playerId && p.colorIdx === idx) { colourRejected = 'taken'; return; }
+        }
+        data.players[playerId].colorIdx = idx;
+        return data;
+      }, { applyLocally: false }), 8000);
+      if (colourRejected) throw new Error(colourRejected);
+    } else {
+      await withTimeout(runTransaction(db, async (tx) => {
+        const snap = await tx.get(roomRef);
+        if (!snap.exists()) throw new Error('gone');
+        const players = snap.data().players || {};
+        // The whole reason this is a transaction: two phones can tap the same square in
+        // the same instant, and a plain write would let both of them have it.
+        for (const [id, p] of Object.entries(players)) {
+          if (id !== playerId && p.colorIdx === idx) throw new Error('taken');
+        }
+        tx.update(roomRef, { [`players.${playerId}.colorIdx`]: idx });
+      }), 8000);
+    }
     myColorIdx = idx;
     localStorage.setItem('hexcolony_color', String(idx));
     // Claiming one is the whole job of this sheet, so it gets out of the way.
@@ -520,7 +540,36 @@ function syncColourPicker() {
   if (openSheet === 'sheet-colour') drawColourGrid();
 }
 
-function makeCode() { return WORD_CODES[Math.floor(Math.random() * WORD_CODES.length)]; }
+// Firestore's own validRoomId rule requires exactly four letters, and the RTDB shape
+// below is built out of the same word — so the four-letter filter that used to live at
+// the one call site this had now lives here, where every caller gets it for free.
+function makeCode() {
+  let w = WORD_CODES[Math.floor(Math.random() * WORD_CODES.length)];
+  while (w.length !== 4) w = WORD_CODES[Math.floor(Math.random() * WORD_CODES.length)];
+  return w;
+}
+
+// The room-level backend switch: which database a room's data actually lives in, picked
+// once by whoever creates it. Told apart by the code's own shape, the same way a Discord
+// Activity room (prefixed 'D') is already told apart from a typed one — an RTDB room's
+// code is a normal four-letter word with 'R' in front of it, so joining by code never has
+// to guess which database to ask, or ask both.
+function roomBackendOf(code) {
+  return typeof code === 'string' && code[0] === 'R' && code.length === 5 ? 'rtdb' : 'firestore';
+}
+function makeRoomCode(backend) {
+  return backend === 'rtdb' ? `R${makeCode()}` : makeCode();
+}
+
+/** The room's current data, or null if there is none — whichever database it is on. */
+async function getRoomData(code, timeoutMs = 5000) {
+  if (roomBackendOf(code) === 'rtdb') {
+    const snap = await withTimeout(rtdbGet(rtdbRef(rtdb, `rooms/${code}`)), timeoutMs);
+    return snap.exists() ? snap.val() : null;
+  }
+  const snap = await withTimeout(getDoc(doc(db, 'rooms', code)), timeoutMs);
+  return snap.exists() ? snap.data() : null;
+}
 
 function roomIsStale(data) {
   if (!data) return true;
@@ -549,13 +598,13 @@ async function createRoom() {
   localStorage.setItem('hexcolony_name', name);
   $('btn-rooms-create').disabled = true;
   try {
-    // A cellular handoff can make the previous create look failed even after
-    // Firestore accepted it. Rejoin the remembered room before creating another.
+    // A cellular handoff can make the previous create look failed even after it was
+    // actually accepted. Rejoin the remembered room before creating another — whichever
+    // database it turns out to be on, read straight off its own code shape.
     const remembered = localStorage.getItem('hexcolony_room');
     if (remembered) {
       try {
-        const existing = await withTimeout(getDoc(doc(db, 'rooms', remembered)), 5000);
-        const data = existing.exists() ? existing.data() : null;
+        const data = await getRoomData(remembered, 5000);
         if (data && !roomIsStale(data) && data.players?.[playerId]) {
           enterRoom(remembered);
           return;
@@ -568,13 +617,13 @@ async function createRoom() {
         return;
       }
     }
+    const backend = RTDB_READY ? createBackend : 'firestore';
     let code = null;
     for (let i = 0; i < 12; i++) {
-      const candidate = makeCode();
-      if (candidate.length !== 4) continue;
+      const candidate = makeRoomCode(backend);
       try {
-        const snap = await withTimeout(getDoc(doc(db, 'rooms', candidate)), 4000);
-        if (!snap.exists() || roomIsStale(snap.data())) { code = candidate; break; }
+        const data = await getRoomData(candidate, 4000);
+        if (!data || roomIsStale(data)) { code = candidate; break; }
       } catch {
         // The lookup hung on a flaky connection. Take the code rather than stall.
         code = candidate;
@@ -585,7 +634,7 @@ async function createRoom() {
 
     // Fire the write and enter immediately; the live listener confirms it. Waiting on
     // a server ack that a phone connection might swallow is how lobbies feel broken.
-    setDoc(doc(db, 'rooms', code), {
+    const roomData = {
       code,
       createdAt: Date.now(),
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
@@ -595,13 +644,20 @@ async function createRoom() {
       players: { [playerId]: freshPlayer(name) },
       order: [],
       game: null,
-    }).catch((e) => {
+    };
+    const onCreateFail = (e) => {
       console.error(e);
       toast('Could not create the room — check your connection.');
       // Nothing is coming. Without this the host waits in a lobby for a room that was
       // never written, which the guard above would otherwise keep them in indefinitely.
       if (roomCode === code) leaveRoom(false);
-    });
+    };
+    if (backend === 'rtdb') {
+      rtdbSet(rtdbRef(rtdb, `rooms/${code}`), { ...roomData, expiresAt: roomData.expiresAt.getTime() })
+        .catch(onCreateFail);
+    } else {
+      setDoc(doc(db, 'rooms', code), roomData).catch(onCreateFail);
+    }
     sfx.join();
     enterRoom(code);
   } finally {
@@ -623,13 +679,12 @@ async function joinCode(code, btn = null) {
   if (!name) return;
   localStorage.setItem('hexcolony_name', name);
   if (btn) btn.disabled = true;
+  const backend = roomBackendOf(code);
   try {
-    const ref = doc(db, 'rooms', code);
     let data = null;
     try {
-      const snap = await withTimeout(getDoc(ref), 6000);
-      if (!snap.exists()) return toast(`Room ${code} not found.`);
-      data = snap.data();
+      data = await getRoomData(code, 6000);
+      if (!data) return toast(`Room ${code} not found.`);
       if (roomIsStale(data)) return toast(`Room ${code} has expired — ask for a new code.`);
     } catch {
       // Lookup hung; join optimistically and let the listener bounce us if it's wrong.
@@ -642,7 +697,11 @@ async function joinCode(code, btn = null) {
       if (Object.keys(data.players || {}).length >= R.MAX_PLAYERS) return toast('That room is full.');
     }
     if (!data || !data.players?.[playerId]) {
-      updateDoc(ref, { [`players.${playerId}`]: freshPlayer(name) }).catch(() => {});
+      if (backend === 'rtdb') {
+        rtdbUpdate(rtdbRef(rtdb, `rooms/${code}`), { [`players/${playerId}`]: freshPlayer(name) }).catch(() => {});
+      } else {
+        updateDoc(doc(db, 'rooms', code), { [`players.${playerId}`]: freshPlayer(name) }).catch(() => {});
+      }
     }
     sfx.join();
     enterRoom(code);
@@ -852,6 +911,23 @@ $('btn-rooms-create').addEventListener('click', () => {
   if (unsubRooms) { unsubRooms(); unsubRooms = null; }
   createRoom();
 });
+
+// The room-level backend switch. Whoever creates the room picks it once, here; everyone
+// who joins afterwards just plays, whichever database it turned out to be — see
+// roomBackendOf, which reads the choice back off the room code's own shape. Firestore is
+// the default: it is what every room has always used, and RTDB is the fallback for the
+// day Firestore's own quota runs out from under a room already being created.
+let createBackend = 'firestore';
+if (RTDB_READY) $('backend-row').hidden = false;
+$('backend-row').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-backend]');
+  if (!b) return;
+  createBackend = b.dataset.backend;
+  for (const seg of $('backend-row').querySelectorAll('[data-backend]')) {
+    seg.classList.toggle('on', seg === b);
+  }
+  sfx.tap();
+});
 $('room-list').addEventListener('click', (e) => {
   const card = e.target.closest('[data-room]');
   if (!card || card.disabled) return;
@@ -1024,6 +1100,24 @@ function subscribePulse() {
 function subscribeRoom() {
   if (!roomRef) return;
   if (unsub) { unsub(); unsub = null; }
+  if (roomRef.backend === 'rtdb') {
+    // RTDB's web SDK has no offline cache by default, so unlike Firestore there is no
+    // "was this from the cache" question to ask — every delivery here is live.
+    unsub = rtdbOnValue(roomRef.ref, (snap) => {
+      if (!snap.exists()) {
+        if (!sawRoomDoc) return;
+        toast('The room was closed.');
+        leaveRoom(false);
+        return;
+      }
+      sawRoomDoc = true;
+      applyRoom(snap.val(), true);
+    }, (err) => {
+      console.error(err);
+      setTimeout(() => resubscribe(true), 1500);
+    });
+    return;
+  }
   // includeMetadataChanges is what lets us tell a real server delivery from a cache
   // replay. Without it, re-attaching a listener always looks healthy even when the
   // connection underneath is dead — which is exactly how phones get stuck.
@@ -1123,8 +1217,13 @@ async function writePulse(force = false) {
       pulseUnavailable();
     }
   }
-  try { await updateDoc(roomRef, { pulseAt: serverTimestamp(), pulseBy: playerId }); }
-  catch { /* fine */ }
+  try {
+    if (roomRef.backend === 'rtdb') {
+      await rtdbUpdate(roomRef.ref, { pulseAt: rtdbServerTimestamp(), pulseBy: playerId });
+    } else {
+      await updateDoc(roomRef, { pulseAt: serverTimestamp(), pulseBy: playerId });
+    }
+  } catch { /* fine */ }
 }
 
 function healthCheck() {
@@ -1151,8 +1250,15 @@ function healthCheck() {
 function enterRoom(code) {
   sawRoomDoc = false;
   roomCode = code;
-  roomRef = doc(db, 'rooms', code);
-  pulseRef = doc(db, 'pulses', code);
+  if (roomBackendOf(code) === 'rtdb') {
+    roomRef = { backend: 'rtdb', code, ref: rtdbRef(rtdb, `rooms/${code}`) };
+    // RTDB pulse rides on the room object itself rather than a sibling document — see
+    // writePulse. There is no separate collection to hold a lock on.
+    pulseRef = null;
+  } else {
+    roomRef = doc(db, 'rooms', code);
+    pulseRef = doc(db, 'pulses', code);
+  }
   localStorage.setItem('hexcolony_room', code);
   const now = Date.now();
   lastFreshAt = now; lastPulseSeenAt = now;
@@ -1185,41 +1291,68 @@ async function leaveRoom(removeSelf = true) {
 
   if (removeSelf && ref && room) {
     try {
-      if (!others.length || isHost) {
+      if (ref.backend === 'rtdb') {
+        if (!others.length || isHost) {
+          await rtdbRemove(ref.ref);
+        } else if (wasPlaying) {
+          await rtdbRunTransaction(ref.ref, (data) => {
+            if (!data) return data;
+            delete data.players[playerId];
+            if (data.hostId === playerId) data.hostId = others[0];
+            if (data.game) {
+              const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId });
+              if (res.ok) {
+                data.game = res.game;
+                if (res.game.phase === 'over') {
+                  data.state = 'over';
+                  if (!data.endedAt) data.endedAt = rtdbServerTimestamp();
+                }
+                if (res.game.turn.clockRestart) {
+                  res.game.turn.clockRestart = false;
+                  data.turnStartedAt = rtdbServerTimestamp();
+                }
+              }
+            }
+            return data;
+          }, { applyLocally: false });
+        } else {
+          const patch = { [`players/${playerId}`]: null };
+          if (room.hostId === playerId) patch.hostId = others[0];
+          await rtdbUpdate(ref.ref, patch);
+        }
+      } else if (!others.length || isHost) {
         // The creator owns the table: leaving shuts it down for everyone and frees
         // the code immediately, rather than transferring a room that can linger.
         await deleteDoc(ref);
         if (pulseRef) deleteDoc(pulseRef).catch(() => {});
-      } else {
-        if (wasPlaying) {
-          // Hand the seat to the engine so the turn never waits on a phone that left.
-          await runTransaction(db, async (tx) => {
-            const snap = await tx.get(ref);
-            if (!snap.exists()) return;
-            const data = snap.data();
-            const patch = { [`players.${playerId}`]: deleteField() };
-            if (data.hostId === playerId) patch.hostId = others[0];
-            if (data.game) {
-              const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId });
-              if (res.ok) {
-                patch.game = res.game;
-                if (res.game.phase === 'over') {
-                  patch.state = 'over';
-                  if (!data.endedAt) patch.endedAt = serverTimestamp();
-                }
-                if (res.game.turn.clockRestart) {
-                  res.game.turn.clockRestart = false;
-                  patch.turnStartedAt = serverTimestamp();
-                }
+      } else if (wasPlaying) {
+        // Hand the seat to the engine so the turn never waits on a phone that left.
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(ref);
+          if (!snap.exists()) return;
+          const data = snap.data();
+          const patch = { [`players.${playerId}`]: deleteField() };
+          if (data.hostId === playerId) patch.hostId = others[0];
+          if (data.game) {
+            const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId });
+            if (res.ok) {
+              patch.game = res.game;
+              if (res.game.phase === 'over') {
+                patch.state = 'over';
+                if (!data.endedAt) patch.endedAt = serverTimestamp();
+              }
+              if (res.game.turn.clockRestart) {
+                res.game.turn.clockRestart = false;
+                patch.turnStartedAt = serverTimestamp();
               }
             }
-            tx.update(ref, patch);
-          });
-        } else {
-          const patch = { [`players.${playerId}`]: deleteField() };
-          if (room.hostId === playerId) patch.hostId = others[0];
-          await updateDoc(ref, patch);
-        }
+          }
+          tx.update(ref, patch);
+        });
+      } else {
+        const patch = { [`players.${playerId}`]: deleteField() };
+        if (room.hostId === playerId) patch.hostId = others[0];
+        await updateDoc(ref, patch);
       }
     } catch { /* best effort — walking out must never hang */ }
   }
@@ -1298,45 +1431,75 @@ async function postMove(move, opts, drew, era) {
   if (!roomRef) return false;
   let rejected = null;
   try {
-    await withTimeout(runTransaction(db, async (tx) => {
-      const snap = await tx.get(roomRef);
-      if (!snap.exists()) { rejected = 'The room is gone.'; return; }
-      const data = snap.data();
-      if (!data.game) { rejected = 'The game has not started.'; return; }
-      const res = R.applyMove(data.game, playerId, move);
-      if (!res.ok) { rejected = res.error; return; }
-      const patch = { game: res.game };
-      if (res.game.phase === 'over') {
-        patch.state = 'over';
-        // Only on the move that ends it, and only if nothing has stamped it yet, so the
-        // length everybody reads is the same length and does not creep while the results
-        // are on screen.
-        if (!data.endedAt) patch.endedAt = serverTimestamp();
-      }
-      // Offers are stamped by Firestore, never by this phone. The engine cannot do it —
-      // it has no clock — and a deadline one handset worked out is exactly the thing that
-      // goes wrong when that handset's clock has drifted, which on a sleeping iPhone it
-      // routinely has. Written by field path because a sentinel cannot go inside the
-      // array the offers live in.
-      //
-      // Derived from what actually changed rather than from the move type, so accepting,
-      // declining, expiring, withdrawing and the turn ending are all covered without any
-      // of them having to remember to tidy up.
-      const had = new Set((data.game.trades || []).map((t) => t.id));
-      const has = new Set((res.game.trades || []).map((t) => t.id));
-      for (const id of has) if (!had.has(id)) patch[`tradeDeadlines.${id}`] = serverTimestamp();
-      for (const id of Object.keys(data.tradeDeadlines || {})) {
-        if (!has.has(Number(id))) patch[`tradeDeadlines.${id}`] = deleteField();
-      }
-      // The engine says the allowance restarts; Firestore says when. Stamping it
-      // server-side is what stops a device with a wrong clock poisoning the deadline
-      // for everyone — no client's idea of "now" ever reaches the shared state.
-      if (res.game.turn.clockRestart) {
-        res.game.turn.clockRestart = false;
-        patch.turnStartedAt = serverTimestamp();
-      }
-      tx.update(roomRef, patch);
-    }), 15000);
+    if (roomRef.backend === 'rtdb') {
+      // RTDB's transaction hands back the whole subtree and wants the whole new subtree
+      // back — there is no field-path patch the way Firestore's tx.update takes. So the
+      // merge that Firestore does server-side (dotted paths onto the existing document)
+      // is done here instead, on the snapshot the transaction itself hands in, and the
+      // full result is what gets returned.
+      await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
+        if (data === null) { rejected = 'The room is gone.'; return data; }
+        if (!data.game) { rejected = 'The game has not started.'; return; }
+        const had = new Set((data.game.trades || []).map((t) => t.id));
+        const res = R.applyMove(data.game, playerId, move);
+        if (!res.ok) { rejected = res.error; return; }
+        data.game = res.game;
+        if (res.game.phase === 'over') {
+          data.state = 'over';
+          if (!data.endedAt) data.endedAt = rtdbServerTimestamp();
+        }
+        const has = new Set((res.game.trades || []).map((t) => t.id));
+        const deadlines = { ...(data.tradeDeadlines || {}) };
+        for (const id of has) if (!had.has(id)) deadlines[id] = rtdbServerTimestamp();
+        for (const id of Object.keys(deadlines)) if (!has.has(Number(id))) delete deadlines[id];
+        data.tradeDeadlines = deadlines;
+        if (res.game.turn.clockRestart) {
+          res.game.turn.clockRestart = false;
+          data.turnStartedAt = rtdbServerTimestamp();
+        }
+        return data;
+      }, { applyLocally: false }), 15000);
+    } else {
+      await withTimeout(runTransaction(db, async (tx) => {
+        const snap = await tx.get(roomRef);
+        if (!snap.exists()) { rejected = 'The room is gone.'; return; }
+        const data = snap.data();
+        if (!data.game) { rejected = 'The game has not started.'; return; }
+        const res = R.applyMove(data.game, playerId, move);
+        if (!res.ok) { rejected = res.error; return; }
+        const patch = { game: res.game };
+        if (res.game.phase === 'over') {
+          patch.state = 'over';
+          // Only on the move that ends it, and only if nothing has stamped it yet, so the
+          // length everybody reads is the same length and does not creep while the results
+          // are on screen.
+          if (!data.endedAt) patch.endedAt = serverTimestamp();
+        }
+        // Offers are stamped by Firestore, never by this phone. The engine cannot do it —
+        // it has no clock — and a deadline one handset worked out is exactly the thing that
+        // goes wrong when that handset's clock has drifted, which on a sleeping iPhone it
+        // routinely has. Written by field path because a sentinel cannot go inside the
+        // array the offers live in.
+        //
+        // Derived from what actually changed rather than from the move type, so accepting,
+        // declining, expiring, withdrawing and the turn ending are all covered without any
+        // of them having to remember to tidy up.
+        const had = new Set((data.game.trades || []).map((t) => t.id));
+        const has = new Set((res.game.trades || []).map((t) => t.id));
+        for (const id of has) if (!had.has(id)) patch[`tradeDeadlines.${id}`] = serverTimestamp();
+        for (const id of Object.keys(data.tradeDeadlines || {})) {
+          if (!has.has(Number(id))) patch[`tradeDeadlines.${id}`] = deleteField();
+        }
+        // The engine says the allowance restarts; Firestore says when. Stamping it
+        // server-side is what stops a device with a wrong clock poisoning the deadline
+        // for everyone — no client's idea of "now" ever reaches the shared state.
+        if (res.game.turn.clockRestart) {
+          res.game.turn.clockRestart = false;
+          patch.turnStartedAt = serverTimestamp();
+        }
+        tx.update(roomRef, patch);
+      }), 15000);
+    }
   } catch (e) {
     console.error(e);
     rejected = 'That did not go through — check your connection.';
@@ -1362,6 +1525,38 @@ async function postMove(move, opts, drew, era) {
 const mapSeedNow = () => room?.mapSeeds?.[room?.mapIndex ?? 0] ?? null;
 const newSeed = () => Math.floor(Math.random() * 2 ** 31);
 
+/**
+ * A field-value patch to `roomRef`, whichever backend it is on.
+ *
+ * Only for patches with no server-timestamp sentinel in them — Firestore's and RTDB's
+ * are different objects, so a patch that needs one is still built per backend at the
+ * call site. Keys that are plain top-level fields are safe verbatim on both. Keys with
+ * a nested path use Firestore's own dotted convention already (`settings.sea`), which
+ * this converts to RTDB's slashed one (`settings/sea`) rather than asking every call
+ * site to know which separator its own room is using.
+ */
+async function updateRoom(patch) {
+  if (roomRef.backend === 'rtdb') {
+    const rtdbPatch = {};
+    for (const [k, v] of Object.entries(patch)) rtdbPatch[k.replace(/\./g, '/')] = v;
+    return rtdbUpdate(roomRef.ref, rtdbPatch);
+  }
+  return updateDoc(roomRef, patch);
+}
+
+/**
+ * True, and says so, for a feature that only runs against Firestore so far — pause,
+ * rematch, kicking a player, and the automatic turn-timeout all still reach for
+ * `updateDoc`/`runTransaction` directly rather than through `updateRoom`. Called at the
+ * top of each so an RTDB room gets one clear sentence instead of a raw SDK error the
+ * first time somebody taps one of these.
+ */
+function notYetOnRtdb() {
+  if (roomRef?.backend !== 'rtdb') return false;
+  toast('Not available yet in a Realtime Database room.');
+  return true;
+}
+
 async function beginMapChoice() {
   if (!isHost()) return toast('Only the host can start.');
   if (!solo) {
@@ -1376,7 +1571,7 @@ async function beginMapChoice() {
   if (room.settings?.fog) return startGameWithSeed(newSeed());
   const patch = { state: 'map', mapSeeds: [newSeed()], mapIndex: 0 };
   if (solo) { Object.assign(room, patch); render(); return; }
-  try { await updateDoc(roomRef, patch); }
+  try { await updateRoom(patch); }
   catch { toast('Could not open the map picker.'); }
 }
 
@@ -1395,14 +1590,14 @@ async function stepMap(dir) {
   sfx.tap();
   const patch = { mapSeeds: seeds, mapIndex: idx };
   if (solo) { Object.assign(room, patch); render(); return; }
-  try { await updateDoc(roomRef, patch); } catch { /* the next tap will retry */ }
+  try { await updateRoom(patch); } catch { /* the next tap will retry */ }
 }
 
 async function backToLobby() {
   if (!isHost()) return;
   sfx.tap();
   if (solo) { room.state = 'lobby'; render(); return; }
-  try { await updateDoc(roomRef, { state: 'lobby' }); } catch { /* fine */ }
+  try { await updateRoom({ state: 'lobby' }); } catch { /* fine */ }
 }
 
 async function acceptMap() {
@@ -1447,16 +1642,18 @@ async function startGameWithSeed(seed) {
   // exactly as it does for every later turn.
   game.turn.clockRestart = false;
   try {
-    await updateDoc(roomRef, {
-      state: 'playing', order, game, turnStartedAt: serverTimestamp(),
-      // The clock the finished game is measured against. Firestore stamps it, like every
+    const stamp = roomRef.backend === 'rtdb' ? rtdbServerTimestamp : serverTimestamp;
+    const patch = {
+      state: 'playing', order, game, turnStartedAt: stamp(),
+      // The clock the finished game is measured against. The server stamps it, like every
       // other time in this app: turnStartedAt is overwritten on every turn, so it cannot
       // be the one, and no phone's idea of when the game began should reach the room.
-      startedAt: serverTimestamp(), endedAt: null,
+      startedAt: stamp(), endedAt: null,
       // Offer ids restart at 1 with the new game, so last game's stamps would be read as
       // this game's deadlines.
       tradeDeadlines: {},
-    });
+    };
+    await updateRoom(patch);
   } catch (e) {
     console.error(e);
     toast('Could not start — check your connection.');
@@ -2096,7 +2293,7 @@ function setSetting(patch) {
     render();
     return true;
   }
-  updateDoc(roomRef, patch).catch(() => {});
+  updateRoom(patch).catch(() => {});
   return true;
 }
 
@@ -2160,7 +2357,10 @@ function renderLobby() {
       e.stopPropagation();
       const who = b.dataset.kick;
       sfx.tap();
-      updateDoc(roomRef, { [`players.${who}`]: deleteField() })
+      const removal = roomRef.backend === 'rtdb'
+        ? rtdbUpdate(roomRef.ref, { [`players/${who}`]: null })
+        : updateDoc(roomRef, { [`players.${who}`]: deleteField() });
+      removal
         .then(() => toast(`${nameFor(who)} removed.`))
         .catch(() => toast('Could not remove them — check your connection.'));
     });
@@ -2478,6 +2678,9 @@ const CHAT_POS_KEY = 'hexcolony_chat_position';
 
 let unsubChat = null;
 let chatLog = [];
+// RTDB's onValue delivers the whole list on every change rather than Firestore's
+// per-document docChanges(), so "which of these are new" is tracked here instead.
+let chatSeenIds = new Set();
 let chatSeenAt = Number(localStorage.getItem('hexcolony_chat_seen') || 0);
 let chatUnread = 0;
 let chatPrimed = false;
@@ -2580,6 +2783,36 @@ function subscribeChat() {
   if (unsubChat) { unsubChat(); unsubChat = null; }
   if (!roomCode || solo || !NET_READY) return;
   chatPrimed = false;
+  const onChatSnapshot = (rows) => {
+    const newIds = new Set(rows.map((m) => m.id));
+    const chatWasOpen = openSheet === 'sheet-chat';
+    if (chatPrimed && !chatWasOpen) {
+      for (const m of rows) {
+        if (chatSeenIds.has(m.id) || m.by === playerId) continue;
+        unlock();
+        sfx.yourTurn();
+        buzz([35]);
+        toast(`${m.name || 'Someone'} sent a message in game chat.`);
+      }
+    }
+    chatSeenIds = newIds;
+    chatLog = rows;
+    if (chatWasOpen) markChatRead(); else countUnread();
+    chatPrimed = true;
+    if (chatWasOpen) drawChat();
+    renderChatButton();
+  };
+  if (roomBackendOf(roomCode) === 'rtdb') {
+    unsubChat = rtdbOnValue(rtdbRef(rtdb, `rooms/${roomCode}/chat`), (snap) => {
+      const val = snap.val() || {};
+      const rows = Object.entries(val)
+        .map(([id, m]) => ({ id, ...m }))
+        .sort((a, b) => (a.at || 0) - (b.at || 0))
+        .slice(-CHAT_KEEP);
+      onChatSnapshot(rows);
+    }, (err) => console.error('chat', err));
+    return;
+  }
   // One orderBy on one field, no filter: served by the automatic index, no composite
   // needed. Newest first so the limit keeps the newest, then flipped for reading.
   const q = query(
@@ -2588,23 +2821,7 @@ function subscribeChat() {
     limit(CHAT_KEEP),
   );
   unsubChat = onSnapshot(q, (snap) => {
-    chatLog = snap.docs.map((d) => ({ id: d.id, ...d.data() })).reverse();
-    const chatWasOpen = openSheet === 'sheet-chat';
-    if (chatWasOpen) markChatRead();
-    else countUnread();
-    if (chatPrimed && !chatWasOpen) {
-      for (const change of snap.docChanges()) {
-        if (change.type !== 'added' || change.doc.data()?.by === playerId) continue;
-        const sender = change.doc.data()?.name || 'Someone';
-        unlock();
-        sfx.yourTurn();
-        buzz([35]);
-        toast(`${sender} sent a message in game chat.`);
-      }
-    }
-    chatPrimed = true;
-    if (chatWasOpen) drawChat();
-    renderChatButton();
+    onChatSnapshot(snap.docs.map((d) => ({ id: d.id, ...d.data() })).reverse());
   }, (err) => console.error('chat', err));
 }
 
@@ -2754,14 +2971,21 @@ async function sendChat() {
 
   input.value = '';
   try {
-    await withTimeout(addDoc(collection(db, 'rooms', roomCode, 'chat'), {
+    const message = {
       by: playerId,
       // The room already holds a name that passed the check when it was set; the box can
       // have been edited since.
       name: room?.players?.[playerId]?.name || (findBadWord(myName()) ? 'Someone' : myName()) || 'Someone',
       text,
-      at: serverTimestamp(),
-    }), 8000);
+    };
+    if (roomBackendOf(roomCode) === 'rtdb') {
+      await withTimeout(rtdbSet(
+        rtdbPush(rtdbRef(rtdb, `rooms/${roomCode}/chat`)),
+        { ...message, at: rtdbServerTimestamp() },
+      ), 8000);
+    } else {
+      await withTimeout(addDoc(collection(db, 'rooms', roomCode, 'chat'), { ...message, at: serverTimestamp() }), 8000);
+    }
     // Anything this device sent is by definition already read.
     chatSeenAt = Date.now();
     localStorage.setItem('hexcolony_chat_seen', String(chatSeenAt));
@@ -2919,6 +3143,7 @@ function openPause() {
 
 async function requestPause(duration) {
   if (!roomRef || solo || room?.state !== 'playing') return;
+  if (notYetOnRtdb()) return;
   if (room.pause?.status === 'pending' || pauseIsActive()) return toast('A pause is already in progress.');
   try {
     await updateDoc(roomRef, {
@@ -2946,12 +3171,14 @@ async function acceptPause() {
 
 async function declinePause() {
   if (!roomRef || room?.pause?.status !== 'pending') return;
+  if (notYetOnRtdb()) return;
   try { await updateDoc(roomRef, { pause: null }); }
   catch { toast('Could not cancel the pause.'); }
 }
 
 async function resumePause() {
   if (!roomRef || room?.pause?.status !== 'active' || room.pause.requestedBy !== playerId) return;
+  if (notYetOnRtdb()) return;
   try { await updateDoc(roomRef, { pause: { ...room.pause, status: 'resuming', resumingAt: serverTimestamp() } }); }
   catch { toast('Could not resume the game.'); }
 }
@@ -5167,6 +5394,7 @@ function openRematchPrompt() {
 
 async function requestRematch() {
   if (solo || !roomRef || !room || room.state !== 'over') return;
+  if (notYetOnRtdb()) return;
   try {
     await withTimeout(runTransaction(db, async (tx) => {
       const snap = await tx.get(roomRef);
@@ -6120,8 +6348,8 @@ window.HEXCOLONY = {
   const last = localStorage.getItem('hexcolony_room');
   if (!last) return;
   try {
-    const snap = await withTimeout(getDoc(doc(db, 'rooms', last)), 5000);
-    if (snap.exists() && !roomIsStale(snap.data()) && snap.data().players?.[playerId]) {
+    const data = await getRoomData(last, 5000);
+    if (data && !roomIsStale(data) && data.players?.[playerId]) {
       enterRoom(last);
       toast(`Back in room ${last}`);
     } else {

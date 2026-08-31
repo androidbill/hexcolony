@@ -1,0 +1,27 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "rooms": {
+      "$code": {
+        "chat": {
+          "$msg": {
+            ".read": "$code.matches(/^R[A-Z]{4}$/)",
+            ".write": "$code.matches(/^R[A-Z]{4}$/)",
+            ".validate": "newData.hasChildren(['by', 'name', 'text', 'at'])
+              && newData.child('text').isString()
+              && newData.child('text').val().length > 0
+              && newData.child('text').val().length <= 140
+              && newData.child('name').isString()
+              && newData.child('name').val().length <= 14"
+          }
+        },
+
+        ".read": "$code.matches(/^R[A-Z]{4}$/)",
+        ".write": "$code.matches(/^R[A-Z]{4}$/)",
+        ".validate": "newData.hasChildren(['code', 'state', 'players'])"
+      }
+    }
+  }
+}
