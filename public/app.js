@@ -933,6 +933,7 @@ $('kebab-database').addEventListener('click', () => {
   createBackend = createBackend === 'firestore' ? 'rtdb' : 'firestore';
   renderBackendChoice();
   sfx.tap();
+  closeKebab();
 });
 $('room-list').addEventListener('click', (e) => {
   const card = e.target.closest('[data-room]');
