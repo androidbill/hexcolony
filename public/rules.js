@@ -210,18 +210,9 @@ function discoverHexes(g, v) {
   }
 }
 
-/**
- * What brings a hex out of the fog differs by map. Everywhere else it is a settlement,
- * landing on the vertex that gets built. Newfoundland is the one board where the wood
- * is already known going in — it is a road reaching further out that matters there, so
- * both ends of the new road are what get checked instead.
- */
-function discoverAtSettlement(g, v) {
-  if (g.layout === 'newfoundland') return;
-  discoverHexes(g, v);
-}
+/** A road reveals whatever hexes sit at either end of it — the far one newly, the near
+ * one always already discovered, so checking both costs nothing extra. */
 function discoverAtRoad(g, e) {
-  if (g.layout !== 'newfoundland') return;
   discoverHexes(g, EDGES[e].a);
   discoverHexes(g, EDGES[e].b);
 }
@@ -879,7 +870,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!legalSettlements(g, pid, true).includes(v)) return fail('You cannot build there.');
       g.bldg[v] = { t: 's', p: pid };
       me.left.settlement -= 1;
-      discoverAtSettlement(g, v);
+      discoverHexes(g, v);
       g.setup.need = 'r';
       g.setup.lastV = v;
       startClock(g, SETUP_SECONDS, true);
@@ -1043,7 +1034,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         pay(g, me, COSTS.settlement);
         g.bldg[move.v] = { t: 's', p: pid };
         me.left.settlement -= 1;
-        discoverAtSettlement(g, move.v);
+        discoverHexes(g, move.v);
         note(g, events, { t: 'build', p: pid, what: 'settlement', v: move.v });
         bumpClock(g);
         // A new settlement can cut an opponent's road, so awards are rechecked.
