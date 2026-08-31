@@ -888,6 +888,17 @@ const clockTrusted = () => solo || clockReady();
 // beats it takes to call a stream broken, or a leader gone) are exactly what they were.
 const PULSE_MS = 8000;
 const HEALTH_MS = 2000;
+// While a game is actually being played, every move already lands on the room document
+// and proves the table is live to everyone watching it — the heartbeat is only needed for
+// the gaps between moves, someone thinking or a connection that quietly died. So the beat
+// due while a move landed in the last PULSE_QUIET_MS is skipped as redundant, and resumes
+// once the table has actually gone quiet for that long.
+//
+// Kept well under STALE_RESUB_MS: that ladder calls a stream broken once nothing fresh —
+// a move OR a beat — has arrived in 22s, and it cannot tell a real quiet turn from a dead
+// one. The beat has to be back on the clock with room to spare before that fires, or a
+// table that is only thinking looks exactly like one that dropped its connection.
+const PULSE_QUIET_MS = 12000;
 
 // A room used to close itself after two minutes with one person in it, on the grounds
 // that an app killed rather than closed leaves its player seated forever. Removed: it
@@ -905,6 +916,7 @@ let pulseMode = 'doc';
 let lastFreshAt = 0, lastResubAt = 0, lastPullAt = 0, lastPulseWrite = 0;
 let lastPulseServerMs = 0, lastPulseSeenAt = 0, lastPulseBy = null;
 let healthInterval = null, pulling = false, resetting = false;
+let lastMoveAt = 0;
 let nudgedAt = 0, nudgeCount = 0;
 
 const markFresh = () => { lastFreshAt = Date.now(); };
@@ -933,6 +945,11 @@ function applyRoom(data, fresh) {
   // guess exists to avoid. The snapshot that confirms the move is already on its way,
   // and it carries everything this one did.
   if (guessSeq && Date.now() - guessAt < GUESS_HOLD_MS && (data.game?.seq ?? 0) < guessSeq) return;
+  // What the heartbeat's quiet gate is watching for: the game starting, or the log
+  // actually moving. Compared against the room this replaces, before it is gone.
+  if (data.state === 'playing' && (room?.state !== 'playing' || data.game?.seq !== room?.game?.seq)) {
+    lastMoveAt = Date.now();
+  }
   guessSeq = 0;
   room = data;
   render();
@@ -1133,6 +1150,10 @@ function shouldPulse() {
 async function writePulse(force = false) {
   if (!roomRef) return;
   if (!force && Date.now() - lastPulseWrite < PULSE_MS - 400) return;
+  // Real gameplay already proves the table is live; skip the beat that second was going
+  // to send rather than pay for one nobody needed. The next scheduled beat picks up
+  // wherever this one would have landed once the table actually goes quiet.
+  if (!force && room?.state === 'playing' && Date.now() - lastMoveAt < PULSE_QUIET_MS) return;
   lastPulseWrite = Date.now();
   if (pulseMode === 'doc' && pulseRef) {
     try {
