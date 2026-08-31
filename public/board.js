@@ -290,7 +290,7 @@ export const LAYOUT_INFO = {
     tiles: 55,
     blurb: 'A lone desert island ringed by open water, then two rings of forest with six '
       + 'wood ports on their shore. Past the treeline stays foggy until someone reaches it.',
-    terrain: { forest: 30, hills: 6, pasture: 6, fields: 6, mountains: 6, desert: 1 },
+    terrain: { forest: 24, hills: 7, pasture: 8, fields: 8, mountains: 7, desert: 1 },
     tokens: { 2: 3, 3: 6, 4: 6, 5: 6, 6: 6, 8: 6, 9: 6, 10: 6, 11: 6, 12: 3 },
     ports: 6,
     bank: 33,
@@ -453,6 +453,11 @@ function hexRing(radius) {
 
 function hexDistance(q, r) {
   return (Math.abs(q) + Math.abs(q + r) + Math.abs(r)) / 2;
+}
+
+/** The 6 hexes where a ring changes direction — where hexRing starts each of its sides. */
+function hexRingCorners(radius) {
+  return RING_DIRS.map(([dq, dr]) => ({ q: dq * radius, r: dr * radius }));
 }
 
 // Ring 1 is left out on purpose: that gap of open water is what strands the desert on
@@ -629,16 +634,19 @@ function classicBoard() {
 }
 
 /**
- * The desert island and the two forest rings are fixed by the shape itself; only which
- * of the four remaining resources falls where under the fog is drawn per seed.
+ * The desert island and the forest are fixed by the shape itself; only which of the
+ * four remaining resources falls where under the fog is drawn per seed. The outer
+ * ring's own six corners break from its wood — the fog reaches one hex further in right
+ * where a ring bends, rather than stopping in a clean line.
  */
 function newfoundlandTerrain(info, rng) {
+  const outerCorners = new Set(hexRingCorners(3).map(({ q, r }) => `${q},${r}`));
   const terrain = [];
   const mysterySlots = [];
   for (const h of HEXES) {
     const dist = hexDistance(h.q, h.r);
     if (dist === 0) terrain[h.i] = 'desert';
-    else if (dist === 2 || dist === 3) terrain[h.i] = 'forest';
+    else if (dist === 2 || (dist === 3 && !outerCorners.has(`${h.q},${h.r}`))) terrain[h.i] = 'forest';
     else mysterySlots.push(h.i);
   }
   const { hills, pasture, fields, mountains } = info.terrain;
