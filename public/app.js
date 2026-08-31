@@ -5752,6 +5752,10 @@ function renderOver(g) {
 }
 
 $('btn-again').addEventListener('click', async () => {
+  // Every other button that starts a game calls this first — a suspended audio context
+  // (iOS after any idle stretch) only resumes from a handler a real tap ran synchronously
+  // through, and this one skipped it, so the new game came up silent.
+  unlock();
   if (solo) {
     const reuseBotNames = Object.values(room.players || {})
       .filter((p) => p.bot).map((p) => p.name);
@@ -5775,8 +5779,8 @@ $('btn-again').addEventListener('click', async () => {
 });
 $('btn-home').addEventListener('click', () => leaveRoom(true));
 $('btn-recap').addEventListener('click', () => { sfx.tap(); shareRecap(); });
-$('btn-rematch-yes').addEventListener('click', () => answerRematch(true));
-$('btn-rematch-no').addEventListener('click', () => answerRematch(false));
+$('btn-rematch-yes').addEventListener('click', () => { unlock(); answerRematch(true); });
+$('btn-rematch-no').addEventListener('click', () => { unlock(); answerRematch(false); });
 
 // ---------------------------------------------------------------- menus
 $('game-menu').addEventListener('click', () => { sfx.tap(); sheet('sheet-menu'); });
