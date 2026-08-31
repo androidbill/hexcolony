@@ -566,11 +566,38 @@ function makeRoomCode(backend) {
   return backend === 'rtdb' ? `R${makeCode()}` : makeCode();
 }
 
+/**
+ * RTDB drops any object or array that serializes empty — `bldg: {}`, `log: []`, an empty
+ * `pending.stealFrom` — rather than storing it, so a container the engine wrote as empty
+ * comes back from the database simply missing. The engine assumes these are always
+ * there (`g.bldg[v]`, `g.log.push(...)`, ...), so every reading of a game from RTDB has
+ * to put them back before it reaches the engine or the renderer. Firestore never does
+ * this, so its rooms need none of it.
+ */
+function normalizeRtdbGame(game) {
+  if (!game) return game;
+  game.bldg ||= {};
+  game.roads ||= {};
+  game.log ||= [];
+  game.trades ||= [];
+  game.discovered ||= [];
+  game.deck ||= [];
+  game.vpNames ||= [];
+  game.pending ||= {};
+  game.pending.discard ||= {};
+  game.pending.stealFrom ||= [];
+  for (const p of Object.values(game.players || {})) p.vpCards ||= [];
+  return game;
+}
+
 /** The room's current data, or null if there is none — whichever database it is on. */
 async function getRoomData(code, timeoutMs = 5000) {
   if (roomBackendOf(code) === 'rtdb') {
     const snap = await withTimeout(rtdbGet(rtdbRef(rtdb, `rooms/${code}`)), timeoutMs);
-    return snap.exists() ? snap.val() : null;
+    if (!snap.exists()) return null;
+    const data = snap.val();
+    normalizeRtdbGame(data.game);
+    return data;
   }
   const snap = await withTimeout(getDoc(doc(db, 'rooms', code)), timeoutMs);
   return snap.exists() ? snap.data() : null;
@@ -988,7 +1015,9 @@ function subscribeRoom() {
         return;
       }
       sawRoomDoc = true;
-      applyRoom(snap.val(), true);
+      const data = snap.val();
+      normalizeRtdbGame(data.game);
+      applyRoom(data, true);
     }, (err) => {
       console.error(err);
       setTimeout(() => resubscribe(true), 1500);
@@ -1177,6 +1206,7 @@ async function leaveRoom(removeSelf = true) {
             delete data.players[playerId];
             if (data.hostId === playerId) data.hostId = others[0];
             if (data.game) {
+              normalizeRtdbGame(data.game);
               const res = R.applyMove(data.game, playerId, { type: 'dropPlayer', who: playerId });
               if (res.ok) {
                 data.game = res.game;
@@ -1317,6 +1347,7 @@ async function postMove(move, opts, drew, era) {
       await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
         if (data === null) { rejected = 'The room is gone.'; return data; }
         if (!data.game) { rejected = 'The game has not started.'; return; }
+        normalizeRtdbGame(data.game);
         const had = new Set((data.game.trades || []).map((t) => t.id));
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
