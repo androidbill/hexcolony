@@ -17,7 +17,7 @@ import {
   collection, query, limit, orderBy, addDoc,
   disableNetwork, enableNetwork,
   rtdb, RTDB_READY, rtdbRef, rtdbGet, rtdbSet, rtdbUpdate, rtdbRemove, rtdbPush,
-  rtdbOnValue, rtdbRunTransaction, rtdbServerTimestamp,
+  rtdbOnValue, rtdbRunTransaction, rtdbServerTimestamp, rtdbGoOffline, rtdbGoOnline,
 } from './fb.js';
 import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { findBadWord, maskText } from './clean.js';
@@ -1067,8 +1067,20 @@ async function pullFromServer(force = false) {
   lastPullAt = Date.now();
   pulling = true;
   try {
-    const snap = await withTimeout(getDocFromServer(roomRef), 6000);
-    if (snap.exists()) applyRoom(snap.data(), true);
+    if (roomRef.backend === 'rtdb') {
+      // RTDB has no cache-bypassing sibling of getDocFromServer — a bare get() on a
+      // reference with no cached value already goes to the server, which is the same
+      // thing this rung wants from Firestore's version.
+      const snap = await withTimeout(rtdbGet(roomRef.ref), 6000);
+      if (snap.exists()) {
+        const data = snap.val();
+        normalizeRtdbGame(data.game);
+        applyRoom(data, true);
+      }
+    } else {
+      const snap = await withTimeout(getDocFromServer(roomRef), 6000);
+      if (snap.exists()) applyRoom(snap.data(), true);
+    }
   } catch { /* still wedged — the next rung handles it */ }
   finally { pulling = false; }
 }
@@ -1081,8 +1093,13 @@ async function hardReset() {
   try {
     if (unsub) { unsub(); unsub = null; }
     if (unsubPulse) { unsubPulse(); unsubPulse = null; }
-    await withTimeout(disableNetwork(db), 4000);
-    await withTimeout(enableNetwork(db), 4000);
+    if (roomRef.backend === 'rtdb') {
+      await withTimeout(rtdbGoOffline(), 4000);
+      await withTimeout(rtdbGoOnline(), 4000);
+    } else {
+      await withTimeout(disableNetwork(db), 4000);
+      await withTimeout(enableNetwork(db), 4000);
+    }
     subscribeRoom();
     subscribePulse();
     await pullFromServer(true);
@@ -1456,19 +1473,6 @@ async function updateRoom(patch) {
     return rtdbUpdate(roomRef.ref, rtdbPatch);
   }
   return updateDoc(roomRef, patch);
-}
-
-/**
- * True, and says so, for a feature that only runs against Firestore so far — pause,
- * rematch, kicking a player, and the automatic turn-timeout all still reach for
- * `updateDoc`/`runTransaction` directly rather than through `updateRoom`. Called at the
- * top of each so an RTDB room gets one clear sentence instead of a raw SDK error the
- * first time somebody taps one of these.
- */
-function notYetOnRtdb() {
-  if (roomRef?.backend !== 'rtdb') return false;
-  toast('Not available yet in a Realtime Database room.');
-  return true;
 }
 
 async function beginMapChoice() {
@@ -3057,12 +3061,11 @@ function openPause() {
 
 async function requestPause(duration) {
   if (!roomRef || solo || room?.state !== 'playing') return;
-  if (notYetOnRtdb()) return;
   if (room.pause?.status === 'pending' || pauseIsActive()) return toast('A pause is already in progress.');
   try {
-    await updateDoc(roomRef, {
-      pause: { status: 'pending', duration, requestedBy: playerId, accepted: { [playerId]: true }, requestedAt: serverTimestamp() },
-    });
+    const stamp = roomRef.backend === 'rtdb' ? rtdbServerTimestamp : serverTimestamp;
+    const pause = { status: 'pending', duration, requestedBy: playerId, accepted: { [playerId]: true }, requestedAt: stamp() };
+    await withTimeout(updateRoom({ pause }), 8000);
     closeSheet();
   } catch { toast('Could not request a pause.'); }
 }
@@ -3070,30 +3073,44 @@ async function requestPause(duration) {
 async function acceptPause() {
   if (!roomRef || !room?.pause || room.pause.status !== 'pending') return;
   try {
-    await runTransaction(db, async (tx) => {
-      const snap = await tx.get(roomRef);
-      if (!snap.exists()) return;
-      const data = snap.data();
-      const p = data.pause;
-      if (!p || p.status !== 'pending') return;
-      const accepted = { ...(p.accepted || {}), [playerId]: true };
-      const all = Object.keys(data.players || {}).every((id) => accepted[id]);
-      tx.update(roomRef, { pause: { ...p, accepted, ...(all ? { status: 'active', startedAt: serverTimestamp() } : {}) } });
-    });
+    if (roomRef.backend === 'rtdb') {
+      await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
+        if (!data) return data;
+        const p = data.pause;
+        if (!p || p.status !== 'pending') return data;
+        const accepted = { ...(p.accepted || {}), [playerId]: true };
+        const all = Object.keys(data.players || {}).every((id) => accepted[id]);
+        data.pause = { ...p, accepted, ...(all ? { status: 'active', startedAt: rtdbServerTimestamp() } : {}) };
+        return data;
+      }, { applyLocally: false }), 8000);
+    } else {
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(roomRef);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        const p = data.pause;
+        if (!p || p.status !== 'pending') return;
+        const accepted = { ...(p.accepted || {}), [playerId]: true };
+        const all = Object.keys(data.players || {}).every((id) => accepted[id]);
+        tx.update(roomRef, { pause: { ...p, accepted, ...(all ? { status: 'active', startedAt: serverTimestamp() } : {}) } });
+      });
+    }
   } catch { toast('Could not accept the pause.'); }
 }
 
 async function declinePause() {
   if (!roomRef || room?.pause?.status !== 'pending') return;
-  if (notYetOnRtdb()) return;
-  try { await updateDoc(roomRef, { pause: null }); }
+  try { await withTimeout(updateRoom({ pause: null }), 8000); }
   catch { toast('Could not cancel the pause.'); }
 }
 
 async function resumePause() {
   if (!roomRef || room?.pause?.status !== 'active' || room.pause.requestedBy !== playerId) return;
-  if (notYetOnRtdb()) return;
-  try { await updateDoc(roomRef, { pause: { ...room.pause, status: 'resuming', resumingAt: serverTimestamp() } }); }
+  try {
+    const stamp = roomRef.backend === 'rtdb' ? rtdbServerTimestamp : serverTimestamp;
+    const pause = { ...room.pause, status: 'resuming', resumingAt: stamp() };
+    await withTimeout(updateRoom({ pause }), 8000);
+  }
   catch { toast('Could not resume the game.'); }
 }
 
@@ -3113,14 +3130,15 @@ async function finishPause() {
     ? resumeAt + 3000
     : (started === null ? null : started + Number(p.duration || 0) * 1000);
   const shiftMs = started === null || fixedEnd === null ? 0 : Math.max(0, fixedEnd - started);
-  const patch = { pause: { ...p, status: 'ended', endedAt: serverTimestamp(), shiftMs } };
+  const stamp = roomRef.backend === 'rtdb' ? rtdbServerTimestamp : serverTimestamp;
+  const patch = { pause: { ...p, status: 'ended', endedAt: stamp(), shiftMs } };
   const turnStart = stampMs(room.turnStartedAt);
   if (turnStart !== null && shiftMs) patch.turnStartedAt = turnStart + shiftMs;
   for (const [id, madeValue] of Object.entries(room.tradeDeadlines || {})) {
     const made = stampMs(madeValue);
     if (made !== null && shiftMs) patch[`tradeDeadlines.${id}`] = made + shiftMs;
   }
-  try { await updateDoc(roomRef, patch); }
+  try { await withTimeout(updateRoom(patch), 8000); }
   catch { /* another player will finish it */ }
 }
 
@@ -5308,19 +5326,32 @@ function openRematchPrompt() {
 
 async function requestRematch() {
   if (solo || !roomRef || !room || room.state !== 'over') return;
-  if (notYetOnRtdb()) return;
   try {
-    await withTimeout(runTransaction(db, async (tx) => {
-      const snap = await tx.get(roomRef);
-      const data = snap.data();
-      if (!data || data.state !== 'over' || !data.players?.[playerId]) return;
-      if (data.rematch?.requester && data.rematch.requester !== playerId) {
-        throw new Error('A rematch request is already waiting for replies.');
-      }
-      tx.update(roomRef, {
-        rematch: { requester: playerId, votes: { [playerId]: true } },
-      });
-    }), 10000);
+    if (roomRef.backend === 'rtdb') {
+      let rejected = null;
+      await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
+        if (!data || data.state !== 'over' || !data.players?.[playerId]) return data;
+        if (data.rematch?.requester && data.rematch.requester !== playerId) {
+          rejected = 'A rematch request is already waiting for replies.';
+          return data;
+        }
+        data.rematch = { requester: playerId, votes: { [playerId]: true } };
+        return data;
+      }, { applyLocally: false }), 10000);
+      if (rejected) throw new Error(rejected);
+    } else {
+      await withTimeout(runTransaction(db, async (tx) => {
+        const snap = await tx.get(roomRef);
+        const data = snap.data();
+        if (!data || data.state !== 'over' || !data.players?.[playerId]) return;
+        if (data.rematch?.requester && data.rematch.requester !== playerId) {
+          throw new Error('A rematch request is already waiting for replies.');
+        }
+        tx.update(roomRef, {
+          rematch: { requester: playerId, votes: { [playerId]: true } },
+        });
+      }), 10000);
+    }
     toast('Rematch request sent.');
   } catch (err) {
     toast(err?.message || 'Could not request another game.');
@@ -5331,44 +5362,82 @@ async function answerRematch(wantsToPlay) {
   if (solo || !roomRef || !room) return;
   let outcome = 'waiting';
   try {
-    await withTimeout(runTransaction(db, async (tx) => {
-      const snap = await tx.get(roomRef);
-      const data = snap.data();
-      const request = data?.rematch;
-      if (!data || data.state !== 'over' || !request || !data.players?.[playerId]) return;
+    if (roomRef.backend === 'rtdb') {
+      await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
+        const request = data?.rematch;
+        if (!data || data.state !== 'over' || !request || !data.players?.[playerId]) return data;
 
-      const votes = { ...(request.votes || {}), [playerId]: wantsToPlay };
-      const ids = Object.keys(data.players);
-      const allVoted = ids.every((pid) => typeof votes[pid] === 'boolean');
-      if (!allVoted) {
-        tx.update(roomRef, { rematch: { ...request, votes } });
-        return;
-      }
+        const votes = { ...(request.votes || {}), [playerId]: wantsToPlay };
+        const ids = Object.keys(data.players);
+        const allVoted = ids.every((pid) => typeof votes[pid] === 'boolean');
+        if (!allVoted) {
+          data.rematch = { ...request, votes };
+          return data;
+        }
 
-      const accepted = ids.filter((pid) => votes[pid] === true);
-      if (accepted.length < 2) {
-        outcome = 'not-enough';
-        tx.update(roomRef, { rematch: null });
-        return;
-      }
+        const accepted = ids.filter((pid) => votes[pid] === true);
+        if (accepted.length < 2) {
+          outcome = 'not-enough';
+          data.rematch = null;
+          return data;
+        }
 
-      const players = Object.fromEntries(accepted.map((pid) => [pid, data.players[pid]]));
-      const hostId = accepted.includes(data.hostId)
-        ? data.hostId
-        : (accepted.includes(request.requester) ? request.requester : accepted[0]);
-      outcome = 'started';
-      tx.update(roomRef, {
-        state: 'lobby',
-        hostId,
-        players,
-        game: null,
-        order: [],
-        tradeDeadlines: {},
-        startedAt: null,
-        endedAt: null,
-        rematch: null,
-      });
-    }), 10000);
+        const players = Object.fromEntries(accepted.map((pid) => [pid, data.players[pid]]));
+        const hostId = accepted.includes(data.hostId)
+          ? data.hostId
+          : (accepted.includes(request.requester) ? request.requester : accepted[0]);
+        outcome = 'started';
+        data.state = 'lobby';
+        data.hostId = hostId;
+        data.players = players;
+        data.game = null;
+        data.order = [];
+        data.tradeDeadlines = {};
+        data.startedAt = null;
+        data.endedAt = null;
+        data.rematch = null;
+        return data;
+      }, { applyLocally: false }), 10000);
+    } else {
+      await withTimeout(runTransaction(db, async (tx) => {
+        const snap = await tx.get(roomRef);
+        const data = snap.data();
+        const request = data?.rematch;
+        if (!data || data.state !== 'over' || !request || !data.players?.[playerId]) return;
+
+        const votes = { ...(request.votes || {}), [playerId]: wantsToPlay };
+        const ids = Object.keys(data.players);
+        const allVoted = ids.every((pid) => typeof votes[pid] === 'boolean');
+        if (!allVoted) {
+          tx.update(roomRef, { rematch: { ...request, votes } });
+          return;
+        }
+
+        const accepted = ids.filter((pid) => votes[pid] === true);
+        if (accepted.length < 2) {
+          outcome = 'not-enough';
+          tx.update(roomRef, { rematch: null });
+          return;
+        }
+
+        const players = Object.fromEntries(accepted.map((pid) => [pid, data.players[pid]]));
+        const hostId = accepted.includes(data.hostId)
+          ? data.hostId
+          : (accepted.includes(request.requester) ? request.requester : accepted[0]);
+        outcome = 'started';
+        tx.update(roomRef, {
+          state: 'lobby',
+          hostId,
+          players,
+          game: null,
+          order: [],
+          tradeDeadlines: {},
+          startedAt: null,
+          endedAt: null,
+          rematch: null,
+        });
+      }), 10000);
+    }
     closeSheet();
     if (outcome === 'not-enough') toast('Not enough players accepted the rematch.');
     else if (outcome === 'waiting') toast(wantsToPlay ? 'You are in for the rematch.' : 'You declined the rematch.');
@@ -5673,7 +5742,7 @@ $('btn-again').addEventListener('click', async () => {
   if (!isHost()) return requestRematch();
   closeSheet();
   try {
-    await updateDoc(roomRef, {
+    await updateRoom({
       state: 'lobby', game: null, order: [], tradeDeadlines: {}, rematch: null,
       startedAt: null, endedAt: null,
     });
