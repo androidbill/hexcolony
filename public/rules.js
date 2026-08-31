@@ -202,12 +202,28 @@ function unpay(g, p, cost) {
   for (const [r, n] of Object.entries(cost)) { p.res[r] += n; g.bank[r] -= n; }
 }
 
-/** Fog of war: reveal every hex touching a newly built settlement, for good, for everyone. */
+/** Fog of war: reveal every hex touching a vertex, for good, for everyone. */
 function discoverHexes(g, v) {
   if (!g.fog) return;
   for (const hi of VERTS[v].hexes) {
     if (!g.discovered.includes(hi)) g.discovered.push(hi);
   }
+}
+
+/**
+ * What brings a hex out of the fog differs by map. Everywhere else it is a settlement,
+ * landing on the vertex that gets built. Newfoundland is the one board where the wood
+ * is already known going in — it is a road reaching further out that matters there, so
+ * both ends of the new road are what get checked instead.
+ */
+function discoverAtSettlement(g, v) {
+  if (g.layout === 'newfoundland') return;
+  discoverHexes(g, v);
+}
+function discoverAtRoad(g, e) {
+  if (g.layout !== 'newfoundland') return;
+  discoverHexes(g, EDGES[e].a);
+  discoverHexes(g, EDGES[e].b);
 }
 
 // ---------------------------------------------------------------- setup
@@ -859,7 +875,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!legalSettlements(g, pid, true).includes(v)) return fail('You cannot build there.');
       g.bldg[v] = { t: 's', p: pid };
       me.left.settlement -= 1;
-      discoverHexes(g, v);
+      discoverAtSettlement(g, v);
       g.setup.need = 'r';
       g.setup.lastV = v;
       startClock(g, SETUP_SECONDS, true);
@@ -888,6 +904,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       if (!legalRoads(g, pid, g.setup.lastV).includes(e)) return fail('That road must touch your new settlement.');
       g.roads[e] = pid;
       me.left.road -= 1;
+      discoverAtRoad(g, e);
       note(g, events, { t: 'build', p: pid, what: 'road', e });
 
       g.setup.at += 1;
@@ -1006,6 +1023,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         if (free) g.turn.freeRoads -= 1; else pay(g, me, COSTS.road);
         g.roads[move.e] = pid;
         me.left.road -= 1;
+        discoverAtRoad(g, move.e);
         note(g, events, { t: 'build', p: pid, what: 'road', e: move.e, free });
         bumpClock(g);
         refreshAwards(g, events);
@@ -1021,7 +1039,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         pay(g, me, COSTS.settlement);
         g.bldg[move.v] = { t: 's', p: pid };
         me.left.settlement -= 1;
-        discoverHexes(g, move.v);
+        discoverAtSettlement(g, move.v);
         note(g, events, { t: 'build', p: pid, what: 'settlement', v: move.v });
         bumpClock(g);
         // A new settlement can cut an opponent's road, so awards are rechecked.
