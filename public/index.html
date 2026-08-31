@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.08.30.49">
+<link rel="stylesheet" href="styles.css?v=2026.08.30.50">
 </head>
 <body>
 
@@ -73,9 +73,9 @@
            kebab-database in app.js. -->
       <p class="hint backend-hint" id="backend-hint"></p>
 
-      <button class="btn btn-ghost" id="btn-rooms">
-        <span class="btn-label">Browse Rooms</span>
-        <span class="btn-sub">See who is waiting for players</span>
+      <button class="btn btn-ghost" id="btn-join-code">
+        <span class="btn-label">Join a Room</span>
+        <span class="btn-sub">Already have a code? Type it in</span>
       </button>
 
       <div class="or-split"><span>or play alone</span></div>
@@ -96,24 +96,6 @@
       <button class="btn btn-ghost" id="btn-settings">Settings</button>
     </div>
 
-  </div>
-</section>
-
-<!-- ============================== ROOMS ============================== -->
-<section class="screen" id="screen-rooms">
-  <header class="topbar">
-    <button class="icon-btn" id="rooms-back" aria-label="Back">
-      <svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
-    <div class="topbar-title">Open rooms</div>
-    <button class="icon-btn" id="rooms-refresh" aria-label="Refresh the list">
-      <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
-  </header>
-
-  <div class="lobby-scroll">
-    <div class="room-list" id="room-list"></div>
-    <p class="hint" id="rooms-hint"></p>
   </div>
 </section>
 
@@ -467,6 +449,17 @@
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
 
+<div class="sheet" id="sheet-join">
+  <h3 class="sheet-title">Join a room</h3>
+  <p class="sheet-sub">Type the code someone shared with you.</p>
+  <input id="join-code-input" class="text-input" type="text" maxlength="5" autocomplete="off"
+         autocapitalize="characters" autocorrect="off" spellcheck="false" placeholder="Room code">
+  <div class="sheet-actions">
+    <button class="btn btn-key" id="join-code-go">Join</button>
+    <button class="btn btn-ghost" data-close>Cancel</button>
+  </div>
+</div>
+
 <div class="sheet" id="sheet-leave-confirm">
   <h3 class="sheet-title">Leave game?</h3>
   <p class="sheet-sub">Your buildings stay on the board. You can't rejoin this game once you leave.</p>
@@ -794,7 +787,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.08.30.49"></script>
-<script type="module" src="app.js?v=2026.08.30.49"></script>
+<script src="iro.min.js?v=2026.08.30.50"></script>
+<script type="module" src="app.js?v=2026.08.30.50"></script>
 </body>
 </html>

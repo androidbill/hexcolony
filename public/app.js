@@ -14,7 +14,7 @@
 import {
   db, NET_READY, doc, getDoc, getDocFromServer, setDoc, updateDoc, onSnapshot,
   deleteField, deleteDoc, serverTimestamp, runTransaction,
-  collection, query, where, limit, orderBy, addDoc,
+  collection, query, limit, orderBy, addDoc,
   disableNetwork, enableNetwork,
   rtdb, RTDB_READY, rtdbRef, rtdbGet, rtdbSet, rtdbUpdate, rtdbRemove, rtdbPush,
   rtdbOnValue, rtdbRunTransaction, rtdbServerTimestamp,
@@ -773,149 +773,7 @@ async function joinDiscordRoom() {
 
 $('btn-discord-join').addEventListener('click', () => { unlock(); joinDiscordRoom(); });
 
-// ---------------------------------------------------------------- the room browser
-//
-// Rooms have always been open to anybody holding the code; this only stops the code
-// being the way you find one. Nothing about who may join has changed — the Firestore
-// rule on /rooms has read: if true, which covers a query as well as a lookup, so no
-// rules deploy is needed for this.
-//
-// The query is one equality filter and a limit, and nothing else. Firestore serves that
-// out of the automatic single-field index; the moment an orderBy on a second field is
-// added it needs a composite index created by hand in the console first, and a query
-// that fails until somebody does that is a query that fails in production. Fifty rooms
-// is a small enough list to sort here.
-const ROOM_LIST_MAX = 50;
-let unsubRooms = null;
-let roomList = [];
-
-function showRooms() {
-  if (!NET_READY) return toast('Online play needs a connection.');
-  unlock();
-  sfx.tap();
-  showScreen('screen-rooms');
-  $('rooms-hint').textContent = 'Looking for open tables…';
-  $('room-list').innerHTML = '';
-  subscribeRoomList();
-}
-
-function leaveRooms() {
-  if (unsubRooms) { unsubRooms(); unsubRooms = null; }
-  roomList = [];
-  showScreen('screen-home');
-}
-
-function subscribeRoomList() {
-  if (unsubRooms) { unsubRooms(); unsubRooms = null; }
-  const q = query(collection(db, 'rooms'), where('state', '==', 'lobby'), limit(ROOM_LIST_MAX));
-  unsubRooms = onSnapshot(q, (snap) => {
-    roomList = snap.docs.map((d) => ({ code: d.id, ...d.data() }));
-    renderRoomList();
-  }, (err) => {
-    console.error(err);
-    $('rooms-hint').textContent = 'Could not reach the room list — check your connection.';
-  });
-}
-
-/** How long ago, in the roughest terms that are still true. */
-function ago(ms) {
-  if (!ms) return '';
-  const mins = Math.max(0, Math.round((Date.now() - ms) / 60000));
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.round(mins / 60);
-  return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
-}
-
-/** The dots that show how full a table is, in the colours already claimed. */
-function seatDots(players) {
-  const seated = Object.values(players || {});
-  const dots = seated.map((p) => {
-    const c = Number.isInteger(p.colorIdx) ? R.PLAYER_COLORS[p.colorIdx].hex : '#6b7a8c';
-    return `<i class="seat-dot" style="--c:${esc(c)}"></i>`;
-  });
-  for (let i = seated.length; i < R.MAX_PLAYERS; i++) dots.push('<i class="seat-dot empty"></i>');
-  return dots.join('');
-}
-
-function renderRoomList() {
-  /**
-   * Anyone looking at the list tidies it.
-   *
-   * These two cases have no device of their own left to close them: a room with nobody
-   * seated lost its last player to an app that was killed rather than closed, and a room
-   * past its eight hours is over whoever is nominally still in it. Both used to be
-   * filtered out of the list and left in the database for good.
-   *
-   * Deleting is safe from here and safe to race: several browsers may try the same room
-   * at once, and a delete that finds nothing there has done its job anyway.
-   */
-  for (const r of roomList) {
-    if (Object.keys(r.players || {}).length === 0 || roomIsStale(r)) {
-      deleteDoc(doc(db, 'rooms', r.code)).catch(() => {});
-    }
-  }
-  // A connection handoff can leave several successful create attempts behind.
-  // For this device, keep only the newest room it hosts and remove older duplicates.
-  const myName = usableName();
-  const owned = roomList
-    .filter((r) => !roomIsStale(r) && (r.hostId === playerId || r.players?.[r.hostId]?.name === myName))
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  for (const duplicate of owned.slice(1)) {
-    deleteDoc(doc(db, 'rooms', duplicate.code)).catch(() => {});
-  }
-
-  const open = roomList
-    .filter((r) => !roomIsStale(r) && Object.keys(r.players || {}).length > 0)
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-
-  if (!open.length) {
-    $('room-list').innerHTML = '';
-    // "Create one" used to point at a button on this screen. It lives on the way in now,
-    // so the sentence has to say where it went rather than at thin air.
-    $('rooms-hint').textContent = 'No open rooms right now. Go back and create one, and '
-      + 'anybody looking at this screen will see it appear.';
-    return;
-  }
-  $('rooms-hint').textContent = open.length === 1
-    ? 'One table waiting. It updates by itself as people come and go.'
-    : `${open.length} tables waiting. The list updates by itself as people come and go.`;
-
-  $('room-list').innerHTML = open.map((r) => {
-    const players = Object.values(r.players || {});
-    const n = players.length;
-    const full = n >= R.MAX_PLAYERS;
-    const host = r.players?.[r.hostId]?.name || players[0]?.name || 'Someone';
-    const s = r.settings || {};
-    const bits = [
-      LAYOUT_INFO[s.layout || 'classic']?.dynamic ? 'dynamic board'
-        : `${LAYOUT_INFO[s.layout || 'classic']?.tiles || 19} tiles`,
-      `${s.targetVP || 10} points`,
-      s.turnSeconds ? `${s.turnSeconds}s turns` : 'no timer',
-      s.useRobber === false ? 'no robber' : 'robber',
-    ];
-    return `<button class="room-card${full ? ' full' : ''}" data-room="${esc(r.code)}"${full ? ' disabled' : ''}>
-      <div class="room-top">
-        <span class="room-host">${esc(host)}'s table</span>
-        <span class="room-code">${esc(r.code)}</span>
-      </div>
-      <div class="room-seats">
-        ${seatDots(r.players)}
-        <span class="room-count">${n}/${R.MAX_PLAYERS}${full ? ' · full' : ''}</span>
-      </div>
-      <div class="room-bits">${bits.map((b) => `<span>${esc(b)}</span>`).join('')}</div>
-      <div class="room-age">${esc(ago(r.createdAt))}</div>
-    </button>`;
-  }).join('');
-}
-
-$('btn-rooms').addEventListener('click', showRooms);
-$('rooms-back').addEventListener('click', () => { sfx.tap(); leaveRooms(); });
-$('rooms-refresh').addEventListener('click', () => { sfx.tap(); subscribeRoomList(); });
-$('btn-rooms-create').addEventListener('click', () => {
-  if (unsubRooms) { unsubRooms(); unsubRooms = null; }
-  createRoom();
-});
+$('btn-rooms-create').addEventListener('click', () => createRoom());
 
 // The room-level backend switch. Whoever creates the room picks it once, here; everyone
 // who joins afterwards just plays, whichever database it turned out to be — see
@@ -935,11 +793,23 @@ $('kebab-database').addEventListener('click', () => {
   sfx.tap();
   closeKebab();
 });
-$('room-list').addEventListener('click', (e) => {
-  const card = e.target.closest('[data-room]');
-  if (!card || card.disabled) return;
-  if (unsubRooms) { unsubRooms(); unsubRooms = null; }
-  joinCode(card.dataset.room);
+$('btn-join-code').addEventListener('click', () => {
+  if (!NET_READY) return toast('Online play needs a connection.');
+  unlock();
+  sfx.tap();
+  $('join-code-input').value = '';
+  sheet('sheet-join');
+  $('join-code-input').focus();
+});
+function submitJoinCode() {
+  const code = $('join-code-input').value.trim().toUpperCase();
+  if (!code) return;
+  closeSheet();
+  joinCode(code);
+}
+$('join-code-go').addEventListener('click', () => { sfx.tap(); submitJoinCode(); });
+$('join-code-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { sfx.tap(); submitJoinCode(); }
 });
 
 // ---------------------------------------------------------------- clock sync
@@ -6337,7 +6207,7 @@ window.HEXCOLONY = {
 
   if (!NET_READY) {
     // No Firebase: solo still plays, so say so rather than letting the buttons fail.
-    $('btn-rooms').disabled = true;
+    $('btn-join-code').disabled = true;
   }
 
   if (IN_DISCORD) {
