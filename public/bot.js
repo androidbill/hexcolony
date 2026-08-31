@@ -123,21 +123,29 @@ function hexKnown(g, hi, board) {
   return board.tiles[hi].terrain === 'desert' || (g.discovered || []).includes(hi);
 }
 
+// A hidden hex's real value could be anything from a barren desert to a 6 or 8 — the
+// average of every number token's own pips, weighted the way they actually turn up in
+// the bag. Credited instead of the tile's real pips exactly because a bot cannot know
+// which of those it is any more than the table can: enough to make scouting worth a
+// look sometimes, never enough to beat a tile whose value is already known and good.
+const FOG_CURIOSITY = 3;
+
 /**
  * What a corner is worth to this player. Production is the base, but a spot that adds
  * a resource you cannot otherwise make is worth far more than its dots suggest — a
  * player with no brick or ore cannot build anything at all, which is the single most
  * common way a promising opening dies.
  *
- * Under fog, a hex nobody has settled next to yet contributes nothing: the bot cannot
- * see its number or resource, so it cannot weigh a spot on a hex it has not scouted any
- * more than a human at the same table could.
+ * Under fog, a hex nobody has settled next to yet cannot be weighed on its own number
+ * or resource — the bot does not know either, no more than a human at the same table
+ * would — so it is credited FOG_CURIOSITY instead, standing in for "probably something,
+ * possibly nothing" rather than the certain zero an unturned tile is not.
  */
 function vertexScore(g, board, v, pid, have) {
   let score = 0;
   const kinds = new Set();
   for (const h of VERTS[v].hexes) {
-    if (!hexKnown(g, h, board)) continue;
+    if (!hexKnown(g, h, board)) { score += FOG_CURIOSITY; continue; }
     const t = board.tiles[h];
     score += pips(t.num);
     if (t.res) kinds.add(t.res);
