@@ -1107,10 +1107,12 @@ button {
 }
 .offer-clock.urgent { background: rgba(229, 72, 77, 0.22); color: #ff9fa1; }
 
-.ask-who {
-  font-size: 13px; font-weight: 800;
-  color: var(--c, var(--gold));
-  max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.ask-name {
+  font-size: 14px; font-weight: 800;
+  color: #fff;
+  text-align: center;
+  margin-bottom: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .ask-cards { display: inline-flex; gap: 4px; padding-top: 5px; }
 /* Each half of the sentence holds on to its own card.

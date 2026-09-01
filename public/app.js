@@ -5096,8 +5096,8 @@ function renderAsks(g) {
 
   box.innerHTML = waiting.map(({ t }) => {
     return `<div class="ask" style="--c:${esc(colorFor(t.from))}">
+      <div class="ask-name">${esc(nameFor(t.from))}</div>
       <div class="ask-line">
-        <span class="ask-who">${esc(nameFor(t.from))}</span>
         <span class="ask-part">is offering you${article(t.give)}
           <span class="ask-cards">${askCards(t.give)}</span></span>
         <span class="ask-part">in exchange for${article(t.want)}
