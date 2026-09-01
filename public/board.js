@@ -296,6 +296,18 @@ export const LAYOUT_INFO = {
     bank: 33,
     dev: { knight: 34, vp: 8, road: 6, plenty: 6, mono: 3 },
   },
+  narrows: {
+    key: 'narrows',
+    label: 'The Narrows',
+    tiles: 41,
+    blurb: 'Two islands, one strip of land between them. Whoever roads across the neck '
+      + 'first controls the only way from one side to the other.',
+    terrain: { forest: 8, pasture: 8, fields: 8, hills: 7, mountains: 7, desert: 3 },
+    tokens: { 2: 3, 3: 4, 4: 4, 5: 4, 6: 4, 8: 4, 9: 4, 10: 4, 11: 4, 12: 3 },
+    ports: 12,
+    bank: 28,
+    dev: { knight: 25, vp: 6, road: 4, plenty: 4, mono: 2 },
+  },
   // One entry per dynamic size. The bags and decks still come from dynamicInfo, which
   // works them out from the tile count; these exist so a picker, a room list and a blurb
   // can treat a dynamic board exactly like a fixed one.
@@ -467,10 +479,38 @@ function newfoundlandCoords() {
   return [...hexRing(0), ...hexRing(2), ...hexRing(3), ...hexRing(4)];
 }
 
+// ---------------------------------------------------------------- The Narrows
+// Two round islands, one narrow neck of land the only way between them. Unlike
+// Newfoundland this needs no terrain or port logic of its own: it is one ordinary
+// connected coastline (the neck keeps it that way), so the normal random shuffle and
+// placePorts' own coastline walk both already do exactly the right thing on it.
+
+/** Every hex within `radius` steps of the origin — a filled disk, not just its rim. */
+function hexDisk(radius) {
+  const out = [];
+  for (let k = 0; k <= radius; k++) out.push(...hexRing(k));
+  return out;
+}
+
+function translated(coords, dq, dr) {
+  return coords.map(({ q, r }) => ({ q: q + dq, r: r + dr }));
+}
+
+function narrowsCoords() {
+  const west = translated(hexDisk(2), -4, 0);
+  const east = translated(hexDisk(2), 4, 0);
+  // The one row where both islands' radius-2 shores land exactly two hexes apart —
+  // three tiles wide is the closest a bridge can be laid without the islands already
+  // touching on their own.
+  const neck = [{ q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }];
+  return [...west, ...east, ...neck];
+}
+
 const TOPOS = {
   classic: buildTopology(planCoords(ROW_PLANS.classic)),
   expansion: buildTopology(planCoords(ROW_PLANS.expansion)),
   newfoundland: buildTopology(newfoundlandCoords()),
+  narrows: buildTopology(narrowsCoords()),
 };
 
 // These are `let` on purpose. Exported `let` bindings are live, so switching the layout
