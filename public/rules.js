@@ -206,6 +206,10 @@ function unpay(g, p, cost) {
 function discoverHexes(g, v) {
   if (!g.fog) return;
   for (const hi of VERTS[v].hexes) {
+    // The Frontier's outer ring is the one exception to "your own build reveals its own
+    // hexes" — it only ever opens as a whole, through checkFrontier, so a single
+    // settlement touching its edge must not leak the one hex it happens to reach.
+    if (g.layout === 'frontier' && hexDistance(HEXES[hi].q, HEXES[hi].r) === 3) continue;
     if (!g.discovered.includes(hi)) g.discovered.push(hi);
   }
 }
@@ -215,6 +219,30 @@ function discoverHexes(g, v) {
 function discoverAtRoad(g, e) {
   discoverHexes(g, EDGES[e].a);
   discoverHexes(g, EDGES[e].b);
+}
+
+/**
+ * The Frontier's outer ring never reveals hex by hex — it opens all at once, for
+ * everyone, the moment enough of the table has actually pushed into it. "Enough" is a
+ * majority of the seats still playing, so on any table size it takes real commitment
+ * from more than just one curious player, not one lucky road.
+ */
+function checkFrontier(g, events) {
+  if (g.layout !== 'frontier' || !g.fog) return;
+  const isFrontier = (hi) => hexDistance(HEXES[hi].q, HEXES[hi].r) === 3;
+  if (HEXES.some((h) => isFrontier(h.i) && g.discovered.includes(h.i))) return; // already open
+
+  const reached = new Set();
+  for (const [v, b] of Object.entries(g.bldg)) {
+    if (VERTS[v].hexes.some(isFrontier)) reached.add(b.p);
+  }
+  for (const [e, p] of Object.entries(g.roads)) {
+    if (EDGES[e].hexes.some(isFrontier)) reached.add(p);
+  }
+  if (reached.size < Math.ceil(g.seats.length / 2)) return;
+
+  for (const h of HEXES) if (isFrontier(h.i)) g.discovered.push(h.i);
+  note(g, events, { t: 'frontier' });
 }
 
 // ---------------------------------------------------------------- setup
@@ -270,10 +298,16 @@ export function newGame(seats, settings, rng = Math.random) {
   // Newfoundland is the one board where more than the desert is known going in: its two
   // forest rings are the whole point of the picture on the box, not a surprise, so they
   // start revealed too — only the mixed ring past them stays under the fog.
+  //
+  // The Frontier starts everyone on an ordinary known island — the whole inner disk,
+  // not just the desert — with only its outer ring genuinely hidden. That ring never
+  // reveals hex by hex either; see checkFrontier below for how it opens instead.
   const fog = !!settings.fog;
   const discovered = fog
     ? startBoard.tiles
-      .filter((t) => t.terrain === 'desert' || (layout === 'newfoundland' && t.terrain === 'forest'))
+      .filter((t) => t.terrain === 'desert'
+        || (layout === 'newfoundland' && t.terrain === 'forest')
+        || (layout === 'frontier' && hexDistance(t.q, t.r) <= 2))
       .map((t) => t.i)
     : [];
 
@@ -397,6 +431,10 @@ export function legalSettlements(g, pid, setupMode = false) {
     // yet reached — the whole rest of the island is still fog at that point anyway.
     if (setupMode && g.layout === 'newfoundland'
       && !v.hexes.some((hi) => hexDistance(HEXES[hi].q, HEXES[hi].r) === 2)) continue;
+    // The Frontier's outer ring is meant to be pushed into after the game starts, not
+    // landed on before anyone has even rolled — setup stays on the known island.
+    if (setupMode && g.layout === 'frontier'
+      && !v.hexes.some((hi) => hexDistance(HEXES[hi].q, HEXES[hi].r) <= 2)) continue;
     out.push(v.i);
   }
   return out;
@@ -875,6 +913,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       g.setup.lastV = v;
       startClock(g, SETUP_SECONDS, true);
       note(g, events, { t: 'build', p: pid, what: 'settlement', v });
+      checkFrontier(g, events);
 
       // The second settlement each player places pays out its surrounding hexes.
       const secondRound = g.setup.at >= g.seats.length;
@@ -901,6 +940,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       me.left.road -= 1;
       discoverAtRoad(g, e);
       note(g, events, { t: 'build', p: pid, what: 'road', e });
+      checkFrontier(g, events);
 
       g.setup.at += 1;
       g.setup.need = 's';
@@ -1020,6 +1060,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         me.left.road -= 1;
         discoverAtRoad(g, move.e);
         note(g, events, { t: 'build', p: pid, what: 'road', e: move.e, free });
+        checkFrontier(g, events);
         bumpClock(g);
         refreshAwards(g, events);
         if (g.turn.freeRoads > 0 && !legalRoads(g, pid).length) g.turn.freeRoads = 0;
@@ -1036,6 +1077,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
         me.left.settlement -= 1;
         discoverHexes(g, move.v);
         note(g, events, { t: 'build', p: pid, what: 'settlement', v: move.v });
+        checkFrontier(g, events);
         bumpClock(g);
         // A new settlement can cut an opponent's road, so awards are rechecked.
         refreshAwards(g, events);

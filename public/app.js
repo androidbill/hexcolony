@@ -2045,7 +2045,9 @@ function drawSoloSheet() {
     b.classList.toggle('on', (b.dataset.soloFog === 'on') === soloFog);
   }
   $('solo-fog-blurb').textContent = soloFog
-    ? 'Every tile hidden but the desert, until a settlement touches it.'
+    ? (soloLayout === 'frontier'
+      ? 'Every tile hidden but the desert. The outer ring opens for everyone at once.'
+      : 'Every tile hidden but the desert, until a settlement touches it.')
     : 'Every tile shown from the start.';
   for (const b of document.querySelectorAll('[data-solo-robber]')) {
     b.classList.toggle('on', (b.dataset.soloRobber === 'on') === soloRobber);
@@ -2096,7 +2098,8 @@ for (const b of document.querySelectorAll('[data-solo-layout]')) {
     soloLayout = b.dataset.soloLayout === 'dynamic' ? `dyn${DYNAMIC_DEFAULT}` : b.dataset.soloLayout;
     localStorage.setItem('hexcolony_solo_layout', soloLayout);
     // The whole point of Newfoundland is not knowing what is past the treeline yet.
-    if (soloLayout === 'newfoundland') {
+    // The Frontier is the same deal — the outer ring is fog until the group earns it.
+    if (soloLayout === 'newfoundland' || soloLayout === 'frontier') {
       soloFog = true;
       localStorage.setItem('hexcolony_solo_fog', 'on');
     }
@@ -2256,7 +2259,8 @@ for (const b of document.querySelectorAll('[data-layout]')) {
     const layout = b.dataset.layout === 'dynamic' ? `dyn${DYNAMIC_DEFAULT}` : b.dataset.layout;
     const patch = { 'settings.layout': layout };
     // The whole point of Newfoundland is not knowing what is past the treeline yet.
-    if (layout === 'newfoundland') patch['settings.fog'] = true;
+    // The Frontier is the same deal — the outer ring is fog until the group earns it.
+    if (layout === 'newfoundland' || layout === 'frontier') patch['settings.fog'] = true;
     if (setSetting(patch)) sfx.tap();
   });
 }
@@ -2357,7 +2361,9 @@ function renderLobby() {
     b.classList.toggle('on', (b.dataset.fog === 'on') === fog);
   }
   $('fog-blurb').textContent = fog
-    ? 'Every tile hidden but the desert, until a settlement touches it.'
+    ? (layout === 'frontier'
+      ? 'Every tile hidden but the desert. The outer ring opens for everyone at once.'
+      : 'Every tile hidden but the desert, until a settlement touches it.')
     : 'Every tile shown from the start.';
 
   const sea = s.sea;
@@ -3548,6 +3554,10 @@ function reactToLog(g) {
       // the taker's own colour, for two seconds.
       case 'longest': playAward('road', e.p); maybeHalfway(g, e.p, 2); break;
       case 'army': playAward('army', e.p); maybeHalfway(g, e.p, 2); break;
+      case 'frontier':
+        sfx.card();
+        shoutout('The frontier is open!', '#fff');
+        break;
       case 'turn':
         if (e.p === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }
         break;
@@ -5267,6 +5277,7 @@ function logLine(e) {
       break;
     case 'longest': text = `<span class="g"><b>${who(e.p)}</b> takes Longest Road (${e.len})</span>`; break;
     case 'army': text = `<span class="g"><b>${who(e.p)}</b> takes Largest Army (${e.size})</span>`; break;
+    case 'frontier': text = '<span class="g">The frontier is open!</span>'; break;
     case 'left': text = `<b>${who(e.p)}</b> left the game`; break;
     case 'abandoned': text = `<b>${who(e.p)}</b> left — game over`; break;
     case 'win': text = `<span class="g">${icon('trophy', { size: 14 })} <b>${who(e.p)}</b>`
