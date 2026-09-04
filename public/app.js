@@ -1331,6 +1331,18 @@ let sendChain = Promise.resolve();
 // refusal was worked out from a state that never existed, so it is dropped rather than
 // sent.
 let sendEra = 0;
+// How long a later move waits its turn behind an earlier one before going anyway.
+//
+// postMove already guards a single transaction with its own 15s ceiling, but that is a
+// per-call guard — it does nothing for whoever is queued BEHIND a call whose promise
+// never settles at all. That can genuinely happen: on iOS Safari a backgrounded tab can
+// pause the very timer withTimeout leans on, so the one promise meant to fail fast can
+// itself stall. Nothing then ever moves this chain forward again, which is fatal for the
+// one thing most likely to be queued behind a stuck roll — this device's own attempt to
+// end its stalled turn (see fireTimeout). A move applies inside a transaction that
+// re-reads the real server state regardless of when it runs, so nothing here depends on
+// strict ordering for correctness; it only has to give up waiting eventually.
+const SEND_QUEUE_MAX_MS = 3000;
 
 /**
  * Send a move.
@@ -1361,7 +1373,8 @@ function send(move, opts = {}) {
   const undoable = move.type === 'build' && g && g.phase === 'build';
   const drew = drawGuess(move);
   const era = sendEra;
-  const run = sendChain.then(() => postMove(move, opts, drew, era));
+  const waited = withTimeout(sendChain, SEND_QUEUE_MAX_MS).catch(() => {});
+  const run = waited.then(() => postMove(move, opts, drew, era));
   // The chain must survive a failed move, or every later tap queues behind a rejection
   // that already resolved.
   sendChain = run.then(() => {}, () => {});
@@ -4136,6 +4149,17 @@ function actBtn(id, ico, label, opts = {}) {
 
 // Set the instant Roll is tapped, cleared once the move resolves either way. See onAction.
 let rollPending = false;
+let rollWatchdog = null;
+// A ceiling that owes nothing to send() ever calling back.
+//
+// Rolling gets a fixed 10s turn allowance (ROLL_SECONDS in rules.js) — shorter than
+// postMove's own 15s network guard, so on nothing worse than a slow connection this
+// device cannot hear back before its own turn is already gone. Left alone, the button
+// would sit on "Rolling…" for the rest of the turn and then keep sitting there, because
+// nothing but that one send() call was ever going to clear it. This gives the button
+// back on its own schedule, well inside the 10s window, so a real stall still leaves
+// time to try again before the table moves on without you.
+const ROLL_PENDING_MAX_MS = 4000;
 
 function renderActions(g) {
   const mine = R.isTurn(g, playerId);
@@ -4257,7 +4281,16 @@ function onAction(id) {
       // left to mis-tap while the real one is still in flight.
       rollPending = true;
       renderActions(g);
-      send({ type: 'roll' }).then(() => { rollPending = false; });
+      clearTimeout(rollWatchdog);
+      rollWatchdog = setTimeout(() => {
+        rollPending = false;
+        const cur = game();
+        if (cur) renderActions(cur);
+      }, ROLL_PENDING_MAX_MS);
+      send({ type: 'roll' }).then(() => {
+        clearTimeout(rollWatchdog);
+        rollPending = false;
+      });
       break;
     }
     case 'end': send({ type: 'endTurn' }); break;
