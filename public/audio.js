@@ -440,7 +440,10 @@ export const sfx = Object.fromEntries(Object.keys(synth).map((name) => [name, ()
   if (!playSample(name)) synth[name]();
 }]));
 
+// Off by default: a phone buzzing on every dice roll and every card gained is a lot of
+// motors for a first impression, and it is easy to turn on in Settings for whoever wants
+// it. Only an explicit 'on' enables it.
 export function buzz(pattern) {
-  if (localStorage.getItem('hexcolony_haptics') === 'off') return;
+  if (localStorage.getItem('hexcolony_haptics') !== 'on') return;
   try { if (navigator.vibrate) navigator.vibrate(pattern); } catch { /* fine */ }
 }

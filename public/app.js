@@ -5890,7 +5890,7 @@ function openSettings() {
 
 function togState(key) {
   if (key === 'sound') return soundEnabled();
-  if (key === 'haptics') return localStorage.getItem('hexcolony_haptics') !== 'off';
+  if (key === 'haptics') return localStorage.getItem('hexcolony_haptics') === 'on';
   if (key === 'spin') return localStorage.getItem('hexcolony_spin_pieces') === 'on';
   return localStorage.getItem('hexcolony_awake') === 'on';
 }
