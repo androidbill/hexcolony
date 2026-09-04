@@ -3981,17 +3981,20 @@ function renderTrayRing(g) {
 }
 
 /**
- * Throw the dice across the board, then let them settle into the readout.
+ * Spin one large die over the board, then let it settle into the readout.
  *
- * Two halves. The tumble is pure CSS and always the same, because a throw that varied
- * would read as a glitch rather than as a roll. The settle is measured: the dice fly to
- * wherever the status row actually is, which moves with the safe area, the score strip
- * and the width of whatever the turn badge is currently saying — so the distance cannot
- * be written down in the stylesheet and has to be handed over as a custom property.
+ * Two halves. The spin is pure CSS and always the same, because a throw that varied
+ * would read as a glitch rather than as a roll. The settle is measured: the die flies to
+ * wherever the total in the status row actually is, which moves with the safe area, the
+ * score strip and the width of whatever the turn badge is currently saying — so the
+ * distance cannot be written down in the stylesheet and has to be handed over as a
+ * custom property.
  *
- * The faces show the real numbers from the moment they appear. Spinning through random
- * digits and landing on the answer is a lie the eye catches, and it makes the moment
- * about the animation instead of about the roll.
+ * It shows the total, not the two faces that made it — the total is the number that
+ * decides the turn, and it is the number this flies down to join. The pair still reads
+ * in the status row itself once the die lands there. The real answer appears the instant
+ * the spin ends. Spinning through random digits and landing on it is a lie the eye
+ * catches, and it makes the moment about the animation instead of about the roll.
  */
 const ROLL_TUMBLE_MS = 620;
 const ROLL_SETTLE_MS = 400;
@@ -3999,32 +4002,30 @@ let rollTimers = [];
 
 function playRoll(dice) {
   const stage = $('dice-stage');
-  if (!stage || !Array.isArray(dice) || dice.length !== 2) return;
+  const die = $('bigdie');
+  if (!stage || !die || !Array.isArray(dice) || dice.length !== 2) return;
   // A second roll landing mid-throw restarts cleanly rather than layering two.
   for (const t of rollTimers) clearTimeout(t);
   rollTimers = [];
 
-  const faces = [$('bigdie-a'), $('bigdie-b')];
-  faces.forEach((el, i) => { el.textContent = String(dice[i]); });
+  die.textContent = String(dice[0] + dice[1]);
 
   stage.hidden = false;
   stage.classList.remove('rolling', 'settling');
-  for (const el of faces) el.style.removeProperty('--dx');
+  die.style.removeProperty('--dx');
   void stage.offsetWidth;              // restart the animation rather than continue it
   stage.classList.add('rolling');
 
   rollTimers.push(setTimeout(() => {
     // Measured now, not earlier: the status row only takes its final position once the
     // turn badge has the text for this turn.
-    const targets = [$('die-a'), $('die-b')];
-    faces.forEach((el, i) => {
-      const from = el.getBoundingClientRect();
-      const to = targets[i]?.getBoundingClientRect();
-      if (!to || !to.width) return;
-      el.style.setProperty('--dx', `${Math.round(to.left + to.width / 2 - (from.left + from.width / 2))}px`);
-      el.style.setProperty('--dy', `${Math.round(to.top + to.height / 2 - (from.top + from.height / 2))}px`);
-      el.style.setProperty('--ds', (to.width / from.width).toFixed(3));
-    });
+    const from = die.getBoundingClientRect();
+    const to = $('die-sum')?.getBoundingClientRect();
+    if (to && to.width) {
+      die.style.setProperty('--dx', `${Math.round(to.left + to.width / 2 - (from.left + from.width / 2))}px`);
+      die.style.setProperty('--dy', `${Math.round(to.top + to.height / 2 - (from.top + from.height / 2))}px`);
+      die.style.setProperty('--ds', (to.width / from.width).toFixed(3));
+    }
     stage.classList.remove('rolling');
     stage.classList.add('settling');
   }, ROLL_TUMBLE_MS));
@@ -4116,8 +4117,11 @@ function renderHand(g) {
   }).join('') + (trading ? '' : devCard({ count: devs || null, dim: !devs, size: 'sm', stack: false }));
 }
 
-// Tapping your own card is how you overrule the payment the app worked out. One more
-// each tap, round to nothing at the top, so a tap is always undoable by tapping again.
+// Tapping your own card takes a whole trade's worth at once — three wheat on a 3:1 port
+// in one tap, not three — then a whole lot more each tap after, and back to nothing once
+// every lot is spent, so a tap is always undoable by tapping again. lotAfterTap lives in
+// rules.js because it is the same "what makes a whole trade" question the bank itself
+// asks, and the two must not drift apart.
 $('hand').addEventListener('click', (e) => {
   if (!trading) return;
   const g = game();
@@ -4127,10 +4131,14 @@ $('hand').addEventListener('click', (e) => {
   // The one real limit in the whole of trading: you cannot offer a card you do not hold.
   const r = el.dataset.pay;
   const have = g.players[playerId]?.res[r] || 0;
-  if (!have || (giveSel[r] || 0) >= have) return;
-  giveSel[r] = (giveSel[r] || 0) + 1;
+  if (!have) return;
   const rate = R.tradeRate(g, board, playerId, r);
-  if (giveSel[r] === 1 && rate < 4) portHint = { res: r, rate };
+  const next = R.lotAfterTap(giveSel[r] || 0, have, rate);
+  if (next) giveSel[r] = next; else delete giveSel[r];
+  // The hint fires the moment one full lot is on the table — this is the tap that would
+  // otherwise land at some other rate, before the player notices the port they are
+  // standing on already got them a better one.
+  if (next && next === rate && rate < 4) portHint = { res: r, rate };
   sfx.tap();
   render();
 });

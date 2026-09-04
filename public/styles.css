@@ -585,9 +585,10 @@ button {
 
 /* ------------------------------------------------------------ the roll
    Rolling is the most repeated action in the game and it used to be two numbers
-   appearing. These are the same two numbers, thrown across the board first.
+   appearing. One large die spins over the board and lands showing the total — the
+   number that actually decides the turn — then flies to take its place in the readout.
 
-   The stage covers the board and takes no input: the dice are a thing happening, not a
+   The stage covers the board and takes no input: the die is a thing happening, not a
    thing to press, and a full-screen layer that swallowed taps would eat the first tap of
    the turn it is announcing. */
 .dice-stage {
@@ -595,41 +596,34 @@ button {
   z-index: 6;
   pointer-events: none;
   display: grid; place-items: center;
-  grid-auto-flow: column;
-  gap: 22px;
 }
 .bigdie {
-  width: 96px; height: 96px;
-  border-radius: 20px;
+  width: 128px; height: 128px;
+  border-radius: 26px;
   background: linear-gradient(160deg, #fdf6e4, var(--parch));
   color: var(--ink);
   display: grid; place-items: center;
-  font-size: 54px; font-weight: 800;
+  font-size: 60px; font-weight: 800;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, .55), inset 0 -4px 0 rgba(0, 0, 0, .18);
+  box-shadow: 0 22px 48px rgba(0, 0, 0, .55), inset 0 -5px 0 rgba(0, 0, 0, .18);
   /* The two transforms the animation drives, declared here so the settle can start from
-     wherever the tumble happened to leave the die. */
+     wherever the spin happened to leave the die. */
   transform-origin: 50% 50%;
   will-change: transform, opacity;
 }
-/* Each die gets its own tumble so the pair never spins in step, which is the tell that
-   makes a rolled die read as animation rather than as a throw. */
-.dice-stage.rolling #bigdie-a { animation: tumble-a .62s cubic-bezier(.28,.02,.24,1) both; }
-.dice-stage.rolling #bigdie-b { animation: tumble-b .62s cubic-bezier(.22,.03,.3,1) both; }
+.dice-stage.rolling .bigdie { animation: die-spin .62s cubic-bezier(.28,.02,.24,1) both; }
 
-@keyframes tumble-a {
-  0%   { transform: translate(-40px, 120px) scale(.35) rotate(-160deg); opacity: 0; }
-  22%  { opacity: 1; }
-  55%  { transform: translate(6px, -26px) scale(1.12) rotate(190deg); }
-  78%  { transform: translate(0, 8px) scale(.97) rotate(352deg); }
-  100% { transform: translate(0, 0) scale(1) rotate(360deg); opacity: 1; }
-}
-@keyframes tumble-b {
-  0%   { transform: translate(46px, 132px) scale(.35) rotate(140deg); opacity: 0; }
-  22%  { opacity: 1; }
-  52%  { transform: translate(-8px, -34px) scale(1.15) rotate(-200deg); }
-  80%  { transform: translate(0, 6px) scale(.98) rotate(-368deg); }
-  100% { transform: translate(0, 0) scale(1) rotate(-360deg); opacity: 1; }
+/* Two full turns, always — a real toss looks different every time, but an animation that
+   varied would read as a glitch rather than as a roll. Landing back at a multiple of
+   360deg is what lets the total appear upright the instant the spin ends, with no separate
+   "straighten up" step to sit through. */
+@keyframes die-spin {
+  0%   { transform: scale(.4) rotate(0deg); opacity: 0; }
+  16%  { opacity: 1; }
+  38%  { transform: scale(1.2) rotate(300deg); }
+  62%  { transform: scale(.9) rotate(560deg); }
+  84%  { transform: scale(1.06) rotate(680deg); }
+  100% { transform: scale(1) rotate(720deg); opacity: 1; }
 }
 
 /* ------------------------------------------------------------ a trade crossing the table
@@ -2259,8 +2253,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
      and the cards fade rather than flying, so the information survives and the motion
      does not. The timings are untouched, because the JavaScript is counting on them to
      know when to take each stage down. */
-  @keyframes tumble-a { from { opacity: 0; } to { opacity: 1; transform: none; } }
-  @keyframes tumble-b { from { opacity: 0; } to { opacity: 1; transform: none; } }
+  @keyframes die-spin { from { opacity: 0; } to { opacity: 1; transform: none; } }
   @keyframes die-settle { to { opacity: 0; transform: none; } }
   @keyframes gain-in { from { opacity: 0; } to { opacity: 1; transform: none; } }
   @keyframes gain-away { to { opacity: 0; transform: none; } }
