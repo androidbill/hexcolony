@@ -906,6 +906,14 @@ const PULSE_QUIET_MS = 12000;
 // it when you are the last one in it, which covers the ordinary case. Orphans from a
 // killed app are swept from outside — scripts/sweep-rooms.mjs — and roomIsStale keeps
 // them out of the browse list meanwhile.
+// A softer, earlier tier than STALE_RESUB_MS: nothing has actually been called broken
+// yet at this point (no rung of the reconnect ladder has fired), but a furnace-cycle
+// Wi-Fi blip or a subway tunnel is already long enough to have missed something — the
+// steal that never showed up on someone's screen was exactly this length of gap, too
+// short to ever trip the 22s ladder. This one is cosmetic only: it says "hang on" rather
+// than "reconnecting", so it doesn't cry wolf over a perfectly normal slow turn the way
+// a lower STALE_RESUB_MS would.
+const STALE_HINT_MS = 8000;
 const STALE_RESUB_MS = 22000;
 const STALE_PULL_MS = 34000;
 const STALE_RESET_MS = 52000;
@@ -920,7 +928,18 @@ let lastMoveAt = 0;
 let nudgedAt = 0, nudgeCount = 0;
 
 const markFresh = () => { lastFreshAt = Date.now(); };
-function setConnBadge(bad) { $('conn-badge').hidden = !bad; }
+/**
+ * Two tiers, one element. 'hard' is the existing ladder saying it gave up on this
+ * stream and is actively fixing it. 'soft' is new: nothing has actually failed, this is
+ * only "it has been a little quiet" — worded so it never reads as an accusation against
+ * a connection that turns out fine a moment later.
+ */
+function setConnBadge(level) {
+  const el = $('conn-badge');
+  el.hidden = !level;
+  el.classList.toggle('soft', level === 'soft');
+  el.textContent = level === 'soft' ? 'Catching up…' : 'Reconnecting…';
+}
 
 function applyRoom(data, fresh) {
   if (fresh) markFresh();
@@ -1184,7 +1203,7 @@ function healthCheck() {
   if (stale > STALE_RESET_MS) hardReset();
   else if (stale > STALE_PULL_MS) pullFromServer();
   else if (stale > STALE_RESUB_MS) resubscribe(true);
-  setConnBadge(stale > STALE_RESUB_MS);
+  setConnBadge(stale > STALE_RESUB_MS ? 'hard' : stale > STALE_HINT_MS ? 'soft' : null);
 
   // Your phone is on the table and the table is waiting for you. Nudge, but give up
   // after a while so it doesn't buzz all evening.

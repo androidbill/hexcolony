@@ -2304,6 +2304,9 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   font-size: 12px; font-weight: 700;
   z-index: 95;
 }
+/* The soft tier is a heads-up, not an alarm — nothing has actually failed yet, so it
+   reads as a quieter amber rather than the ladder's urgent red. */
+.conn-badge.soft { background: rgba(196, 140, 30, 0.92); }
 
 .banner {
   position: fixed; left: 12px; right: 12px; bottom: calc(var(--safe-b) + 12px);
