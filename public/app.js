@@ -1388,6 +1388,28 @@ function send(move, opts = {}) {
   return run;
 }
 
+/**
+ * Whether a {type:'timeout'} move is actually due, judged against the deadline the
+ * transaction just read from the server — never the caller's own cached copy of it.
+ *
+ * fireTimeout() already checks this against the caller's local room/game before ever
+ * sending the move, but that check runs against whatever snapshot this device last
+ * received. A tab that was backgrounded for a while can wake up holding a snapshot
+ * from before somebody's turn even started, compute a deadline that is long past, and
+ * fire off a timeout that — with nothing re-checking it here — would force through
+ * whoever the FRESH data says is actually on the clock, even if they are mid-turn and
+ * nowhere near out of time. Re-deriving "is it actually due" from the data the
+ * transaction itself just read closes that gap for every caller, not just the stale one.
+ */
+function turnDeadlinePassed(data) {
+  const g = data.game;
+  if (!g.turn.allowMs) return false; // this step was never on the clock
+  if (['active', 'resuming'].includes(data.pause?.status)) return false; // clock is frozen
+  const started = stampMs(data.turnStartedAt);
+  if (started === null) return false; // no stamped deadline to have passed yet
+  return serverNow() >= started + g.turn.allowMs;
+}
+
 async function postMove(move, opts, drew, era) {
   // A move queued behind one the server refused was reasoned from a state that never
   // happened. Sending it anyway would be asking for a second, more confusing refusal.
@@ -1405,6 +1427,7 @@ async function postMove(move, opts, drew, era) {
         if (data === null) { rejected = 'The room is gone.'; return data; }
         if (!data.game) { rejected = 'The game has not started.'; return; }
         normalizeRtdbGame(data.game);
+        if (move.type === 'timeout' && !turnDeadlinePassed(data)) { rejected = 'Not yet.'; return; }
         const had = new Set((data.game.trades || []).map((t) => t.id));
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
@@ -1430,6 +1453,7 @@ async function postMove(move, opts, drew, era) {
         if (!snap.exists()) { rejected = 'The room is gone.'; return; }
         const data = snap.data();
         if (!data.game) { rejected = 'The game has not started.'; return; }
+        if (move.type === 'timeout' && !turnDeadlinePassed(data)) { rejected = 'Not yet.'; return; }
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
         const patch = { game: res.game };
