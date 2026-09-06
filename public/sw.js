@@ -94,7 +94,9 @@ self.addEventListener('fetch', (e) => {
     fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        // Kept alive with waitUntil — otherwise the worker can be killed the instant
+        // res reaches the page, silently dropping this write before it lands.
+        e.waitUntil(caches.open(CACHE).then((c) => c.put(e.request, copy)));
         return res;
       })
       .catch(() => caches.match(e.request, { ignoreSearch: true })

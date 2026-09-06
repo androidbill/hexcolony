@@ -1429,6 +1429,20 @@ function turnDeadlinePassed(data) {
   return serverNow() >= started + g.turn.allowMs;
 }
 
+/**
+ * The same trust gap as turnDeadlinePassed, for a trade offer's own deadline. The
+ * engine's own comment on 'expireTrade' says it plainly: "the engine has no clock of
+ * its own to check it against, exactly as with timeout" — so without this, the same
+ * stale-snapshot device that could force somebody's turn to end early could just as
+ * easily kill a live offer somebody else was about to accept.
+ */
+function tradeDeadlinePassed(data, id) {
+  if (['active', 'resuming'].includes(data.pause?.status)) return false; // clock is frozen
+  const made = stampMs(data.tradeDeadlines?.[id]);
+  if (made === null) return false; // no stamped deadline to have passed yet
+  return serverNow() >= made + R.TRADE_SECONDS * 1000;
+}
+
 async function postMove(move, opts, drew, era) {
   // A move queued behind one the server refused was reasoned from a state that never
   // happened. Sending it anyway would be asking for a second, more confusing refusal.
@@ -1447,6 +1461,7 @@ async function postMove(move, opts, drew, era) {
         if (!data.game) { rejected = 'The game has not started.'; return; }
         normalizeRtdbGame(data.game);
         if (move.type === 'timeout' && !turnDeadlinePassed(data)) { rejected = 'Not yet.'; return; }
+        if (move.type === 'expireTrade' && !tradeDeadlinePassed(data, move.id)) { rejected = 'Not yet.'; return; }
         const had = new Set((data.game.trades || []).map((t) => t.id));
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
@@ -1473,6 +1488,7 @@ async function postMove(move, opts, drew, era) {
         const data = snap.data();
         if (!data.game) { rejected = 'The game has not started.'; return; }
         if (move.type === 'timeout' && !turnDeadlinePassed(data)) { rejected = 'Not yet.'; return; }
+        if (move.type === 'expireTrade' && !tradeDeadlinePassed(data, move.id)) { rejected = 'Not yet.'; return; }
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
         const patch = { game: res.game };
@@ -3968,7 +3984,11 @@ function renderScoreStrip(g) {
 function turnText(g) {
   const up = R.currentPid(g);
   const mine = up === playerId;
-  const who = mine ? 'You' : nameFor(up);
+  // Set into innerHTML by renderTurnBadge below, unlike most other nameFor() call
+  // sites which go through textContent or shoutout's own DOM-node builder — so unlike
+  // those, this one has to escape a name itself rather than relying on the browser to
+  // treat it as plain text.
+  const who = mine ? 'You' : esc(nameFor(up));
   if (g.phase === 'setup') {
     const what = g.setup.need === 's' ? 'a settlement' : 'a road';
     return mine ? `Place ${what}` : `${who} is placing ${what}`;
@@ -3987,7 +4007,7 @@ function turnText(g) {
     if (g.turn.freeRoads > 0 && mine) return `Place ${g.turn.freeRoads} free road${g.turn.freeRoads > 1 ? 's' : ''}`;
     return mine ? 'Your turn' : `${who}'s turn`;
   }
-  if (g.phase === 'over') return `${g.winner === playerId ? 'You' : nameFor(g.winner)} won`;
+  if (g.phase === 'over') return `${g.winner === playerId ? 'You' : esc(nameFor(g.winner))} won`;
   return '';
 }
 
@@ -4333,18 +4353,22 @@ function onAction(id) {
       rollPending = true;
       renderActions(g);
       clearTimeout(rollWatchdog);
-      rollWatchdog = setTimeout(() => {
+      const myWatchdog = rollWatchdog = setTimeout(() => {
         rollPending = false;
         const cur = game();
         if (cur) renderActions(cur);
       }, ROLL_PENDING_MAX_MS);
       send({ type: 'roll' }).then(() => {
+        // Only this attempt's own watchdog. A first roll that finally lands after the
+        // watchdog already unstuck the button — with a second attempt now in flight —
+        // must not clear the SECOND attempt's timer, or a second stall has nothing
+        // left to unstick it and the button dies for the rest of the turn again.
+        if (rollWatchdog !== myWatchdog) return;
         clearTimeout(rollWatchdog);
         rollPending = false;
       });
       break;
     }
-    case 'end': send({ type: 'endTurn' }); break;
     case 'end': send({ type: 'endTurn' }); break;
     case 'trade': startTrade(); break;
     case 'dev': openDev(g); break;
@@ -5334,16 +5358,16 @@ function logLine(e) {
       break;
     }
     case 'nothing': text = `<span class="r">Nobody produced on ${e.roll}</span>`; break;
-    case 'react': text = `<b>${who(e.p)}</b> reacted ${e.emoji}`; break;
-    case 'shortfall': text = `<span class="r">The bank ran short of ${e.res}${e.partial ? ' — partial payout' : ' — nobody paid'}</span>`; break;
-    case 'build': text = `<b>${who(e.p)}</b> built a ${e.what}${e.free ? ' (free)' : ''}`; break;
+    case 'react': text = `<b>${who(e.p)}</b> reacted ${esc(e.emoji)}`; break;
+    case 'shortfall': text = `<span class="r">The bank ran short of ${esc(e.res)}${e.partial ? ' — partial payout' : ' — nobody paid'}</span>`; break;
+    case 'build': text = `<b>${who(e.p)}</b> built a ${esc(e.what)}${e.free ? ' (free)' : ''}`; break;
     case 'buyDev': text = `<b>${who(e.p)}</b> bought a development card`; break;
     case 'playDev': text = `<b>${who(e.p)}</b> played ${esc(R.DEV_INFO[e.card]?.name || e.card)}`; break;
     case 'noloot': text = `<span class="r">Nobody had a card for <b>${who(e.p)}</b> to take</span>`; break;
     case 'robber': text = `<b>${who(e.p)}</b> moved the robber`; break;
     case 'steal': text = `<b>${who(e.p)}</b> robbed <b>${who(e.from)}</b>`; break;
     case 'discard': text = `<b>${who(e.p)}</b> discarded ${e.count}`; break;
-    case 'mono': text = `<b>${who(e.p)}</b> monopolised ${e.res} — ${e.count} cards`; break;
+    case 'mono': text = `<b>${who(e.p)}</b> monopolised ${esc(e.res)} — ${e.count} cards`; break;
     case 'plenty': text = `<b>${who(e.p)}</b> took ${bits(e.res)} from the bank`; break;
     case 'bankTrade': text = `<b>${who(e.p)}</b> traded ${bits(e.give)} to the bank for ${bits(e.want)}`; break;
     case 'offer': text = `<b>${who(e.p)}</b> offered ${bits(e.give)} for ${bits(e.want)}`; break;
@@ -5366,7 +5390,7 @@ function logLine(e) {
     case 'abandoned': text = `<b>${who(e.p)}</b> left — game over`; break;
     case 'win': text = `<span class="g">${icon('trophy', { size: 14 })} <b>${who(e.p)}</b>`
       + ` wins with ${e.vp} points</span>`; break;
-    default: text = e.t;
+    default: text = esc(e.t);
   }
   return `<div class="log-row" style="--c:${esc(c)}">${text}</div>`;
 }

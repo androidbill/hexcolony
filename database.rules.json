@@ -10,6 +10,7 @@
             ".read": "$code.matches(/^R[A-Z]{4}$/)",
             ".write": "$code.matches(/^R[A-Z]{4}$/)",
             ".validate": "newData.hasChildren(['by', 'name', 'text', 'at'])
+              && newData.numChildren() == 4
               && newData.child('text').isString()
               && newData.child('text').val().length > 0
               && newData.child('text').val().length <= 140
