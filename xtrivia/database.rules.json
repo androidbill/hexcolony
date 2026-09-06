@@ -1,0 +1,27 @@
+{
+  "rules": {
+    "rooms": {
+      "$code": {
+        ".read": "$code.matches(/^[A-Z0-9]{5}$/)",
+        ".write": "$code.matches(/^[A-Z0-9]{5}$/)",
+
+        "players": {
+          "$pid": {
+            ".validate": "newData.hasChildren(['name', 'score'])",
+            "name": { ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 16" },
+            "score": { ".validate": "newData.isNumber()" }
+          }
+        },
+
+        "answers": {
+          "$qIndex": {
+            "$pid": {
+              ".validate": "newData.hasChild('optionIndex')",
+              "optionIndex": { ".validate": "newData.isNumber()" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

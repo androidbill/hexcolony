@@ -1,0 +1,10 @@
+{
+  "name": "xtrivia",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "xTrivia - live multiplayer trivia PWA, everyone answers at once",
+  "scripts": {
+    "serve": "npx --yes http-server public -p 8080 -c-1"
+  }
+}

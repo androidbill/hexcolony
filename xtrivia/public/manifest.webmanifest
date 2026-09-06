@@ -1,0 +1,16 @@
+{
+  "id": "/xtrivia/",
+  "name": "xTrivia",
+  "short_name": "xTrivia",
+  "description": "Live multiplayer trivia — everyone answers at once, no accounts, join by room code.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#150a30",
+  "theme_color": "#150a30",
+  "orientation": "portrait",
+  "categories": ["games", "trivia", "entertainment"],
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

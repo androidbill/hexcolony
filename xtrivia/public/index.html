@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#150a30">
+<title>xTrivia</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="toast" class="toast" hidden></div>
+
+<!-- ============================================================ HOME -->
+<main id="screen-home" class="screen">
+  <div class="brand">
+    <img src="icons/icon.svg" alt="" class="brand-mark">
+    <h1>xTrivia</h1>
+    <p class="tagline">Live trivia, everyone answers at once.</p>
+  </div>
+
+  <div class="card">
+    <button id="btn-go-host" class="btn btn-primary">Host a game</button>
+  </div>
+
+  <div class="card">
+    <h2>Join a game</h2>
+    <label class="field">
+      <span>Your name</span>
+      <input id="join-name" maxlength="16" placeholder="Nickname" autocomplete="off">
+    </label>
+    <label class="field">
+      <span>Room code</span>
+      <input id="join-code" maxlength="5" placeholder="ABCDE" autocomplete="off"
+             style="text-transform:uppercase; letter-spacing:.2em; font-weight:700;">
+    </label>
+    <button id="btn-join" class="btn btn-accent">Join</button>
+  </div>
+
+  <p id="offline-note" class="note" hidden>
+    No Firebase connection configured yet — see xtrivia/README.md to set one up.
+  </p>
+</main>
+
+<!-- ============================================================ HOST SETUP -->
+<main id="screen-host-setup" class="screen" hidden>
+  <button class="btn-back" data-back>&larr;</button>
+  <h1>Host a game</h1>
+
+  <label class="field">
+    <span>Your name</span>
+    <input id="host-name" maxlength="16" placeholder="Nickname" autocomplete="off">
+  </label>
+
+  <label class="field">
+    <span>Category</span>
+    <select id="host-category"><option value="">Any category</option></select>
+  </label>
+
+  <label class="field">
+    <span>Difficulty</span>
+    <select id="host-difficulty">
+      <option value="">Any difficulty</option>
+      <option value="easy">Easy</option>
+      <option value="medium">Medium</option>
+      <option value="hard">Hard</option>
+    </select>
+  </label>
+
+  <label class="field">
+    <span>Number of questions: <b id="host-amount-val">10</b></span>
+    <input id="host-amount" type="range" min="5" max="20" step="1" value="10">
+  </label>
+
+  <label class="field">
+    <span>Seconds per question: <b id="host-seconds-val">20</b></span>
+    <input id="host-seconds" type="range" min="10" max="60" step="5" value="20">
+  </label>
+
+  <button id="btn-create-room" class="btn btn-primary">Create room</button>
+</main>
+
+<!-- ============================================================ LOBBY -->
+<main id="screen-lobby" class="screen" hidden>
+  <h1>Room code</h1>
+  <div class="room-code" id="lobby-code">-----</div>
+  <p class="note">Share this code — players join from the home screen.</p>
+
+  <h2>Players (<span id="lobby-count">0</span>)</h2>
+  <ul id="lobby-players" class="player-list"></ul>
+
+  <p id="lobby-waiting" class="note">Waiting for the host to start&hellip;</p>
+  <button id="btn-start-game" class="btn btn-primary" hidden>Start game</button>
+</main>
+
+<!-- ============================================================ QUESTION -->
+<main id="screen-question" class="screen" hidden>
+  <div class="q-topbar">
+    <span id="q-progress" class="pill">Q 1/10</span>
+    <span id="q-meta" class="pill pill-muted"></span>
+    <span id="q-answered" class="pill pill-muted" hidden></span>
+  </div>
+  <div class="timer-track"><div id="q-timer-bar" class="timer-bar"></div></div>
+  <h2 id="q-text" class="q-text"></h2>
+  <div id="q-options" class="options-grid"></div>
+  <button id="btn-force-reveal" class="btn btn-ghost" hidden>Reveal now</button>
+</main>
+
+<!-- ============================================================ REVEAL -->
+<main id="screen-reveal" class="screen" hidden>
+  <h2 id="reveal-heading"></h2>
+  <p id="reveal-correct" class="reveal-correct"></p>
+  <div id="reveal-points" class="reveal-points"></div>
+
+  <h3>Leaderboard</h3>
+  <ol id="reveal-board" class="leaderboard"></ol>
+
+  <button id="btn-next-question" class="btn btn-primary" hidden>Next question</button>
+  <p id="reveal-wait" class="note" hidden>Waiting for the host&hellip;</p>
+</main>
+
+<!-- ============================================================ END -->
+<main id="screen-end" class="screen" hidden>
+  <h1>Final scores</h1>
+  <div id="end-podium" class="podium"></div>
+  <ol id="end-board" class="leaderboard"></ol>
+
+  <button id="btn-play-again" class="btn btn-primary" hidden>Play again</button>
+  <button id="btn-back-home" class="btn btn-ghost">Back to home</button>
+</main>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
