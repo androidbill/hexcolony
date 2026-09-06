@@ -10,6 +10,16 @@
 
 export const RESOURCES = ['wood', 'brick', 'sheep', 'wheat', 'ore'];
 
+// `res` and `label` below usually come straight from the enum above, but several
+// callers key a card off an object's own field name instead (a trade's give/want, a
+// log entry's `res`) — and since the whole room document is writable by any seated
+// client, that field is not actually guaranteed to be one of the five resources by the
+// time it reaches here. Escaped the same way app.js's own `esc()` does, so a forged
+// value breaks nothing worse than showing a card with no matching artwork.
+const esc = (s) => String(s ?? '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
 export const RES_NAME = {
   wood: 'Wood', brick: 'Brick', sheep: 'Sheep', wheat: 'Wheat', ore: 'Ore',
 };
@@ -23,7 +33,12 @@ export const RES_NAME = {
 export function resCard(res, {
   count = null, size = '', selected = false, dim = false, dataset = '', label = '', stack = true,
 } = {}) {
-  const cls = ['rcard', `rcard--${res}`];
+  // `res` is almost always one of RESOURCES, but several callers key a card off a
+  // trade's or a log entry's own field name instead — data any seated client can have
+  // written directly — so it is not actually guaranteed to be one of the five by the
+  // time it gets here.
+  const safeRes = esc(res);
+  const cls = ['rcard', `rcard--${safeRes}`];
   if (size) cls.push(`rcard--${size}`);
   if (selected) cls.push('is-selected');
   if (dim) cls.push('is-dim');
@@ -35,13 +50,13 @@ export function resCard(res, {
 
   const badge = (count !== null && count !== undefined)
     ? `<span class="rcard-count">${count}</span>` : '';
-  const name = label ? `<span class="rcard-label">${label}</span>` : '';
+  const name = label ? `<span class="rcard-label">${esc(label)}</span>` : '';
 
   // The resource class goes on the WRAP as well as the card. It carries --rc, and the
   // stack edges are siblings of the card rather than children of it — so they could never
   // see that variable and every stack in the game has been drawing its edges in the grey
   // fallback colour instead of the resource's own.
-  return `<span class="rcard-wrap rcard--${res}"${dataset}>${edges}`
+  return `<span class="rcard-wrap rcard--${safeRes}"${dataset}>${edges}`
     + `<span class="${cls.join(' ')}"><span class="rcard-face"></span>${badge}</span>`
     + `${name}</span>`;
 }
@@ -56,7 +71,7 @@ export function devCard({ count = null, size = '', dim = false, dataset = '', la
     `<span class="rcard-edge" style="--i:${depth - i}"></span>`).join('');
   const badge = (count !== null && count !== undefined)
     ? `<span class="rcard-count">${count}</span>` : '';
-  const name = label ? `<span class="rcard-label">${label}</span>` : '';
+  const name = label ? `<span class="rcard-label">${esc(label)}</span>` : '';
   return `<span class="rcard-wrap rcard--dev"${dataset}>${edges}`
     + `<span class="${cls.join(' ')}"><span class="rcard-face rcard-face--dev">?</span>${badge}</span>`
     + `${name}</span>`;

@@ -22,11 +22,24 @@ service cloud.firestore {
     }
 
     match /rooms/{code} {
-      allow read: if true;
+      // get (one known code) is the whole point of "the code is the secret" and stays
+      // open; list is a DIFFERENT permission in Firestore's rules and a bare
+      // `allow read: if true` grants both — which let any client run
+      // getDocs(collection(db,'rooms')) and read every room's code and state with no
+      // code needed at all, the one thing this model assumes is impossible. Nothing in
+      // the app ever queries the rooms collection instead of getting one document by
+      // its code, so list has nothing legitimate to allow.
+      allow get: if true;
+      allow list: if false;
       allow create: if validRoomId(code)
                     && request.resource.data.keys().hasAll(['code', 'state', 'players'])
                     && request.resource.data.code == code;
-      allow update: if true;
+      // request.resource.data on an update is the document as it will read AFTER the
+      // write merges in, not just the patch — so this only rejects an update that would
+      // leave the room missing one of these or with a rewritten code; an ordinary
+      // partial updateDoc() that never touches them still passes untouched.
+      allow update: if request.resource.data.keys().hasAll(['code', 'state', 'players'])
+                    && request.resource.data.code == code;
       allow delete: if true;
     }
 
@@ -51,7 +64,9 @@ service cloud.firestore {
                     && request.resource.data.text.size() > 0
                     && request.resource.data.text.size() <= 140
                     && request.resource.data.name is string
-                    && request.resource.data.name.size() <= 14;
+                    && request.resource.data.name.size() <= 14
+                    && request.resource.data.by is string
+                    && request.resource.data.by.size() <= 40;
       // Said is said: a message cannot be edited into something else after the fact.
       allow update: if false;
       allow delete: if true;
@@ -61,9 +76,18 @@ service cloud.firestore {
     // Firestore has no field-level deltas: a beat written inside the room would
     // rebroadcast the entire game state to every phone every few seconds.
     match /pulses/{code} {
-      allow read: if true;
+      // Same get/list split as rooms above, and this one mattered more: unlike rooms
+      // this had no validRoomId(code) check on read at all, so a bare
+      // getDocs(collection(db,'pulses')) needed no guess of any kind to return every
+      // live room's code in one call — a direct index of the one thing this whole
+      // model treats as secret.
+      allow get: if validRoomId(code);
+      allow list: if false;
       allow write: if validRoomId(code)
-                   && request.resource.data.keys().hasOnly(['at', 'by', 'code', 'expiresAt']);
+                   && request.resource.data.keys().hasOnly(['at', 'by', 'code', 'expiresAt'])
+                   && request.resource.data.code == code
+                   && request.resource.data.by is string
+                   && request.resource.data.by.size() <= 40;
       allow delete: if true;
     }
 
