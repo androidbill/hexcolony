@@ -99,11 +99,25 @@ export function unlock() {
 // this, audio stays dead until whatever the next cue happens to be, which on a slow turn
 // can be a long silent stretch that reads as "the sound broke" rather than "it will catch
 // up on the next knock". Catching the tab becoming visible again resumes it immediately.
+//
+// It is not enough on its own, though: a resume() called from here, or from inside
+// note()/burst() when the next cue tries to play, is not running inside a user gesture,
+// and a context a phone has actually gone and suspended for real (not just "interrupted",
+// which this same call does recover) can refuse to leave that state for anything less —
+// which is exactly the case that needed the app fully closed and reopened to fix. Almost
+// none of this game's sounds are played from the tap that caused them in the first place
+// (see reactToLog: they follow the shared log arriving back from the server, well outside
+// whatever gesture triggered the move), so the sound system as a whole is only ever as
+// alive as the last time a real tap landed somewhere. Watching every tap in the app, not
+// just the handful of buttons that already called unlock() by name, is what closes that
+// gap — the tap that dismisses the results screen or answers a rematch prompt counts the
+// same as one that presses a button that happens to say "sound".
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && ctx && ctx.state !== 'running') {
     ctx.resume().catch(() => {});
   }
 });
+document.addEventListener('pointerdown', unlock, { passive: true });
 
 /** A panner, or a plain gain where StereoPannerNode is missing (older Safari). */
 function panner(pan) {
