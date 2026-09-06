@@ -2718,7 +2718,7 @@ function chatTime(at) {
 
 function chatTextMarkup(text) {
   const handles = new Set(chatPeople().map((p) => chatMentionHandle(p.name).toLowerCase()).filter(Boolean));
-  const clean = esc(maskText(text || ''));
+  const clean = esc(text || '');
   return clean.replace(/(^|[\s])(@[A-Za-z0-9_]{1,24})/g, (all, prefix, mention) => {
     return handles.has(mention.slice(1).toLowerCase())
       ? `${prefix}<span class="chat-mention">${mention}</span>`
@@ -2976,16 +2976,6 @@ async function sendChat() {
   const text = (input.value || '').trim().slice(0, CHAT_MAX);
   if (!text) return;
   if (!roomCode || solo) return;
-
-  const bad = findBadWord(text);
-  if (bad) {
-    // Named, because "that is not allowed" with no idea which word is a puzzle rather
-    // than a rule — and because the filter is not perfect, so a player who has been
-    // stopped for saying "Scunthorpe" deserves to know that is what happened.
-    toast(`Let's keep it clean — "${bad}" will not send.`);
-    sfx.error();
-    return;
-  }
 
   input.value = '';
   try {
