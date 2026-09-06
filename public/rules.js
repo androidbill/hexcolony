@@ -327,7 +327,15 @@ export function newGame(seats, settings, rng = Math.random) {
     robber: useRobber ? startBoard.robber : -1,
     bank: Object.fromEntries(RESOURCES.map((r) => [r, info.bank])),
     deck: shuffle(devBag(info), rng),
-    vpNames: shuffle(VP_NAMES, rng),
+    // Sized to how many VP cards this board's deck actually deals, not just the base
+    // flavour-name list — Newfoundland and the larger dynamic boards deal more of them
+    // than there are names for, and a fixed 6-name list quietly fell back to the same
+    // generic "Victory Point" for every card past the sixth, so two players could end up
+    // holding a card with the identical name. A repeat past the base list is numbered
+    // rather than invented, since there is no unlimited supply of one-word landmarks.
+    vpNames: shuffle(Array.from({ length: info.dev.vp || 0 }, (_, i) => (
+      i < VP_NAMES.length ? VP_NAMES[i] : `${VP_NAMES[i % VP_NAMES.length]} ${Math.floor(i / VP_NAMES.length) + 1}`
+    )), rng),
     phase: 'setup',
     setup: { order, at: 0, need: 's', lastV: null },
     turnSeconds: TURN_OPTIONS.includes(settings.turnSeconds) ? settings.turnSeconds : 0,
@@ -679,6 +687,15 @@ function startTurn(g, events) {
   g.trades = [];
   startClock(g, ROLL_SECONDS);
   note(g, events, { t: 'turn', p: pid });
+  // Longest Road/Largest Army can change hands on somebody ELSE's move — a settlement
+  // cutting a road, a knight nobody expected — and land on a player who was already one
+  // award away from the target without them doing anything at all. checkWin only ever
+  // looks at whoever's turn it is, by design, so without this a bystander's win is never
+  // caught unless their own next turn happens to also build, buy, or play a card; a turn
+  // spent just rolling and trading would let the game run straight past a real win.
+  // Every turn starts here, so checking right where it begins closes that gap while still
+  // only ever declaring a win on the winner's own turn.
+  checkWin(g, events);
 }
 
 function advanceSeat(g) {
@@ -1436,6 +1453,15 @@ export function applyMove(state, pid, move, rng = Math.random) {
         // Straight to 'robber' was wrong in a game with the robber switched off: that
         // phase has no legal move there, so the turn parked and never came back.
         afterSeven(g, events, rng);
+      } else if ((g.phase === 'steal' || g.phase === 'take') && !g.pending.stealFrom.length) {
+        // The thief's own turn, not theirs — wasTheirTurn only covers the departed
+        // seat being the actor. If every candidate they could have robbed leaves
+        // while they're still deciding, stealFrom above is now empty but the phase
+        // never moved off 'steal'/'take', and nothing else can ever match an empty
+        // list: steal/takeCard both require stealFrom.includes(move.from), and even
+        // the timeout escape hatch reads stealFrom[0], which is undefined. Without
+        // this the turn is stuck for good.
+        resumeTurn(g);
       }
       refreshAwards(g, events);
       return ok();
