@@ -2709,6 +2709,12 @@ $('react-grid').addEventListener('click', (e) => {
 document.addEventListener('click', (e) => {
   if (!e.target.closest('#board-tools')) setBoardTools(false);
 });
+document.addEventListener('click', (e) => {
+  if (!actionsMenuOpen || e.target.closest('#actions')) return;
+  actionsMenuOpen = false;
+  const g = game();
+  if (g) renderActions(g);
+});
 
 $('btn-recenter').addEventListener('click', () => { view.resetView(); sfx.tap(); });
 
@@ -4299,10 +4305,26 @@ let rollWatchdog = null;
 // time to try again before the table moves on without you.
 const ROLL_PENDING_MAX_MS = 4000;
 
+// Players, DEV and — on your own turn — Trade all have a second way in now: a name in
+// the score strip, the dev card in the hand, a card in the hand. Sitting on the action
+// bar for the whole game on top of that is three permanent buttons for things that are
+// each reached for a few times a turn at most. They fold behind one handle instead,
+// exactly the way the board's own tools do — shut is the default, and it opens no wider
+// than the row it already had, so nothing about the bar's layout changes except how much
+// of it is visible before you ask for it.
+let actionsMenuOpen = false;
+let actionsMenuKey = '';
+
 function renderActions(g) {
   const mine = R.isTurn(g, playerId);
   const p = g.players[playerId];
   const bar = $('actions');
+  // Shut on the way into a new turn or a new phase, so an expansion left open during a
+  // build phase does not sit there through the robber, the discard, or somebody else's
+  // whole turn. Not reset on every render — an incoming trade offer redraws this same
+  // bar and must not slam the menu shut while a player is still using it.
+  const menuKey = `${g.turn.num}:${g.phase}`;
+  if (menuKey !== actionsMenuKey) { actionsMenuKey = menuKey; actionsMenuOpen = false; }
   // Whether the Cards sheet opens is a question about what is HELD, not about what can be
   // played this second. Gating it on the playable subset — which excludes victory points
   // and anything bought this turn — meant a victory point card, five of the twenty-five in
@@ -4315,10 +4337,17 @@ function renderActions(g) {
   const devBadge = held;
   const canBuyDev = !!p && mine && g.phase === 'build'
     && !pauseBlocksGame() && R.whatCanIBuild(g, playerId).dev;
-  const utility = () => actBtn('players', icon('players'), 'Players')
-    + actBtn('dev', icon('dev'), 'DEV', {
-      ready: canBuyDev, badge: devBadge || 0,
-    });
+  // Collapsed, the badge and the ready glow move to the handle itself — the two things
+  // this fold must not cost are knowing you are holding cards and knowing you can
+  // afford one, and both were exactly what DEV's own badge already said.
+  const utility = (extra = '') => {
+    if (!actionsMenuOpen) {
+      return actBtn('more', icon('more'), 'More', { ready: canBuyDev, badge: devBadge || 0 });
+    }
+    return actBtn('players', icon('players'), 'Players')
+      + actBtn('dev', icon('dev'), 'DEV', { ready: canBuyDev, badge: devBadge || 0 })
+      + extra;
+  };
 
   if (!p) { bar.innerHTML = utility(); return; }
 
@@ -4372,8 +4401,7 @@ function renderActions(g) {
   // build phase
   const mustPlace = g.turn.freeRoads > 0;
   bar.innerHTML =
-    utility() +
-    actBtn('trade', icon('trade'), 'Trade', { disabled: R.handSize(p) === 0 }) +
+    utility(actBtn('trade', icon('trade'), 'Trade', { disabled: R.handSize(p) === 0 })) +
     actBtn('end', icon('done'), 'End turn', { primary: !mustPlace, disabled: mustPlace });
 }
 
@@ -4437,11 +4465,16 @@ function onAction(id) {
       break;
     }
     case 'end': send({ type: 'endTurn' }); break;
-    case 'trade': startTrade(); break;
-    case 'dev': openDev(g); break;
+    case 'more': actionsMenuOpen = true; renderActions(g); break;
+    // Whatever it opened, the row goes back to just the handle behind it — the same
+    // "shut the moment one is used" rule the board's own tools pill follows. Closing a
+    // sheet does not itself repaint the bar underneath, so the collapse is drawn here
+    // rather than left for whatever render happens to come next.
+    case 'trade': actionsMenuOpen = false; renderActions(g); startTrade(); break;
+    case 'dev': actionsMenuOpen = false; renderActions(g); openDev(g); break;
     case 'discard': openDiscard(g); break;
     case 'steal': openSteal(g); break;
-    case 'players': openPlayers(); break;
+    case 'players': actionsMenuOpen = false; renderActions(g); openPlayers(); break;
     case 'log': openLog(g); break;
     case 'over':
       renderOver(g);

@@ -73,6 +73,13 @@ const PATHS = {
   // A card back, for the count on a player chip.
   card: '<rect x="5" y="3.5" width="14" height="17" rx="2.2"/><path d="M9 8.5l6 7M15 8.5l-6 7"/>',
 
+  // Three plain dots, the same handle the board's own tools use — there vertical, since
+  // that pill grows up off a corner; here horizontal, since this one grows sideways
+  // along the action bar it lives in.
+  more: '<circle cx="5" cy="12" r="1.9" fill="currentColor" stroke="none"/>'
+    + '<circle cx="12" cy="12" r="1.9" fill="currentColor" stroke="none"/>'
+    + '<circle cx="19" cy="12" r="1.9" fill="currentColor" stroke="none"/>',
+
   house: '<path d="M4 11.2L12 4.5l8 6.7"/><path d="M6.2 10v9.5h11.6V10"/>',
   city: '<path d="M3.5 20.5h17"/><path d="M5 20.5V9.2L10.5 5v15.5"/><path d="M10.5 11.5H19v9"/>'
     + '<path d="M13.5 15h2.5"/>',
