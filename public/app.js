@@ -4410,7 +4410,10 @@ function renderActions(g) {
   if (g.phase === 'roll') {
     bar.innerHTML =
       utility() +
-      actBtn('roll', icon('roll'), rollPending ? 'Rolling…' : 'Roll', { primary: true, wide: true, disabled: rollPending }); return;
+      // Not wide: More sits beside this the same way it sits beside End turn, and the
+      // two rows read as one bar with a changing second half rather than as two
+      // different widths for the one button that never moves.
+      actBtn('roll', icon('roll'), rollPending ? 'Rolling…' : 'Roll', { primary: true, disabled: rollPending }); return;
   }
 
   // build phase
