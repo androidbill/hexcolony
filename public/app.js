@@ -64,6 +64,25 @@ function shuffle(list) {
   }
   return out;
 }
+
+/**
+ * A fair shuffle that will not lead off with the same seat twice running.
+ *
+ * A plain shuffle is not wrong when the same player opens two or three games in a row —
+ * at a table of two or three that is common, not rare — but it reads as broken to
+ * whoever it happens to, and there is no reason to leave that on the table when it costs
+ * nothing to rule out. The shuffle still runs once; only the one excluded outcome, if the
+ * dice actually landed on it, gets swapped away rather than reshuffling from scratch
+ * (which has no bound on how long it could take to avoid, at four players 1 time in 4).
+ */
+function shuffleSeats(ids, avoidFirst) {
+  const order = shuffle(ids);
+  if (avoidFirst && order.length > 1 && order[0] === avoidFirst) {
+    const j = 1 + Math.floor(Math.random() * (order.length - 1));
+    [order[0], order[j]] = [order[j], order[0]];
+  }
+  return order;
+}
 let playerId = localStorage.getItem('hexcolony_pid');
 if (!playerId) { playerId = rid(); localStorage.setItem('hexcolony_pid', playerId); }
 
@@ -1638,8 +1657,10 @@ async function startGameWithSeed(seed) {
   // passes through, whatever it talked its way past to get seated.
   const problem = R.seatingProblem(ids);
   if (problem) return toast(problem);
-  // Seat order is shuffled here, which is this game's version of rolling for first player.
-  const order = shuffle(ids);
+  // Seat order is shuffled here, which is this game's version of rolling for first
+  // player — steered away from repeating whoever led the room's last game, so the game
+  // this device most recently lost to firestore.rules still has that record on hand.
+  const order = shuffleSeats(ids, room.lastFirstPid);
   const game = R.newGame(order, { ...room.settings, seed });
   // Setup is timed from the moment the board appears, and the deadline is only
   // meaningful against a stamp every device reads the same way — so the server sets it,
@@ -1656,6 +1677,10 @@ async function startGameWithSeed(seed) {
       // Offer ids restart at 1 with the new game, so last game's stamps would be read as
       // this game's deadlines.
       tradeDeadlines: {},
+      // Read back by the NEXT game's shuffle, whenever that comes — a rematch resets
+      // everything else about the room, but this is exactly the one fact that has to
+      // survive that reset for the exclusion to mean anything.
+      lastFirstPid: order[0],
     };
     await updateRoom(patch);
   } catch (e) {
@@ -2010,6 +2035,11 @@ function lastBotNames() {
   try { return JSON.parse(localStorage.getItem(LAST_BOT_NAMES_KEY) || '[]'); } catch { return []; }
 }
 
+// Who opened the last solo game, kept by NAME rather than id. A bot's id is freshly
+// minted every game — only its name is what a player actually recognizes as "the same
+// one going first again" — and reuseBotNames is what makes that name survive a rematch.
+const LAST_FIRST_KEY = 'hexcolony_last_first';
+
 function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7, reuseBotNames = null) {
   const name = usableName();
   if (!name) return false;
@@ -2026,8 +2056,12 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
       joinedAt: Date.now(), bot: true, level: b.level,
     };
   }
-  // Seat order is shuffled, so you don't always open the board.
-  const order = shuffle([playerId, ...bots.map((b) => b.id)]);
+  // Seat order is shuffled, so you don't always open the board — and steered away from
+  // whoever led last time by matching today's roster back to that name.
+  const lastFirstName = localStorage.getItem(LAST_FIRST_KEY);
+  const avoidId = Object.entries(players).find(([, p]) => p.name === lastFirstName)?.[0] || null;
+  const order = shuffleSeats([playerId, ...bots.map((b) => b.id)], avoidId);
+  localStorage.setItem(LAST_FIRST_KEY, players[order[0]].name);
   const settings = {
     targetVP, discardLimit, boardMode: 'random', layout, useRobber,
     turnSeconds: soloTurnSeconds, sea: soloSea, discardSeconds: R.DISCARD_SECONDS,
