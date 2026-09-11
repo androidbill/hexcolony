@@ -1945,9 +1945,13 @@ function runBot(pid) {
   const g = room.game;
   const board = ensureBoard();
   const level = room.players[pid]?.level || 'medium';
+  // Who at the table is a person rather than another bot — see NO_BOT_TRADE_VP in
+  // bot.js. room.players carries the bot flag; the pure rules state g does not, so
+  // this is worked out here rather than asked of the game itself.
+  const humans = new Set(Object.keys(room.players || {}).filter((id) => !room.players[id].bot));
 
   let move = null;
-  try { move = botMove(g, board, pid, level); } catch (e) { console.error('bot brain failed', e); }
+  try { move = botMove(g, board, pid, level, Math.random, humans); } catch (e) { console.error('bot brain failed', e); }
   if (!move) move = fallbackMove(g, pid);
   if (!move) return;
 

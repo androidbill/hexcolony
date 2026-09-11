@@ -283,8 +283,14 @@ function surplusFor(p, cost) {
 /**
  * The bot's next move, or null if it has nothing it wants to do (the caller should
  * then end its turn). Never mutates `game`.
+ *
+ * `humans` names which seats are people rather than other bots — needed only for
+ * NO_BOT_TRADE_VP (see judgeTrade). Left undefined, as the bot tournament harness
+ * leaves it, that rule simply never fires: there is no human seat there for a bot to
+ * make an exception for, and the harness measures bots against each other on equal
+ * terms, not this game's particular reason not to.
  */
-export function botMove(game, board, pid, level, rng = Math.random) {
+export function botMove(game, board, pid, level, rng = Math.random, humans) {
   const cfg = LEVELS[level] || LEVELS.medium;
   const g = game;
   const p = g.players[pid];
@@ -298,7 +304,7 @@ export function botMove(game, board, pid, level, rng = Math.random) {
   // Answer the oldest offer still waiting on us; the rest come round on later calls.
   const asked = (g.trades || []).find((t) => t.from !== pid && !t.replies[pid]);
   if (asked) {
-    return { type: 'replyTrade', id: asked.id, yes: judgeTrade(g, asked, board, pid, cfg, rng) };
+    return { type: 'replyTrade', id: asked.id, yes: judgeTrade(g, asked, board, pid, cfg, rng, humans) };
   }
 
   if (!R.isTurn(g, pid)) return null;
@@ -312,7 +318,12 @@ export function botMove(game, board, pid, level, rng = Math.random) {
   // belt and braces.
   const ours = (g.trades || []).find((t) => t.from === pid);
   if (ours) {
-    const yes = g.seats.find((s) => s !== pid && ours.replies[s] === 'yes');
+    // The same NO_BOT_TRADE_VP line, seen from the other side: this bot put the offer
+    // out itself, so it already knows every reply is to its own trade, and past the
+    // threshold only a human's "yes" is one it will actually close.
+    const closeableWith = (s) => ours.replies[s] === 'yes'
+      && (!(humans?.size && R.publicVP(g, pid) >= NO_BOT_TRADE_VP) || humans.has(s));
+    const yes = g.seats.find((s) => s !== pid && closeableWith(s));
     if (yes) return { type: 'acceptTrade', id: ours.id, with: yes };
     if (g.seats.some((s) => s !== pid && !ours.replies[s])) return null;
     return { type: 'cancelTrade', id: ours.id };
@@ -552,12 +563,25 @@ function chooseDiscard(g, board, pid, cfg, rng) {
   return give;
 }
 
+// A bot this close to winning stops dealing with its own kind. It will still put
+// offers of its own on the table — nothing here touches offerTrade — but from here on
+// it only closes a deal with a human. Bots trading among themselves past this point is
+// how one of them quietly gets the last card or two it needed off the others; a human
+// giving it away is that human's own call to make, not something the table conspires
+// to hand over.
+//
+// A flat 8, not scaled to the target the way denyLeader is: this is "how close is too
+// close to keep helping," which does not get any less true in a 15-point game, unlike
+// "who is about to win," which does.
+const NO_BOT_TRADE_VP = 8;
+
 /** Is an offered trade worth taking? */
-function judgeTrade(g, t, board, pid, cfg, rng) {
+function judgeTrade(g, t, board, pid, cfg, rng, humans) {
   const p = g.players[pid];
   for (const [res, n] of Object.entries(t.want)) {
     if ((p.res[res] || 0) < n) return false;         // cannot pay
   }
+  if (humans?.size && !humans.has(t.from) && R.publicVP(g, pid) >= NO_BOT_TRADE_VP) return false;
   // Never hand the leader their winning card.
   if (cfg.denyLeader) {
     const lead = g.seats.filter((s) => s !== pid).sort((a, b) => R.publicVP(g, b) - R.publicVP(g, a))[0];
