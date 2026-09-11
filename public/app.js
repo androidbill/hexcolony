@@ -2710,7 +2710,15 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('#board-tools')) setBoardTools(false);
 });
 document.addEventListener('click', (e) => {
-  if (!actionsMenuOpen || e.target.closest('#actions')) return;
+  if (!actionsMenuOpen) return;
+  // Not e.target.closest('#actions') — onAction's own 'more' handler already rebuilt the
+  // bar's innerHTML by the time this same click finishes bubbling here, which detaches
+  // the button that was actually tapped (a fresh innerHTML throws the old nodes away
+  // rather than keeping them). A detached node's closest() can never find an ancestor
+  // again, so that check always said "outside" and closed the menu the instant it opened.
+  // composedPath() is fixed at dispatch, before anything downstream mutates the tree, so
+  // it still names #actions as being on the path even after the node itself is gone.
+  if (e.composedPath().includes($('actions'))) return;
   actionsMenuOpen = false;
   const g = game();
   if (g) renderActions(g);
@@ -4319,6 +4327,10 @@ function renderActions(g) {
   const mine = R.isTurn(g, playerId);
   const p = g.players[playerId];
   const bar = $('actions');
+  // Visible by default; the two branches with nothing to show hide it explicitly. Reset
+  // here rather than left to whichever branch happens to run, because most of them only
+  // ever rewrite innerHTML and were never the ones that had to hide it in the first place.
+  bar.hidden = false;
   // Shut on the way into a new turn or a new phase, so an expansion left open during a
   // build phase does not sit there through the robber, the discard, or somebody else's
   // whole turn. Not reset on every render — an incoming trade offer redraws this same
@@ -4349,7 +4361,9 @@ function renderActions(g) {
       + extra;
   };
 
-  if (!p) { bar.innerHTML = utility(); return; }
+  // No actions at all for a spectator — the row would only ever have shown Players and
+  // DEV, and neither means anything without a seat.
+  if (!p) { bar.hidden = true; bar.innerHTML = ''; return; }
 
   if (g.phase !== 'over' && pauseBlocksGame()) {
     bar.innerHTML = utility()
@@ -4372,13 +4386,14 @@ function renderActions(g) {
       : `<div class="act-prompt"><span class="act-ico">${icon('waiting')}</span>Waiting for others to discard</div>`); return;
   }
 
-  // Cards stays in the bar while somebody else is playing. What is in your hand is
-  // yours to look at whenever you like — it was only ever reachable on your own turn,
-  // so the one time you actually want to check what you are holding, which is while you
-  // are sitting there waiting, was the one time there was no way in. The sheet knows it
-  // is not your turn and offers nothing to press.
+  // Nothing to press on somebody else's turn — Players is a tap on their name in the
+  // score strip now, and DEV is the card at the end of your own hand, so the row this
+  // used to spend on both of them the whole game through is worth more shown to nobody
+  // at all. The tray is not flex-grown, so losing this row does not just go blank —
+  // it shrinks, and the hand above it drops to sit at the true bottom of the screen
+  // until there is something here again worth surfacing it for.
   if (!mine || g.phase === 'setup') {
-    bar.innerHTML = utility(); return;
+    bar.hidden = true; bar.innerHTML = ''; return;
   }
 
   if (g.phase === 'robber') {
