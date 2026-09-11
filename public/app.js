@@ -6605,16 +6605,29 @@ window.HEXCOLONY = {
   // left to rejoin, and silently pulling somebody back into it is exactly wrong the
   // moment they are trying to get into a different room instead.
   const last = localStorage.getItem('hexcolony_room');
-  if (!last) return;
-  try {
-    const data = await getRoomData(last, 5000);
-    if (data && !roomIsStale(data) && data.state !== 'over' && data.players?.[playerId]) {
-      enterRoom(last);
-      toast(`Back in room ${last}`);
-    } else {
+  let rejoinedOnline = false;
+  if (last) {
+    try {
+      const data = await getRoomData(last, 5000);
+      if (data && !roomIsStale(data) && data.state !== 'over' && data.players?.[playerId]) {
+        enterRoom(last);
+        toast(`Back in room ${last}`);
+        rejoinedOnline = true;
+      } else {
+        localStorage.removeItem('hexcolony_room');
+      }
+    } catch {
       localStorage.removeItem('hexcolony_room');
     }
-  } catch {
-    localStorage.removeItem('hexcolony_room');
+  }
+
+  // The same idea for a solo game, which refreshResume() above only ever offered as a
+  // button to notice and tap. A locked phone or a killed tab is exactly as much an
+  // accident mid solo game as mid an online one, and a name already on file (it has to
+  // be, to have started the game this is resuming) is everything resuming needs — so it
+  // happens the same way the room above just did, without waiting to be asked.
+  if (!rejoinedOnline) {
+    const saved = loadSolo();
+    if (saved?.game && saved.game.phase !== 'over' && myName()) enterSolo(saved);
   }
 })();
