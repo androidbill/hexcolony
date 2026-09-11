@@ -4189,6 +4189,12 @@ function renderHand(g) {
   const p = g.players[playerId];
   if (!p) { $('hand').innerHTML = '<span class="hint">You are watching this game.</span>'; return; }
   const devs = R.devCount(p);
+  // Outside trade mode, a card you actually hold is still worth a tap: it opens the
+  // trade sheet with that card already offered, which is the one thing tapping a spare
+  // card in your hand was ever going to mean. Only while it is genuinely yours to
+  // spend — your own turn, after rolling — so the hand does not turn into a trigger a
+  // player has to route around while it is only there to be looked at.
+  const canStartTrade = !trading && R.isTurn(g, playerId) && g.phase === 'build';
   $('hand').innerHTML = RESOURCES.map((r) => {
     const n = p.res[r] || 0;
     // In trade mode, selected cards move up into the blue offer box. The hand retains
@@ -4201,11 +4207,17 @@ function renderHand(g) {
       stack: false,
       label: '',
     });
-    if (!trading) return card;
-    return `<button class="discard-card" data-pay="${r}"
-      aria-label="Offer one ${RES_NAME[r]}${take ? ` — ${take} already selected` : ''}">${card}</button>`;
+    if (trading) {
+      return `<button class="discard-card" data-pay="${r}"
+        aria-label="Offer one ${RES_NAME[r]}${take ? ` — ${take} already selected` : ''}">${card}</button>`;
+    }
+    if (canStartTrade && n) {
+      return `<button class="discard-card" data-start-trade="${r}"
+        aria-label="Trade ${RES_NAME[r]}">${card}</button>`;
+    }
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
+    return card;
   }).join('') + (trading ? '' : devCard({ count: devs || null, dim: !devs, size: 'sm', stack: false }));
 }
 
@@ -4213,17 +4225,9 @@ function renderHand(g) {
 // in one tap, not three — then a whole lot more each tap after, and back to nothing once
 // every lot is spent, so a tap is always undoable by tapping again. lotAfterTap lives in
 // rules.js because it is the same "what makes a whole trade" question the bank itself
-// asks, and the two must not drift apart.
-$('hand').addEventListener('click', (e) => {
-  if (!trading) return;
-  const g = game();
-  if (!g) return;
-  const el = e.target.closest('[data-pay]');
-  if (!el) return;
-  // The one real limit in the whole of trading: you cannot offer a card you do not hold.
-  const r = el.dataset.pay;
-  const have = g.players[playerId]?.res[r] || 0;
-  if (!have) return;
+// asks, and the two must not drift apart. Shared by the sheet's own row and by a tap on
+// the hand itself, which starts the whole thing off.
+function offerLotTap(g, r, have) {
   const rate = R.tradeRate(g, board, playerId, r);
   const next = R.lotAfterTap(giveSel[r] || 0, have, rate);
   if (next) giveSel[r] = next; else delete giveSel[r];
@@ -4231,6 +4235,35 @@ $('hand').addEventListener('click', (e) => {
   // otherwise land at some other rate, before the player notices the port they are
   // standing on already got them a better one.
   if (next && next === rate && rate < 4) portHint = { res: r, rate };
+}
+
+$('hand').addEventListener('click', (e) => {
+  const g = game();
+  if (!g) return;
+  if (!trading) {
+    // A card tapped before the sheet was even open. It opens now with that resource
+    // already offered, exactly as if Trade had been pressed first and the card tapped
+    // second — there is no different path here to keep in step with, because there
+    // isn't a second one.
+    const startEl = e.target.closest('[data-start-trade]');
+    if (!startEl) return;
+    const r = startEl.dataset.startTrade;
+    const have = g.players[playerId]?.res[r] || 0;
+    if (!have) return;
+    trading = true;
+    giveSel = {}; wantSel = {};
+    offerLotTap(g, r, have);
+    sfx.tap();
+    render();
+    return;
+  }
+  const el = e.target.closest('[data-pay]');
+  if (!el) return;
+  // The one real limit in the whole of trading: you cannot offer a card you do not hold.
+  const r = el.dataset.pay;
+  const have = g.players[playerId]?.res[r] || 0;
+  if (!have) return;
+  offerLotTap(g, r, have);
   sfx.tap();
   render();
 });
