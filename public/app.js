@@ -4218,7 +4218,8 @@ function renderHand(g) {
     // A zero card stays on the table, greyed: the hand doubles as the legend for what
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
     return card;
-  }).join('') + (trading ? '' : devCard({ count: devs || null, dim: !devs, size: 'sm', stack: false }));
+  }).join('') + (trading ? '' : `<button class="discard-card" data-open-dev="1" aria-label="Development cards">`
+    + `${devCard({ count: devs || null, dim: !devs, size: 'sm', stack: false })}</button>`);
 }
 
 // Tapping your own card takes a whole trade's worth at once — three wheat on a 3:1 port
@@ -4241,6 +4242,10 @@ $('hand').addEventListener('click', (e) => {
   const g = game();
   if (!g) return;
   if (!trading) {
+    // The dev card at the end of the hand is the same door DEV is, not a second one —
+    // whatever DEV shows once opened is exactly what tapping the card it sits next to
+    // in the hand should reach too.
+    if (e.target.closest('[data-open-dev]')) { sfx.tap(); openDev(g); return; }
     // A card tapped before the sheet was even open. It opens now with that resource
     // already offered, exactly as if Trade had been pressed first and the card tapped
     // second — there is no different path here to keep in step with, because there
