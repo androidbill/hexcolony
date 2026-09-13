@@ -3034,7 +3034,6 @@ async function sendChat() {
     // Anything this device sent is by definition already read.
     chatSeenAt = Date.now();
     localStorage.setItem('hexcolony_chat_seen', String(chatSeenAt));
-    if (openSheet === 'sheet-chat') closeSheetAndRestoreResults();
   } catch (e) {
     console.error(e);
     toast('That message did not send.');
@@ -3615,12 +3614,17 @@ function reactToLog(g) {
       case 'robber': sfx.robber(); break;
       case 'steal':
         sfx.steal();
-        // Only the two of them are told what it was, so only the two of them see it.
         if (e.p === playerId || e.from === playerId) {
+          // Only the two of them are told what it was, so only the two of them get the
+          // card itself — the flying-card animation and the shoutout naming it.
           playSteal(e.res, e.p === playerId);
           const thief = e.p === playerId ? 'You' : nameFor(e.p);
           const victim = e.from === playerId ? 'you' : nameFor(e.from);
           shoutout([{ parts: [`${thief} stole `, { resource: e.res }] }, `from ${victim}`], colorFor(e.p));
+        } else {
+          // Everyone else still sees that a steal happened and who it happened to —
+          // the same thing the log already says — just never what was taken.
+          shoutout(`${nameFor(e.p)} stole from ${nameFor(e.from)}`, colorFor(e.p));
         }
         break;
       case 'produce':
