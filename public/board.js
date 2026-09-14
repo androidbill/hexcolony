@@ -296,31 +296,6 @@ export const LAYOUT_INFO = {
     bank: 33,
     dev: { knight: 34, vp: 8, road: 6, plenty: 6, mono: 3 },
   },
-  narrows: {
-    key: 'narrows',
-    label: 'The Narrows',
-    tiles: 41,
-    blurb: 'Two islands, one strip of land between them. Whoever roads across the neck '
-      + 'first controls the only way from one side to the other.',
-    terrain: { forest: 8, pasture: 8, fields: 8, hills: 7, mountains: 7, desert: 3 },
-    tokens: { 2: 3, 3: 4, 4: 4, 5: 4, 6: 4, 8: 4, 9: 4, 10: 4, 11: 4, 12: 3 },
-    ports: 12,
-    bank: 28,
-    dev: { knight: 25, vp: 6, road: 4, plenty: 4, mono: 2 },
-  },
-  frontier: {
-    key: 'frontier',
-    label: 'The Frontier',
-    tiles: 37,
-    blurb: 'A known island the same size as Classic, with one more ring around it kept '
-      + "under fog as a group. It opens for everyone the moment enough of the table's "
-      + 'own players have pushed a road or settlement into it — no one reveals it alone.',
-    terrain: { forest: 7, pasture: 7, fields: 7, hills: 7, mountains: 6, desert: 3 },
-    tokens: { 2: 2, 3: 3, 4: 4, 5: 4, 6: 4, 8: 4, 9: 4, 10: 4, 11: 3, 12: 2 },
-    ports: 11,
-    bank: 26,
-    dev: { knight: 23, vp: 6, road: 4, plenty: 4, mono: 2 },
-  },
   // One entry per dynamic size. The bags and decks still come from dynamicInfo, which
   // works them out from the tile count; these exist so a picker, a room list and a blurb
   // can treat a dynamic board exactly like a fixed one.
@@ -492,47 +467,10 @@ function newfoundlandCoords() {
   return [...hexRing(0), ...hexRing(2), ...hexRing(3), ...hexRing(4)];
 }
 
-// ---------------------------------------------------------------- The Narrows
-// Two round islands, one narrow neck of land the only way between them. Unlike
-// Newfoundland this needs no terrain or port logic of its own: it is one ordinary
-// connected coastline (the neck keeps it that way), so the normal random shuffle and
-// placePorts' own coastline walk both already do exactly the right thing on it.
-
-/** Every hex within `radius` steps of the origin — a filled disk, not just its rim. */
-function hexDisk(radius) {
-  const out = [];
-  for (let k = 0; k <= radius; k++) out.push(...hexRing(k));
-  return out;
-}
-
-function translated(coords, dq, dr) {
-  return coords.map(({ q, r }) => ({ q: q + dq, r: r + dr }));
-}
-
-function narrowsCoords() {
-  const west = translated(hexDisk(2), -4, 0);
-  const east = translated(hexDisk(2), 4, 0);
-  // The one row where both islands' radius-2 shores land exactly two hexes apart —
-  // three tiles wide is the closest a bridge can be laid without the islands already
-  // touching on their own.
-  const neck = [{ q: -1, r: 0 }, { q: 0, r: 0 }, { q: 1, r: 0 }];
-  return [...west, ...east, ...neck];
-}
-
-// ---------------------------------------------------------------- The Frontier
-// An ordinary 19-tile island — the same shape and size as Classic, radius 2 — with one
-// more ring of 18 tiles around it that stays hidden as a group. rules.js is what
-// decides when that ring opens; the shape here only has to make ring 3 exist.
-function frontierCoords() {
-  return [...hexDisk(2), ...hexRing(3)];
-}
-
 const TOPOS = {
   classic: buildTopology(planCoords(ROW_PLANS.classic)),
   expansion: buildTopology(planCoords(ROW_PLANS.expansion)),
   newfoundland: buildTopology(newfoundlandCoords()),
-  narrows: buildTopology(narrowsCoords()),
-  frontier: buildTopology(frontierCoords()),
 };
 
 // These are `let` on purpose. Exported `let` bindings are live, so switching the layout
@@ -718,27 +656,6 @@ function newfoundlandTerrain(info, rng) {
 }
 
 /**
- * The known island (dist <= 2) and the fogged outer ring (dist === 3) are dealt as two
- * separate bags so the desert — and the robber that starts on it — always lands on the
- * known island. A desert drawn into the ring would both strand the robber somewhere
- * nobody can see yet and reveal that hex before anyone earned it, since revealing the
- * desert every game starts on is exactly what lets the robber begin in view.
- */
-function frontierTerrain(info, rng) {
-  const inner = [];
-  const outer = [];
-  for (const h of HEXES) (hexDistance(h.q, h.r) <= 2 ? inner : outer).push(h.i);
-  const { desert, ...rest } = info.terrain;
-  const innerSpots = shuffled(inner, rng);
-  const outerSpots = shuffled(outer, rng);
-  const bag = shuffled(terrainBag({ terrain: rest }), rng);
-  const terrain = [];
-  innerSpots.forEach((i, k) => { terrain[i] = k < desert ? 'desert' : bag[k - desert]; });
-  outerSpots.forEach((i, k) => { terrain[i] = bag[innerSpots.length - desert + k]; });
-  return terrain;
-}
-
-/**
  * Six ports evenly spaced along the shore the inner forest ring shares with the water
  * around the desert island — not on the island's own tiny coast. That inner shore is
  * its own closed loop, exactly like the outer coastline `placePorts` walks, so it is
@@ -801,10 +718,6 @@ function buildBoard(seed, mode, layout) {
     terrain = newfoundlandTerrain(info, rng);
     numbers = dealTokens(terrain, rng, info);
     ports = newfoundlandPorts();
-  } else if (key === 'frontier') {
-    terrain = frontierTerrain(info, rng);
-    numbers = dealTokens(terrain, rng, info);
-    ports = placePorts(rng, info);
   } else if (mode === 'classic' && key === 'classic') {
     // The fixed arrangement only exists for the classic island.
     ({ terrain, numbers } = classicBoard());
