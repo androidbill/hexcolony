@@ -836,14 +836,23 @@ $('btn-rooms-create').addEventListener('click', () => createRoom());
 
 // The room-level backend switch. Whoever creates the room picks it once, here; everyone
 // who joins afterwards just plays, whichever database it turned out to be — see
-// roomBackendOf, which reads the choice back off the room code's own shape. Firestore is
-// the default: it is what every room has always used, and RTDB is the fallback for the
-// day Firestore's own quota runs out from under a room already being created.
-let createBackend = 'firestore';
+// roomBackendOf, which reads the choice back off the room code's own shape. RTDB is the
+// default now: Firestore bills roughly one read per connected player per move, so a
+// live multiplayer game is exactly the shape of workload that burns through its free
+// quota fastest, while RTDB's free tier is metered by bandwidth and connection count
+// instead — the same game costs it nothing like as much. createRoom() still falls back
+// to Firestore itself if RTDB is not actually reachable (see RTDB_READY below), so this
+// default is never able to hand someone a room that cannot be created.
+let createBackend = 'rtdb';
 function renderBackendChoice() {
-  const label = createBackend === 'rtdb' ? 'Realtime DB' : 'Firestore';
+  // What createRoom() will actually use, not just the toggle's own state — a deployment
+  // that never turned RTDB on in the console has RTDB_READY false and falls back to
+  // Firestore regardless of createBackend, and the hint saying "Using: RTDB" right up
+  // until the room silently landed on Firestore anyway would be its own small mystery.
+  const effective = RTDB_READY ? createBackend : 'firestore';
+  const label = effective === 'rtdb' ? 'Realtime DB' : 'Firestore';
   $('kebab-database-val').textContent = label;
-  $('backend-hint').textContent = `Using: ${createBackend === 'rtdb' ? 'RTDB' : 'Firestore'}`;
+  $('backend-hint').textContent = `Using: ${label}`;
 }
 renderBackendChoice();
 $('kebab-database').addEventListener('click', () => {
