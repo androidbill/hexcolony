@@ -3653,8 +3653,15 @@ function reactToLog(g) {
       case 'offer':
         // The chime is what makes you look down at the strip, so it has to agree with it:
         // an offer you cannot pay for is not shown and is declined on the spot, and a
-        // sound for one would point at something that is not there.
-        if (e.p !== playerId && !tradeRejectFrom.has(e.p) && canPay(g, e.want)) sfx.card();
+        // sound — or a shoutout — for one would point at something that is not there.
+        if (e.p !== playerId && !tradeRejectFrom.has(e.p) && canPay(g, e.want)) {
+          sfx.card();
+          // The strip already carries what is wanted and offered, so the shoutout just
+          // says a trade is up — the same restraint "X stole from Y" shows an onlooker,
+          // not because this is private the way a steal's card is, but because the
+          // shoutout's job is to make you look down at the strip, not to replace it.
+          shoutout(`${nameFor(e.p)} is offering a trade`, colorFor(e.p));
+        }
         break;
       case 'trade': sfx.trade(); playTradeSwap(e); break;
       case 'react': playReaction(e.p, e.emoji); break;
@@ -5432,7 +5439,13 @@ function logLine(e) {
     case 'playDev': text = `<b>${who(e.p)}</b> played ${esc(R.DEV_INFO[e.card]?.name || e.card)}`; break;
     case 'noloot': text = `<span class="r">Nobody had a card for <b>${who(e.p)}</b> to take</span>`; break;
     case 'robber': text = `<b>${who(e.p)}</b> moved the robber`; break;
-    case 'steal': text = `<b>${who(e.p)}</b> robbed <b>${who(e.from)}</b>`; break;
+    // The one card in this whole log that is not public knowledge the moment it
+    // happens — the shoutout still only says a steal took place, not what it was, for
+    // whoever is not one of the two people at it — but the log is a written record
+    // either of them (or anyone settling an argument afterwards) can check, and there is
+    // no reason to make that harder to read than the rest of the sheet. Covers a 7
+    // without the robber too: it is the same 'steal' entry either way.
+    case 'steal': text = `<b>${who(e.p)}</b> robbed <b>${who(e.from)}</b> of 1${RES_ICON[e.res]}`; break;
     case 'discard': text = `<b>${who(e.p)}</b> discarded ${e.count}`; break;
     case 'mono': text = `<b>${who(e.p)}</b> monopolised ${esc(e.res)} — ${e.count} cards`; break;
     case 'plenty': text = `<b>${who(e.p)}</b> took ${bits(e.res)} from the bank`; break;
