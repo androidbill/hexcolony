@@ -331,7 +331,7 @@ let lastSeq = 0;               // highest game-log id already reacted to
 // reactToLog can't tell those apart from lastSeq alone, so render() works it out below,
 // the one place every route into a game — solo, host, guest, rematch — passes through.
 let freshGameStart = false;
-let trackedGameStart;          // room.startedAt (ms) last checked against, to catch the change
+let trackedGameSeed;           // stable identity of the game whose log lastSeq belongs to
 let announcedUp = null;        // the turn already shouted; null until the first render
 let lastPhaseKey = '';
 let seenLogAt = 0;
@@ -1255,6 +1255,7 @@ function enterRoom(code) {
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
   clockSamples = []; clockOffset = null;
   lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
+  trackedGameSeed = undefined;
   announcedUp = null;
   resetGuess(); resetTrade();
   subscribeChat();
@@ -2021,6 +2022,7 @@ function enterSolo(saved) {
   solo = true;
   roomCode = null; roomRef = null; pulseRef = null;
   lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
+  trackedGameSeed = undefined;
   announcedUp = null;
   resetGuess(); resetTrade();
   room = {
@@ -3515,10 +3517,23 @@ function render() {
   // seeing mid-flight (a join or a resume — its backlog should stay silent). Caught here
   // rather than at every place a game can start, because a rematch's fresh deal reaches
   // every other player through this same render, not through the button that requested it.
-  const startedKey = stampMs(room?.startedAt);
-  if (startedKey !== trackedGameStart) {
-    trackedGameStart = startedKey;
-    if ((g.log || []).length === 0) freshGameStart = true;
+  const gameSeed = g.seed;
+  if (gameSeed !== trackedGameSeed) {
+    // Log ids start at 1 again in every game. Keeping the previous game's lastSeq makes
+    // every entry in a rematch look old, which silences dice, builds, turns and all the
+    // other sounds until the new log eventually grows past the old game's final id.
+    // A player entering an existing game still needs its backlog skipped, so only reset
+    // when this device had already tracked a different game. The seed is a better game
+    // identity than startedAt: Firestore can first show an estimated server timestamp
+    // and then correct it, which must not make one game look like two.
+    const replacingKnownGame = trackedGameSeed !== undefined;
+    trackedGameSeed = gameSeed;
+    if (replacingKnownGame) {
+      lastSeq = 0;
+      freshGameStart = true;
+    } else if ((g.log || []).length === 0) {
+      freshGameStart = true;
+    }
   }
 
   reactToLog(g);
