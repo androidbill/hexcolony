@@ -104,18 +104,17 @@ export function unlock() {
     // Not just 'suspended': iOS can leave a context 'interrupted' — after a phone call,
     // Siri, or the screen simply locking — and a context stuck there never comes back on
     // its own. Anything other than already running is worth a resume attempt.
-    if (ctx.state !== 'running') {
-      const stuck = ctx;
-      // resume() does not always fail loudly on a context iOS has truly zombied — it
-      // can just as easily resolve without the state ever reaching 'running', which a
-      // bare .catch() never sees. Either way — a rejection, or a resolve that still
-      // is not running — every unlock() from here on was retrying the exact same dead
-      // context forever, since the module only ever builds a new one when `ctx` is
-      // still null. Discarding it means the very next tap (the global pointerdown
-      // listener below fires on all of them) builds a fresh, working context instead.
-      const discard = () => { if (ctx === stuck) ctx = null; };
-      stuck.resume().then(() => { if (stuck.state !== 'running') discard(); }, discard);
-    }
+    //
+    // Deliberately NOT discarding and recreating the context when a resume attempt
+    // fails, which an earlier version of this function did. A context that fails to
+    // resume once can still succeed later, on a subsequent real gesture — that is the
+    // recovery path the global pointerdown listener below exists for. Building a
+    // replacement is worse, not better: the next thing to call unlock() is just as
+    // likely to be an async sound for another player's move (reactToLog, running well
+    // outside any gesture) as it is a real tap, and a context created OUTSIDE a gesture
+    // can end up unable to ever resume at all — trading a context that might still
+    // recover for one that is more likely never to.
+    if (ctx.state !== 'running') ctx.resume().catch(() => {});
   } catch { /* no audio on this device — everything below degrades to silence */ }
 }
 
