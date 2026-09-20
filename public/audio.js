@@ -84,6 +84,22 @@ export function unlock() {
       roomSend.connect(conv).connect(master);
 
       noiseBuf = makeNoise();
+
+      // resume() alone unlocks OSCILLATOR playback on most engines, but several mobile
+      // browsers (both iOS Safari and Android's various WebViews) only fully unlock
+      // BUFFER-based playback once an actual AudioBufferSourceNode has been started
+      // synchronously inside a genuine touch gesture — a separate requirement from the
+      // context just being 'running'. Every recorded effect in sfx/ is buffer-based;
+      // `tap` is the one effect with no recording, so it is pure oscillator synthesis
+      // and was the only thing that ever played — exactly backwards from what "no
+      // audio" sounds like it should mean. A single silent sample, started right here
+      // in the same gesture that creates the context, satisfies that requirement once
+      // for the context's whole lifetime.
+      const silence = ctx.createBuffer(1, 1, 22050);
+      const unlockSrc = ctx.createBufferSource();
+      unlockSrc.buffer = silence;
+      unlockSrc.connect(ctx.destination);
+      unlockSrc.start(0);
     }
     // Not just 'suspended': iOS can leave a context 'interrupted' — after a phone call,
     // Siri, or the screen simply locking — and a context stuck there never comes back on
