@@ -36,39 +36,6 @@ const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
 const LOBBY_IDLE_TTL_MS = 30 * 60 * 1000;
 const CHAT_EMOJIS = ['😀', '😄', '😂', '🤣', '😊', '😎', '😍', '🤔', '😭', '😡', '🙌', '👋', '👍', '👎', '❤️', '🔥', '🎉', '✅', '💯', '⚡', '🌊', '🏝️', '🎲', '🏆'];
 
-const CAMP_CARD_NAMES = {
-  knight: 'Ranger Patrol', road: 'Trail Crew', plenty: 'Packed Provisions',
-  mono: 'Supply Raid', vp: 'Camp Story',
-};
-const CAMP_CARD_BLURBS = {
-  knight: 'Move the camper and borrow a card. Three patrols earn Biggest Campfire.',
-  road: 'Place two trails for free.',
-  plenty: 'Take any two supplies from the camp store.',
-  mono: 'Name a supply. Every other camper hands you all of theirs.',
-  vp: 'Worth 1 point. Stays secret until someone wins.',
-};
-const CLASSIC_RES_NAMES = { wood: 'Wood', brick: 'Brick', sheep: 'Sheep', wheat: 'Wheat', ore: 'Ore' };
-const CAMP_RES_NAMES = { wood: 'Firewood', brick: 'Canvas', sheep: 'Blankets', wheat: 'Rations', ore: 'Camp Gear' };
-const CAMP_STEAL_LINES = [
-  'A raccoon with excellent organizational skills reorganized your supplies.',
-  'Your snacks have entered witness protection.',
-  'Someone inspected your backpack and found exactly what they wanted.',
-  'The camp thief strikes again. At least they left the zipper open.',
-  'Your emergency rations are no longer an emergency for you.',
-  'The Department of Unscheduled Sharing has arrived.',
-  'Your cooler was guarded by vibes alone. The vibes failed.',
-  'Your supplies went on a short hike and never came back.',
-];
-const CAMP_RANGER_LINES = [
-  'The ranger spotted an unattended backpack.',
-  'A suspicious rustling came from the next campsite.',
-  'Your ranger says, “Don’t worry, I have a plan.”',
-  'A mysterious footprint leads directly to someone else’s supplies.',
-  'The campfire council authorized one questionable investigation.',
-];
-const campText = (g, classic, camp) => g?.campMode ? camp : classic;
-const campLine = (g, lines, seed = 0) => lines[Math.abs(Number(seed) || 0) % lines.length];
-
 // Firestore promises can hang forever on a bad mobile connection — never let a UI flow
 // await one without a deadline.
 function withTimeout(promise, ms) {
@@ -737,7 +704,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', campMode: false, useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
+      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
       players: { [playerId]: freshPlayer(name) },
       order: [],
       game: null,
@@ -838,7 +805,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', campMode: false, useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
+        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
         players: { [playerId]: freshPlayer(name) },
         order: [],
         game: null,
@@ -2088,7 +2055,7 @@ function lastBotNames() {
 // one going first again" — and reuseBotNames is what makes that name survive a rematch.
 const LAST_FIRST_KEY = 'hexcolony_last_first';
 
-function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7, reuseBotNames = null, campMode = false) {
+function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7, reuseBotNames = null) {
   const name = usableName();
   if (!name) return false;
   clearUndo();
@@ -2111,7 +2078,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   const order = shuffleSeats([playerId, ...bots.map((b) => b.id)], avoidId);
   localStorage.setItem(LAST_FIRST_KEY, players[order[0]].name);
   const settings = {
-    targetVP, discardLimit, boardMode: 'random', layout, campMode: !!campMode, useRobber,
+    targetVP, discardLimit, boardMode: 'random', layout, useRobber,
     turnSeconds: soloTurnSeconds, sea: soloSea, discardSeconds: R.DISCARD_SECONDS,
     fog: soloFog,
   };
@@ -2172,7 +2139,6 @@ let soloFog = localStorage.getItem('hexcolony_solo_fog') === 'on';
 let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
 let soloSea = localStorage.getItem('hexcolony_solo_sea') || SEA_DEFAULT;
-let soloCampMode = localStorage.getItem('hexcolony_solo_camp') === 'on';
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
@@ -2221,18 +2187,6 @@ function drawSoloSheet() {
   // because there the host is changing settings other people are watching — here nobody
   // else is looking, so it can simply go.
   $('solo-discard-row').hidden = !soloRobber;
-  for (const b of document.querySelectorAll('[data-solo-camp-mode]')) {
-    b.classList.toggle('on', (b.dataset.soloCampMode === 'on') === soloCampMode);
-  }
-}
-
-for (const b of document.querySelectorAll('[data-solo-camp-mode]')) {
-  b.addEventListener('click', () => {
-    soloCampMode = b.dataset.soloCampMode === 'on';
-    localStorage.setItem('hexcolony_solo_camp', soloCampMode ? 'on' : 'off');
-    sfx.tap();
-    drawSoloSheet();
-  });
 }
 
 for (const b of document.querySelectorAll('[data-solo-timer]')) {
@@ -2327,7 +2281,7 @@ for (const b of document.querySelectorAll('[data-solo]')) {
   });
 }
 $('btn-solo-start').addEventListener('click', () => {
-  if (startSolo(soloLevel, soloBots, soloTarget, soloLayout, soloRobber, soloDiscard, null, soloCampMode)) closeSheet();
+  if (startSolo(soloLevel, soloBots, soloTarget, soloLayout, soloRobber, soloDiscard)) closeSheet();
 });
 
 // ---------------------------------------------------------------- lobby
@@ -2378,12 +2332,6 @@ for (const b of document.querySelectorAll('[data-robber]')) {
 for (const b of document.querySelectorAll('[data-fog]')) {
   b.addEventListener('click', () => {
     if (setSetting({ 'settings.fog': b.dataset.fog === 'on' })) sfx.tap();
-  });
-}
-
-for (const b of document.querySelectorAll('[data-camp-mode]')) {
-  b.addEventListener('click', () => {
-    if (setSetting({ 'settings.campMode': b.dataset.campMode === 'on' })) sfx.tap();
   });
 }
 
@@ -2486,9 +2434,6 @@ function renderLobby() {
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 10);
   $('set-discard').textContent = String(s.discardLimit || 7);
-  for (const b of document.querySelectorAll('[data-camp-mode]')) {
-    b.classList.toggle('on', (b.dataset.campMode === 'on') === !!s.campMode);
-  }
   const turnSeconds = R.TURN_OPTIONS.includes(s.turnSeconds) ? s.turnSeconds : 0;
   for (const b of document.querySelectorAll('[data-timer]')) {
     b.classList.toggle('on', Number(b.dataset.timer) === turnSeconds);
@@ -3554,8 +3499,6 @@ function render() {
 
   const g = game();
   if (!g) return;
-  document.documentElement.classList.toggle('camp-mode', !!g.campMode);
-  Object.assign(RES_NAME, g.campMode ? CAMP_RES_NAMES : CLASSIC_RES_NAMES);
   ensureBoard();
   if (!$('screen-game').classList.contains('is-active')) {
     showScreen('screen-game');
@@ -3563,7 +3506,6 @@ function render() {
   }
 
   view.setGame(g);
-  loadTerrainArt(() => view.draw(performance.now()), !!g.campMode);
   view.spinPieces = localStorage.getItem('hexcolony_spin_pieces') === 'on';
   // Whatever ended the moment you were in — the timer running out, a 7, someone
   // leaving — the pending "tap the board" is over with it. Clearing it here covers
@@ -3696,12 +3638,11 @@ function reactToLog(g) {
           playSteal(e.res, e.p === playerId);
           const thief = e.p === playerId ? 'You' : nameFor(e.p);
           const victim = e.from === playerId ? 'you' : nameFor(e.from);
-          const line = g.campMode ? campLine(g, CAMP_STEAL_LINES, e.i) : null;
-          shoutout(g.campMode ? `${line} ${thief} took a supply from ${victim}.` : [{ parts: [`${thief} stole `, { resource: e.res }] }, `from ${victim}`], colorFor(e.p));
+          shoutout([{ parts: [`${thief} stole `, { resource: e.res }] }, `from ${victim}`], colorFor(e.p));
         } else {
           // Everyone else still sees that a steal happened and who it happened to —
           // the same thing the log already says — just never what was taken.
-          shoutout(g.campMode ? campLine(g, CAMP_STEAL_LINES, e.i) : `${nameFor(e.p)} stole from ${nameFor(e.from)}`, colorFor(e.p));
+          shoutout(`${nameFor(e.p)} stole from ${nameFor(e.from)}`, colorFor(e.p));
         }
         break;
       case 'produce':
@@ -3712,10 +3653,7 @@ function reactToLog(g) {
           setTimeout(() => { sfx.gain(); playGain(mine); }, ROLL_TUMBLE_MS + ROLL_SETTLE_MS);
         }
         break;
-      case 'playDev':
-        sfx.card();
-        if (g.campMode && e.card === 'knight') shoutout(campLine(g, CAMP_RANGER_LINES, e.i), colorFor(e.p));
-        break;
+      case 'playDev': sfx.card(); break;
       // Monopoly is the one dev card that can flip the whole table's hand at once, so it
       // gets the biggest announcement in the game: the resource itself, shown large,
       // rather than the small inline icon a steal gets.
@@ -4001,9 +3939,7 @@ function playAward(kind, pid) {
   for (const t of awardTimers) clearTimeout(t);
   awardTimers = [];
 
-  const what = kind === 'army'
-    ? campText(game(), 'Largest Army', 'Biggest Campfire')
-    : campText(game(), 'Longest Road', 'Longest Trail');
+  const what = kind === 'army' ? 'Largest Army' : 'Longest Road';
   $('award-card').src = `art/${kind === 'army' ? 'largest-army' : 'longest-road'}.png`;
   $('award-card').alt = what;
   $('award-take-name').textContent = pid === playerId ? 'You take' : `${nameFor(pid)} takes`;
@@ -4091,10 +4027,10 @@ function renderScoreStrip(g) {
 
     // One badge each rather than two emoji run together, so each can say what it is.
     const crowns = [
-      g.award.road === pid ? `<span class="chip-crown" title="${g.campMode ? 'Longest Trail' : 'Longest Road'} (${g.award.roadLen})"`
-        + ` aria-label="${g.campMode ? 'Longest Trail' : 'Longest Road'}">${icon('road', { size: 13 })}</span>` : '',
-      g.award.army === pid ? `<span class="chip-crown" title="${g.campMode ? 'Biggest Campfire' : 'Largest Army'} (${g.award.armySize})"`
-        + ` aria-label="${g.campMode ? 'Biggest Campfire' : 'Largest Army'}">${icon('army', { size: 13 })}</span>` : '',
+      g.award.road === pid ? `<span class="chip-crown" title="Longest Road (${g.award.roadLen})"`
+        + ` aria-label="Longest Road">${icon('road', { size: 13 })}</span>` : '',
+      g.award.army === pid ? `<span class="chip-crown" title="Largest Army (${g.award.armySize})"`
+        + ` aria-label="Largest Army">${icon('army', { size: 13 })}</span>` : '',
     ].join('');
     if (awardsEl.innerHTML !== crowns) awardsEl.innerHTML = crowns;
 
@@ -4111,7 +4047,7 @@ function turnText(g) {
   // treat it as plain text.
   const who = mine ? 'You' : esc(nameFor(up));
   if (g.phase === 'setup') {
-    const what = g.setup.need === 's' ? (g.campMode ? 'a tent' : 'a settlement') : (g.campMode ? 'a trail' : 'a road');
+    const what = g.setup.need === 's' ? 'a settlement' : 'a road';
     return mine ? `Place ${what}` : `${who} is placing ${what}`;
   }
   if (g.phase === 'discard') {
@@ -4551,8 +4487,6 @@ const COST_BITS = (cost, have = null) => costRow(cost, have);
 
 // ---------------------------------------------------------------- dev cards
 function openDev(g) {
-  const devTitle = $('dev-sheet-title');
-  if (devTitle) devTitle.textContent = g.campMode ? 'Camp Cards' : 'Development cards';
   const p = g.players[playerId];
   if (!p) {
     $('dev-buy').innerHTML = '<p class="hint">You are watching this game.</p>';
@@ -4576,7 +4510,7 @@ function openDev(g) {
     <button class="dev-buy" id="btn-buy-dev"${can.dev ? '' : ' disabled'}>
       <span class="dev-buy-ico">🃏</span>
       <span class="dev-buy-txt">
-      <span class="dev-buy-name">${g.campMode ? 'Buy a Camp Card' : 'Buy a development card'}</span>
+        <span class="dev-buy-name">Buy a development card</span>
         <span class="build-cost">${COST_BITS(R.COSTS.dev, p.res)}</span>
       </span>
       <span class="dev-buy-left">${empty ? 'deck empty' : myTurn ? `${g.deck.length} left` : 'not your turn'}</span>
@@ -4601,8 +4535,8 @@ function openDev(g) {
     rows.push(`<button class="dev-card" data-dev="${k}"${blocked ? ' disabled' : ''}>
       <span class="dev-n">${ready + fresh}</span>
       <span class="dev-txt">
-        <span class="dev-name">${esc(campText(g, info.name, CAMP_CARD_NAMES[k] || info.name))}</span>
-        <span class="dev-blurb">${esc(campText(g, info.blurb, CAMP_CARD_BLURBS[k] || info.blurb))}</span>
+        <span class="dev-name">${esc(info.name)}</span>
+        <span class="dev-blurb">${esc(info.blurb)}</span>
         ${fresh ? `<span class="dev-lock">${fresh} bought this turn — playable next turn</span>` : ''}
         ${!myTurn && ready ? '<span class="dev-lock">Not your turn — playable when it is</span>' : ''}
         ${myTurn && g.turn.playedDev && ready ? '<span class="dev-lock">One card per turn, already used</span>' : ''}
@@ -4614,7 +4548,7 @@ function openDev(g) {
     rows.push(`<div class="dev-card" style="opacity:.85">
       <span class="dev-n">${vps}</span>
       <span class="dev-txt">
-        <span class="dev-name">${g.campMode ? 'Camp Stories' : 'Victory Points'}</span>
+        <span class="dev-name">Victory Points</span>
         <span class="dev-blurb">${esc(p.vpCards.join(', '))} — worth ${vps} point${vps > 1 ? 's' : ''}, revealed when you win.</span>
       </span></div>`);
   }
@@ -5485,8 +5419,8 @@ function openPlayers() {
         + ` ${p.left.settlement}${icon('house', { size: 14 })}`
         + ` ${p.left.city}${icon('city', { size: 14 })}</span>`,
     ];
-    if (g.award.road === pid) stats.push(`<span class="pstat award">${g.campMode ? 'Longest Trail' : 'Longest Road'}</span>`);
-    if (g.award.army === pid) stats.push(`<span class="pstat award">${g.campMode ? 'Biggest Campfire' : 'Largest Army'}</span>`);
+    if (g.award.road === pid) stats.push('<span class="pstat award">Longest Road</span>');
+    if (g.award.army === pid) stats.push('<span class="pstat award">Largest Army</span>');
     if (ports.length) stats.push(`<span class="pstat">${ports.map((k) => k === 'any' ? '3:1' : `2:1 ${k}`).join(' · ')}</span>`);
     return `<div class="pcard" style="--c:${esc(colorFor(pid))}">
       <div class="pcard-top">
@@ -5500,7 +5434,6 @@ function openPlayers() {
 }
 
 function logLine(e) {
-  const g = game();
   const who = (pid) => pid === playerId ? 'You' : esc(nameFor(pid));
   const c = e.p ? colorFor(e.p) : 'transparent';
   const bits = (o) => Object.entries(o).map(([r, n]) => `${n}${RES_ICON[r]}`).join(' ');
@@ -5517,8 +5450,8 @@ function logLine(e) {
     case 'react': text = `<b>${who(e.p)}</b> reacted ${esc(e.emoji)}`; break;
     case 'shortfall': text = `<span class="r">The bank ran short of ${esc(e.res)}${e.partial ? ' — partial payout' : ' — nobody paid'}</span>`; break;
     case 'build': text = `<b>${who(e.p)}</b> built a ${esc(e.what)}${e.free ? ' (free)' : ''}`; break;
-    case 'buyDev': text = `<b>${who(e.p)}</b> bought a ${g.campMode ? 'Camp Card' : 'development card'}`; break;
-    case 'playDev': text = `<b>${who(e.p)}</b> played ${esc(campText(g, R.DEV_INFO[e.card]?.name || e.card, CAMP_CARD_NAMES[e.card] || e.card))}`; break;
+    case 'buyDev': text = `<b>${who(e.p)}</b> bought a development card`; break;
+    case 'playDev': text = `<b>${who(e.p)}</b> played ${esc(R.DEV_INFO[e.card]?.name || e.card)}`; break;
     case 'noloot': text = `<span class="r">Nobody had a card for <b>${who(e.p)}</b> to take</span>`; break;
     case 'robber': text = `<b>${who(e.p)}</b> moved the robber`; break;
     // The one card in this whole log that is not public knowledge the moment it
@@ -5545,8 +5478,8 @@ function logLine(e) {
         ? `<b>${who(e.p)}</b> gave ${bits(e.give)} to <b>${who(e.with)}</b> for ${bits(e.want)}`
         : `<b>${who(e.p)}</b> traded with <b>${who(e.with)}</b>`;
       break;
-    case 'longest': text = `<span class="g"><b>${who(e.p)}</b> takes ${g.campMode ? 'Longest Trail' : 'Longest Road'} (${e.len})</span>`; break;
-    case 'army': text = `<span class="g"><b>${who(e.p)}</b> takes ${g.campMode ? 'Biggest Campfire' : 'Largest Army'} (${e.size})</span>`; break;
+    case 'longest': text = `<span class="g"><b>${who(e.p)}</b> takes Longest Road (${e.len})</span>`; break;
+    case 'army': text = `<span class="g"><b>${who(e.p)}</b> takes Largest Army (${e.size})</span>`; break;
     case 'left': text = `<b>${who(e.p)}</b> left the game`; break;
     case 'abandoned': text = `<b>${who(e.p)}</b> left — game over`; break;
     case 'win': text = `<span class="g">${icon('trophy', { size: 14 })} <b>${who(e.p)}</b>`
@@ -5978,11 +5911,11 @@ function pointSources(g, pid) {
   }
   const cards = (p.dev.vp || 0) + (p.devNew.vp || 0);
   return [
-    { key: 'houses', icon: icon('house', { size: 16 }), label: g.campMode ? (houses === 1 ? 'tent' : 'tents') : (houses === 1 ? 'settlement' : 'settlements'), n: houses, vp: houses },
-    { key: 'cities', icon: icon('city', { size: 16 }), label: g.campMode ? (cities === 1 ? 'cabin' : 'cabins') : (cities === 1 ? 'city' : 'cities'), n: cities, vp: cities * 2 },
-    { key: 'road', icon: icon('road', { size: 16 }), label: `${g.campMode ? 'longest trail' : 'longest road'}${g.award.road === pid ? ` (${g.award.roadLen})` : ''}`,
+    { key: 'houses', icon: icon('house', { size: 16 }), label: houses === 1 ? 'settlement' : 'settlements', n: houses, vp: houses },
+    { key: 'cities', icon: icon('city', { size: 16 }), label: cities === 1 ? 'city' : 'cities', n: cities, vp: cities * 2 },
+    { key: 'road', icon: icon('road', { size: 16 }), label: `longest road${g.award.road === pid ? ` (${g.award.roadLen})` : ''}`,
       n: g.award.road === pid ? 1 : 0, vp: g.award.road === pid ? 2 : 0 },
-    { key: 'army', icon: icon('army', { size: 16 }), label: `${g.campMode ? 'biggest campfire' : 'largest army'}${g.award.army === pid ? ` (${g.award.armySize})` : ''}`,
+    { key: 'army', icon: icon('army', { size: 16 }), label: `largest army${g.award.army === pid ? ` (${g.award.armySize})` : ''}`,
       n: g.award.army === pid ? 1 : 0, vp: g.award.army === pid ? 2 : 0 },
     { key: 'cards', icon: icon('dev', { size: 16 }), label: cards === 1 ? 'victory card' : 'victory cards', n: cards, vp: cards },
   ];
@@ -6051,7 +5984,7 @@ $('btn-again').addEventListener('click', async () => {
     const reuseBotNames = Object.values(room.players || {})
       .filter((p) => p.bot).map((p) => p.name);
     if (startSolo(room.level, room.bots, room.settings.targetVP, room.settings.layout,
-      room.settings.useRobber, room.settings.discardLimit, reuseBotNames, room.settings.campMode)) {
+      room.settings.useRobber, room.settings.discardLimit, reuseBotNames)) {
       closeSheet();
     }
     return;
@@ -6096,13 +6029,11 @@ function openHow() {
 
 /** What everything costs, drawn once and used by both sheets that show it. */
 function costRows() {
-  const g = game();
-  const camp = !!g?.campMode;
   return [
-    ['road', camp ? 'Trail' : 'Road', R.COSTS.road],
-    ['house', camp ? 'Tent' : 'Settlement', R.COSTS.settlement],
-    ['city', camp ? 'Cabin' : 'City', R.COSTS.city],
-    ['dev', camp ? 'Camp Card' : 'Development card', R.COSTS.dev],
+    ['road', 'Road', R.COSTS.road],
+    ['house', 'Settlement', R.COSTS.settlement],
+    ['city', 'City', R.COSTS.city],
+    ['dev', 'Development card', R.COSTS.dev],
   ].map(([ico, name, cost]) => `<div class="cost-row">
       <span class="cost-ico">${icon(ico, { size: 18 })}</span><span class="cost-name">${name}</span>
       <span class="cost-bits">${COST_BITS(cost)}</span></div>`).join('');

@@ -40,14 +40,6 @@ const TERRAIN_EDGE = {
   desert:    '#f0d9a0',   // pays nothing, so it gets its own sand rather than a resource
   fog:       '#6c7f95',   // undiscovered — a rim that reads as "unknown", not a resource
 };
-const CAMP_TERRAIN_EDGE = {
-  forest:    '#20e64f', // Firewood
-  hills:     '#ff3030', // Canvas
-  pasture:   '#168bff', // Blankets
-  fields:    '#ffe600', // Rations
-  mountains: '#ffffff', // Camp Gear
-  desert:    '#f0d9a0',
-};
 
 const RES_COLOR = {
   wood: '#2f6b3a', brick: '#b8613a', sheep: '#78bf5c', wheat: '#e3ba57', ore: '#8d94a8',
@@ -210,17 +202,8 @@ const TILE_ART = {
   mountains: 'ore',
   desert:    'desert',   // produces nothing, but it is still a tile you look at
 };
-const CAMP_TILE_ART = {
-  forest:    'camp-firewood',
-  hills:     'camp-canvas',
-  pasture:   'camp-blankets',
-  fields:    'camp-rations',
-  mountains: 'camp-gear',
-  desert:    'desert',
-};
 const ART_EXT = ['jpg', 'png', 'webp', 'jpeg'];
 const artImages = {};   // terrain -> HTMLImageElement once decoded
-let artTheme = 'classic';
 
 // Tiles are keyed by terrain but ports are keyed by the resource they trade, so the
 // two-for-one badges need the mapping the other way round: 'wood' -> 'forest'.
@@ -232,14 +215,8 @@ const TERRAIN_BY_RES = Object.fromEntries(
  * Kick off loading the terrain art. Safe to call repeatedly; each terrain is only
  * fetched once. `onLoad` fires per successful image so the caller can redraw.
  */
-export function loadTerrainArt(onLoad, campMode = false) {
-  const nextTheme = campMode ? 'camp' : 'classic';
-  if (nextTheme !== artTheme) {
-    artTheme = nextTheme;
-    for (const terrain of Object.keys(TILE_ART)) delete artImages[terrain];
-  }
-  const tiles = campMode ? CAMP_TILE_ART : TILE_ART;
-  for (const [terrain, base] of Object.entries(tiles)) {
+export function loadTerrainArt(onLoad) {
+  for (const [terrain, base] of Object.entries(TILE_ART)) {
     if (artImages[terrain] !== undefined) continue;
     artImages[terrain] = null;                     // "attempted", so we don't retry
     let ext = 0;
@@ -278,14 +255,6 @@ const PIECES = {
   city: {
     d: 'M 15 85 L 105 85 L 105 55 L 80 30 L 55 55 L 55 30 L 35 15 L 15 30 Z',
     box: { x: 15, y: 15, w: 90, h: 70 },
-  },
-  tent: {
-    d: 'M 50 12 L 91 84 L 9 84 Z M 50 48 L 66 84 L 34 84 Z',
-    box: { x: 9, y: 12, w: 82, h: 72 },
-  },
-  cabin: {
-    d: 'M 10 45 L 50 12 L 90 45 L 90 85 L 10 85 Z',
-    box: { x: 10, y: 12, w: 80, h: 73 },
   },
 };
 for (const spec of Object.values(PIECES)) spec.path = new Path2D(spec.d);
@@ -849,8 +818,7 @@ export class BoardView {
     // Still inside the clip, which is what makes this an inside border: the stroke is
     // drawn at twice its intended width and the outer half is clipped away, leaving a
     // band that hugs the edge exactly instead of straddling it.
-      const edgePalette = this.game?.campMode ? CAMP_TERRAIN_EDGE : TERRAIN_EDGE;
-      c.strokeStyle = edgePalette[terrain] || st.a;
+    c.strokeStyle = TERRAIN_EDGE[terrain] || st.a;
     c.lineWidth = Math.max(2, R * 0.15);
     c.globalAlpha = 0.9;
     c.stroke(path);
@@ -1169,19 +1137,13 @@ export class BoardView {
       if (k > 0) { jumping.push([v, b, k]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const spin = this.spinPieces && b.p === activePid;
-      const draw = this.game.campMode
-        ? (b.t === 'c' ? this.drawCabin.bind(this) : this.drawTent.bind(this))
-        : (b.t === 'c' ? this.drawCity.bind(this) : this.drawSettlement.bind(this));
-      draw(x, y, this.colorOf(b.p), 1, spin);
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, spin) : this.drawSettlement(x, y, this.colorOf(b.p), 1, spin);
     }
     for (const [v, b, k] of jumping) {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const grow = 1 + k * (BUILD_PEAK - 1);
       const spin = this.spinPieces && b.p === activePid;
-      const draw = this.game.campMode
-        ? (b.t === 'c' ? this.drawCabin.bind(this) : this.drawTent.bind(this))
-        : (b.t === 'c' ? this.drawCity.bind(this) : this.drawSettlement.bind(this));
-      draw(x, y, this.colorOf(b.p), grow, spin);
+      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, spin) : this.drawSettlement(x, y, this.colorOf(b.p), grow, spin);
       const at = this.built.get(v);
       if (at !== undefined) this.drawBuildDust(x, y, this.now - at, v);
     }
@@ -1267,8 +1229,6 @@ export class BoardView {
 
   drawSettlement(x, y, color, grow = 1, spin = false) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow, spin); }
   drawCity(x, y, color, grow = 1, spin = false) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow, spin); }
-  drawTent(x, y, color, grow = 1, spin = false) { this.drawPiece('tent', x, y, color, this.scale * 0.52 * grow, spin); }
-  drawCabin(x, y, color, grow = 1, spin = false) { this.drawPiece('cabin', x, y, color, this.scale * 0.58 * grow, spin); }
 
   drawRobber() {
     if (!this.game) return;
