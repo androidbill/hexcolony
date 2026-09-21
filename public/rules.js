@@ -282,6 +282,7 @@ export function newGame(seats, settings, rng = Math.random) {
     seed,
     mode,
     layout,
+    campMode: !!settings.campMode,
     useRobber,
     fog,
     discovered,

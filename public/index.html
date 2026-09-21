@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.09.20.04">
+<link rel="stylesheet" href="styles.css?v=2026.09.20.08">
 </head>
 <body>
 
@@ -164,6 +164,15 @@
       </div>
 
       <div class="opt-group">The game</div>
+
+      <div class="opt-row col">
+        <span class="opt-l">Theme</span>
+        <div class="seg-row">
+          <button class="seg on" data-camp-mode="off">Classic</button>
+          <button class="seg" data-camp-mode="on">CampMode</button>
+        </div>
+        <em class="opt-note">Camping names, Camp Cards, and dynamic campsite humor.</em>
+      </div>
 
       <!-- Two numbers side by side. They are the same shape of control and they are read
            together — how long this runs, and how much a seven hurts. -->
@@ -346,7 +355,7 @@
 <div class="veil" id="veil"></div>
 
 <div class="sheet" id="sheet-dev">
-  <h3 class="sheet-title">Development cards</h3>
+  <h3 class="sheet-title" id="dev-sheet-title">Development cards</h3>
   <div id="dev-buy"></div>
   <div class="dev-list" id="dev-list"></div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
@@ -523,6 +532,15 @@
   </div>
 
   <div class="opt-group">The game</div>
+
+  <div class="opt-row col">
+    <span class="opt-l">Theme</span>
+    <div class="seg-row">
+      <button class="seg on" data-solo-camp-mode="off">Classic</button>
+      <button class="seg" data-solo-camp-mode="on">CampMode</button>
+    </div>
+    <em class="opt-note">Camping names, Camp Cards, and dynamic campsite humor.</em>
+  </div>
 
   <div class="opt-row col">
     <span class="opt-l">Turn timer</span>
@@ -788,7 +806,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.09.20.04"></script>
-<script type="module" src="app.js?v=2026.09.20.04"></script>
+<script src="iro.min.js?v=2026.09.20.08"></script>
+<script type="module" src="app.js?v=2026.09.20.08"></script>
 </body>
 </html>

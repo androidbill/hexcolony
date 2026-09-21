@@ -1689,6 +1689,15 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .rcard--wheat { --rc: #c9963a; --rc-art: url('art/wheat.jpg'); }
 .rcard--ore   { --rc: #7f8a99; --rc-art: url('art/ore.jpg'); }
 
+/* CampMode keeps the same resource-card layout but swaps in its saturated, point-top
+   campsite tiles. The theme class is applied by app.js from the authoritative game state,
+   so classic games continue to use the original artwork. */
+.camp-mode .rcard--wood  { --rc: #159447; --rc-art: url('art/camp-firewood.png'); }
+.camp-mode .rcard--brick { --rc: #e21d20; --rc-art: url('art/camp-canvas.png'); }
+.camp-mode .rcard--sheep { --rc: #168bff; --rc-art: url('art/camp-blankets.png'); }
+.camp-mode .rcard--wheat { --rc: #f4b718; --rc-art: url('art/camp-rations.png'); }
+.camp-mode .rcard--ore   { --rc: #ffffff; --rc-art: url('art/camp-gear.png'); }
+
 /* ------------------------------------------------------------ tray */
 /* `relative` so the trades can hang off the top of it without being part of it. */
 .tray {
