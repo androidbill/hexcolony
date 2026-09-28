@@ -2695,7 +2695,7 @@ $('board-tools-btn').addEventListener('click', (e) => {
   unlock(); sfx.tap();
   setBoardTools(!$('board-tools').classList.contains('open'));
 });
-for (const id of ['btn-how-board', 'btn-trade-filter', 'btn-recenter', 'btn-react', 'game-log-btn']) {
+for (const id of ['btn-how-board', 'btn-trade-filter', 'btn-recenter', 'btn-react', 'game-log-btn', 'btn-menu']) {
   $(id).addEventListener('click', () => setBoardTools(false));
 }
 // The costs alone, not the whole How to Play. Mid-game the question is "what does a city
@@ -6021,7 +6021,7 @@ $('btn-rematch-yes').addEventListener('click', () => { unlock(); answerRematch(t
 $('btn-rematch-no').addEventListener('click', () => { unlock(); answerRematch(false); });
 
 // ---------------------------------------------------------------- menus
-$('game-menu').addEventListener('click', () => { sfx.tap(); sheet('sheet-menu'); });
+$('btn-menu').addEventListener('click', () => { unlock(); sfx.tap(); sheet('sheet-menu'); });
 $('game-log-btn').addEventListener('click', () => { const g = game(); if (g) openLog(g); });
 $('menu-players').addEventListener('click', openPlayers);
 $('menu-history').addEventListener('click', openHistory);

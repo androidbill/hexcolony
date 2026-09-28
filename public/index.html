@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.09.28.01">
+<link rel="stylesheet" href="styles.css?v=2026.09.28.02">
 </head>
 <body>
 
@@ -219,14 +219,10 @@
 <!-- ============================== GAME ============================== -->
 <section class="screen" id="screen-game">
   <header class="topbar game-top">
+    <!-- No kebab here any more — see btn-menu in the board tools pill — so the strip
+         is the only thing in this row and gets the whole width to spread the chips
+         across instead of sharing it with a 40px button. -->
     <div class="score-strip" id="score-strip"></div>
-    <!-- Right-hand kebab, the same three dots the rest of the app uses for a menu.
-         The score strip keeps the width either way: one button leaves, one arrives. -->
-    <button class="icon-btn" id="game-menu" aria-label="Menu" aria-haspopup="true">
-      <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
-        <circle cx="12" cy="5" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="12" cy="19" r="1.9"/>
-      </svg>
-    </button>
   </header>
 
   <div class="board-wrap">
@@ -307,6 +303,15 @@
         <button class="board-fab" id="game-log-btn" aria-label="Game log">
           <svg viewBox="0 0 24 24"><path d="M5 5h14M5 10h14M5 15h9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
           <i class="chat-dot log-dot" id="log-dot" hidden></i>
+        </button>
+        <!-- Closest of all: the game menu used to be its own kebab at the top of the
+             screen, squeezed in beside the score strip. Moved here so that row is free
+             for the strip alone, and placed last because Players, Settings and Leave
+             are reached for the most of anything in this pill. A hamburger rather than
+             another set of dots, so the handle you just tapped and the thing it opened
+             do not read as the same icon twice. -->
+        <button class="board-fab" id="btn-menu" aria-label="Menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
         </button>
       </div>
       <button class="board-fab board-tools-btn" id="board-tools-btn" aria-label="Board tools" aria-expanded="false" aria-controls="board-tools-list">
@@ -788,7 +793,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.09.28.01"></script>
-<script type="module" src="app.js?v=2026.09.28.01"></script>
+<script src="iro.min.js?v=2026.09.28.02"></script>
+<script type="module" src="app.js?v=2026.09.28.02"></script>
 </body>
 </html>

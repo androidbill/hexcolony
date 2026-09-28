@@ -2479,11 +2479,8 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   .actions,
   .hand { width: 100%; max-width: 560px; margin-left: auto; margin-right: auto; }
 
-  /* The kebab comes out of the flow so the chips centre on the window rather than on
-     what is left of it once the button has taken its 40px — otherwise the strip sits
-     half a button to the left of centre, which is exactly the sort of near-miss that
-     looks like a mistake rather than a layout. */
-  .game-top { position: relative; }
-  .game-top #game-menu { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
+  /* The row is just the strip now that the kebab has moved into the board tools pill,
+     so centring it is a plain max-width and auto margins — no button on one side to
+     throw it off centre any more. */
   .score-strip { max-width: 640px; margin-left: auto; margin-right: auto; }
 }
