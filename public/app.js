@@ -3740,6 +3740,12 @@ function announceTurn(g) {
   // news to everyone watching it start.
   if (first && !(g.phase === 'setup' && (g.setup?.at ?? 0) === 0)) return;
   shoutout(`${nameFor(up)}'s turn`, colorFor(up), 2000);
+  // Setup has no 'turn' log entry the way a real turn does (see startTurn) — placing
+  // the initial two settlements just walks g.setup.order, and nothing was ever logged
+  // for reactToLog's own 'turn' case to play the personal nudge from. This function
+  // already knows the active seat just changed, for whatever reason, so it is where
+  // that nudge belongs while setup is still running.
+  if (g.phase === 'setup' && up === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }
 }
 
 /**
@@ -4025,14 +4031,22 @@ function renderScoreStrip(g) {
     const cardsHtml = `<span class="chip-cards-n">${cards}</span><span class="chip-cards-card"></span>`;
     if (cardsEl.dataset.n !== String(cards)) { cardsEl.dataset.n = String(cards); cardsEl.innerHTML = cardsHtml; }
 
-    // One badge each rather than two emoji run together, so each can say what it is.
-    const crowns = [
-      g.award.road === pid ? `<span class="chip-crown" title="Longest Road (${g.award.roadLen})"`
-        + ` aria-label="Longest Road">${icon('road', { size: 13 })}</span>` : '',
-      g.award.army === pid ? `<span class="chip-crown" title="Largest Army (${g.award.armySize})"`
-        + ` aria-label="Largest Army">${icon('army', { size: 13 })}</span>` : '',
-    ].join('');
-    if (awardsEl.innerHTML !== crowns) awardsEl.innerHTML = crowns;
+    // A player's own road length and knight count are not hidden information — in the
+    // physical game they are two things anyone at the table can just count — so each
+    // gets its own stat here rather than staying invisible until whoever holds it wins
+    // the award. The crown that used to be the only sign of either now sits right next
+    // to the number it is keeping score of, instead of grouped off on its own where it
+    // said which award without saying by how much.
+    const stat = (kind, n, title) => `<span class="chip-stat" title="${esc(title)}">`
+      + `${icon(kind, { size: 12 })}${n}</span>`;
+    const crown = (kind, held, title) => held
+      ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';
+    const stats = stat('road', p.roadLen || 0, 'Longest road')
+      + crown('road', g.award.road === pid, `Longest Road (${g.award.roadLen})`)
+      + stat('army', p.knights || 0, 'Knights played')
+      + crown('army', g.award.army === pid, `Largest Army (${g.award.armySize})`)
+      + stat('dev', R.devCount(p), 'Development cards held');
+    if (awardsEl.innerHTML !== stats) awardsEl.innerHTML = stats;
 
     el.classList.toggle('up', pid === up);
   });
