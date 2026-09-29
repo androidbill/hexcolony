@@ -4056,10 +4056,12 @@ function renderScoreStrip(g) {
       ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';
     const dev = stat('dev', R.devCount(p), 'Development cards held');
     const cardsRow = cardsHtml + dev;
-    const stats = stat('road', p.roadLen || 0, 'Longest road')
-      + crown('road', g.award.road === pid, `Longest Road (${g.award.roadLen})`)
-      + stat('army', p.knights || 0, 'Knights played')
-      + crown('army', g.award.army === pid, `Largest Army (${g.award.armySize})`);
+    const roadHeld = g.award.road === pid;
+    const armyHeld = g.award.army === pid;
+    const stats = stat(roadHeld ? 'card' : 'road', p.roadLen || 0,
+        roadHeld ? `Longest Road (${g.award.roadLen})` : 'Longest road')
+      + stat(armyHeld ? 'card' : 'army', p.knights || 0,
+        armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played');
     const allStats = cardsRow + stats;
     if (statsEl.innerHTML !== allStats) statsEl.innerHTML = allStats;
 
