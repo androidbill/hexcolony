@@ -150,6 +150,18 @@ button {
   padding: 16px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
 }
+/* Stuck to the top of the lobby's own scroll area, not the window — .lobby-scroll is
+   what actually scrolls, so sticky's offset is relative to its padding edge, right under
+   the topbar. Who's seated is worth keeping in view the whole time you're picking a map
+   and settings below it; a blur and its own shadow are what keep that reading as a card
+   sitting above the list scrolling under it, rather than the list just stopping short. */
+#lobby-seats-card {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 14px 18px -10px rgba(0, 0, 0, 0.55);
+}
 .card-title {
   font-weight: 700; font-size: 15px; margin-bottom: 10px;
   display: flex; align-items: center; gap: 8px;

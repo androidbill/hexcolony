@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.09.28.25">
+<link rel="stylesheet" href="styles.css?v=2026.09.28.26">
 </head>
 <body>
 
@@ -118,7 +118,10 @@
       <span class="code-hero-s">Everyone taps <b>Join</b> and types this</span>
     </div>
 
-    <div class="card">
+    <!-- Pinned while the setup card below it scrolls — who's actually at the table is
+         worth keeping in view the whole time you're picking a map and settings, not just
+         at the top of the screen you scroll straight past. -->
+    <div class="card" id="lobby-seats-card">
       <div class="card-title">At the table <span id="lobby-count" class="pill">1</span></div>
       <div class="seat-list" id="seat-list"></div>
       <p class="hint" id="lobby-hint">Waiting for players…</p>
@@ -793,7 +796,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.09.28.25"></script>
-<script type="module" src="app.js?v=2026.09.28.25"></script>
+<script src="iro.min.js?v=2026.09.28.26"></script>
+<script type="module" src="app.js?v=2026.09.28.26"></script>
 </body>
 </html>
