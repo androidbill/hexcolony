@@ -1508,13 +1508,13 @@ button {
 }
 /* The score, the same chit used for a tile's number token on the board — a cream disc,
    dark serif-weight digits — so the number reads as the same kind of number wherever it
-   shows up. Stretched to the chip's own height and kept a perfect circle by its
-   aspect-ratio, so it just fills the pill rather than floating inside it at some
-   arbitrary size. */
+   shows up. */
 .chip-vp {
-  align-self: stretch;
-  aspect-ratio: 1 / 1;
-  flex: 0 0 auto;
+  /* The points disc was as tall as the whole two-row pill. Keep the score text the
+     same size, but make the disc 25% smaller so the stat row has more breathing room. */
+  align-self: center;
+  width: 30px; height: 30px;
+  flex: 0 0 30px;
   display: flex; align-items: center; justify-content: center;
   border-radius: 50%;
   background: #f3e6cb;
