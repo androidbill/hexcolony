@@ -1534,9 +1534,15 @@ button {
 }
 .chip-row-stats { gap: 4px; justify-content: flex-start; }
 .chip-row-stats .chip-stat { flex: 0 0 auto; }
-/* Road and army counts inherit the exact font settings of their stat group. Those groups
-   deliberately match .chip-cards, which remains the untouched reference styling. */
-.chip-count { font: inherit; }
+/* Road and army numbers use the regular-card count's typeface explicitly. The size is
+   inherited from their stat group, which tracks the regular-card count at each layout. */
+.chip-count {
+  font-family: ui-rounded, "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: inherit;
+  font-weight: 700;
+  font-style: normal;
+  font-variant: normal;
+}
 .chip-cards-card {
   position: relative;
   width: 11px; height: 15px;
