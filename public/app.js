@@ -3667,7 +3667,14 @@ function reactToLog(g) {
           setTimeout(() => { sfx.gain(); playGain(mine); }, ROLL_TUMBLE_MS + ROLL_SETTLE_MS);
         }
         break;
-      case 'playDev': sfx.card(); break;
+      case 'playDev':
+        sfx.card();
+        // Monopoly gets its own bigger shoutout below (see 'mono', logged as a second
+        // entry in this same move) — this would just repeat it a beat earlier.
+        if (e.card !== 'mono') {
+          shoutout(`${e.p === playerId ? 'You' : nameFor(e.p)} played ${R.DEV_INFO[e.card]?.name || e.card}`, colorFor(e.p));
+        }
+        break;
       // Monopoly is the one dev card that can flip the whole table's hand at once, so it
       // gets the biggest announcement in the game: the resource itself, shown large,
       // rather than the small inline icon a steal gets.
