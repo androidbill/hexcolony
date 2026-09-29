@@ -3570,6 +3570,30 @@ function maybeHalfway(g, pid, delta) {
   }
 }
 
+/**
+ * The win moment: sound, shoutout, confetti, then the results once the shoutout has had
+ * its say. Shared by an actual scored win and a resignation that ends the game outright
+ * (a two-player table with nobody left to play against) — winning by forfeit is still
+ * winning, and the player left standing should not have to notice from a quiet results
+ * sheet that something happened.
+ */
+function celebrateWin(winner) {
+  (winner === playerId ? sfx.win : sfx.lose)();
+  shoutout(`${winner === playerId ? 'You win' : `${nameFor(winner)} wins`}!`, colorFor(winner));
+  confetti(colorFor(winner));
+  // The results are worth reading, but not over the top of the moment they are about.
+  // They follow once the shoutout has had its say.
+  celebrating = true;
+  setTimeout(() => {
+    celebrating = false;
+    const g2 = game();
+    if (g2?.phase === 'over' && openSheet !== 'sheet-over' && openSheet !== 'sheet-chat') {
+      renderOver(g2);
+      sheet('sheet-over');
+    }
+  }, WIN_PAUSE_MS);
+}
+
 // Sound and flourish are driven off the shared log, not off local move results, so
 // every player hears the same dice and the same robber.
 function reactToLog(g) {
@@ -3690,22 +3714,13 @@ function reactToLog(g) {
       case 'turn':
         if (e.p === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }
         break;
-      case 'win':
-        (e.p === playerId ? sfx.win : sfx.lose)();
-        shoutout(`${e.p === playerId ? 'You win' : `${nameFor(e.p)} wins`}!`, colorFor(e.p));
-        confetti(colorFor(e.p));
-        // The results are worth reading, but not over the top of the moment they are
-        // about. They follow once the shoutout has had its say.
-        celebrating = true;
-        setTimeout(() => {
-          celebrating = false;
-          const g2 = game();
-    if (g2?.phase === 'over' && openSheet !== 'sheet-over' && openSheet !== 'sheet-chat') {
-      renderOver(g2);
-      sheet('sheet-over');
-    }
-        }, WIN_PAUSE_MS);
-        break;
+      case 'win': celebrateWin(e.p); break;
+      // A two-player game where one side resigns has no move that scores a win — there
+      // is nobody left to outscore, so the engine never gets to log one — but it is
+      // exactly as much a win for whoever is still seated. g.winner is set the moment
+      // this fires, so the same celebration plays for them rather than the game just
+      // quietly landing on the results sheet with no fanfare at all.
+      case 'abandoned': if (g.winner) celebrateWin(g.winner); break;
       default: break;
     }
   }
