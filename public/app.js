@@ -4062,7 +4062,9 @@ function renderScoreStrip(g) {
       roadHeld ? `Longest Road (${g.award.roadLen})` : 'Longest road');
     const army = awardStat('army', p.knights || 0, armyHeld,
       armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played');
-    const dev = stat('dev', R.devCount(p), 'Development cards held');
+    const dev = `<span class="chip-cards chip-dev-cards" title="Development cards held">`
+      + `<span class="chip-cards-n">${R.devCount(p)}</span>`
+      + `<span class="chip-cards-card chip-cards-card-dev"></span></span>`;
     const allStats = cardsHtml + road + army + dev;
     if (statsEl.innerHTML !== allStats) statsEl.innerHTML = allStats;
 

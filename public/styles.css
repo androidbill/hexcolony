@@ -1543,6 +1543,10 @@ button {
   overflow: hidden;
   flex: 0 0 auto;
 }
+.chip-cards-card-dev {
+  background: linear-gradient(155deg, #42b9f2, #167bb5);
+  border-color: rgba(8, 46, 72, 0.8);
+}
 .chip-cards-card::before {
   content: '';
   position: absolute; inset: 0;
@@ -1574,11 +1578,6 @@ button {
   font-size: 12px; font-weight: 700; opacity: 0.85;
 }
 .chip-stat svg { width: 12px; height: 12px; display: block; }
-.chip-stat-dev svg {
-  width: 13px; height: 15px; padding: 1px;
-  border-radius: 2.5px; background: #238bc4;
-  color: #f4fbff; box-sizing: border-box;
-}
 .chip-award-stat { gap: 4px; }
 .chip-award-icon {
   width: 17px; height: 17px; flex: 0 0 17px;
