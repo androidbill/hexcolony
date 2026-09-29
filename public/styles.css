@@ -2153,16 +2153,19 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .log-row .r { color: #ff9fa1; }
 
 /* ------------------------------------------------------------ menus + misc */
-.menu-list { display: flex; flex-direction: column; gap: 8px; }
+/* One line each, not two — the subtitle under every label was what pushed eight items
+   past a phone's screen height and into a scroll. The label alone says enough (Players,
+   Settings, Leave game do not need a second sentence to be understood), and dropping it
+   is most of what makes the whole sheet fit without one. */
+.menu-list { display: flex; flex-direction: column; gap: 6px; }
 .menu-item {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
-  padding: 13px; border-radius: var(--r);
+  display: flex; align-items: center;
+  padding: 11px 13px; border-radius: var(--r);
   background: rgba(255, 255, 255, 0.06);
   border: 1px solid var(--line);
   width: 100%;
 }
 .menu-item b { font-weight: 700; }
-.menu-item i { font-style: normal; font-size: 12px; color: var(--dim); }
 .menu-item.danger b { color: #ff9fa1; }
 .pause-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .pause-status {
