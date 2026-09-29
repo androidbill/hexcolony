@@ -240,24 +240,17 @@ function shoutout(msg, accent, duration = 2000) {
  */
 function trayHeight() {
   const t = $('tray');
-  // The actions row floats over the board now instead of stretching the tray (see
-  // .actions in styles.css), so anything that used to size itself off the tray's own
-  // height needs that overlay's own height folded back in to still clear it.
-  const a = $('actions');
-  const actionsH = a && a.children.length ? a.offsetHeight + 8 : 0;
-  document.documentElement.style.setProperty('--actions-h', `${actionsH}px`);
-  if (t) document.documentElement.style.setProperty('--tray-h', `${t.offsetHeight + actionsH}px`);
+  if (t) document.documentElement.style.setProperty('--tray-h', `${t.offsetHeight}px`);
   // And how much the floating trade layer is currently covering, so the board's own
   // buttons can sit above it rather than under an offer.
   const f = $('tray-float');
   const h = f && f.offsetParent !== null ? f.offsetHeight : 0;
-  document.documentElement.style.setProperty('--float-h', `${(h ? h + 8 : 0) + actionsH}px`);
+  document.documentElement.style.setProperty('--float-h', `${h ? h + 8 : 0}px`);
 }
 if (typeof ResizeObserver === 'function' && $('tray')) {
   const ro = new ResizeObserver(trayHeight);
   ro.observe($('tray'));
   if ($('tray-float')) ro.observe($('tray-float'));
-  if ($('actions')) ro.observe($('actions'));
 }
 
 // The one measurement that matters on a phone: 100vh lies when the URL bar is showing,
@@ -4385,6 +4378,10 @@ function renderActions(g) {
   const mine = R.isTurn(g, playerId);
   const p = g.players[playerId];
   const bar = $('actions');
+  // Visible by default; the two branches with nothing to show hide it explicitly. Reset
+  // here rather than left to whichever branch happens to run, because most of them only
+  // ever rewrite innerHTML and were never the ones that had to hide it in the first place.
+  bar.hidden = false;
   // DEV and Trade used to live here behind a Players/DEV/Trade fold. Both have their own
   // door now — tap the dev card at the end of your hand for DEV, tap any resource card to
   // start a trade with it already offered — so the only thing this row ever needs to say
@@ -4392,11 +4389,8 @@ function renderActions(g) {
   // a handle.
   const utility = () => actBtn('players', icon('players'), 'Players');
 
-  // No actions at all for a spectator — the row would only ever have shown Players. Left
-  // in the layout empty rather than `hidden`: collapsing it changes the tray's height,
-  // which pushes the board above it to resize — exactly the shift a turn starting or
-  // ending should not cause. `.actions:empty` in styles.css reserves its row's height.
-  if (!p) { bar.innerHTML = ''; return; }
+  // No actions at all for a spectator — the row would only ever have shown Players.
+  if (!p) { bar.hidden = true; bar.innerHTML = ''; return; }
 
   if (g.phase !== 'over' && pauseBlocksGame()) {
     bar.innerHTML = utility()
@@ -4422,10 +4416,10 @@ function renderActions(g) {
   // Nothing to press on somebody else's turn — Players is a tap on their name in the
   // score strip now, and DEV is the card at the end of your own hand, so the row this
   // used to spend on both of them the whole game through is worth more shown to nobody
-  // at all. Left empty rather than collapsed (see the spectator branch above) so the
-  // board doesn't jump when a turn starts and this row fills back in.
+  // at all. The tray floats over the board now (see .tray in styles.css), so collapsing
+  // this row just shrinks the overlay down to the hand — the board itself never moves.
   if (!mine || g.phase === 'setup') {
-    bar.innerHTML = ''; return;
+    bar.hidden = true; bar.innerHTML = ''; return;
   }
 
   if (g.phase === 'robber') {

@@ -1048,9 +1048,7 @@ button {
    for wheat. Out of the flow, the board underneath does not move at all. */
 .tray-float {
   position: absolute;
-  left: 10px; right: 10px;
-  /* Stacks above the actions row's own overlay rather than under it — see .actions. */
-  bottom: calc(100% + var(--actions-h, 0px));
+  left: 10px; right: 10px; bottom: 100%;
   /* Capped and centred rather than stretched edge to edge.
      A phone is narrower than the cap, so this changes nothing there — it is the desktop
      that needed it, where an offer ran the full width of the window with one short
@@ -1776,10 +1774,16 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .rcard--ore   { --rc: #7f8a99; --rc-art: url('art/ore.jpg'); }
 
 /* ------------------------------------------------------------ tray */
-/* `relative` so the trades can hang off the top of it without being part of it. */
+/* Floats over the bottom of the board instead of sitting beside it in the flex column.
+   It used to be a flex sibling of .board-wrap, so its own height — which changes with
+   whose turn it is, the actions row coming and going — resized the board above it every
+   time a turn started or ended. Positioned instead, .board-wrap is free to fill the
+   whole screen underneath it and the tray just grows and shrinks over the water, the
+   same way .tray-float already grows and shrinks over it for a trade offer. */
 .tray {
-  position: relative;
-  flex-shrink: 0;
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 6;
   background: rgba(5, 18, 32, 0.94);
   border-top: 1px solid var(--line);
   padding: 9px 10px calc(var(--safe-b) + 9px);
@@ -1815,21 +1819,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .rcard-wrap.bump { animation: bump .45s cubic-bezier(.2, 1.5, .4, 1); }
 @keyframes bump { 0% { transform: translateY(0); } 40% { transform: translateY(-9px) scale(1.1); } }
 
-/* Floats over the bottom of the board instead of stretching the tray, the same way
-   .tray-float does and for the same reason: this row appears and disappears with whose
-   turn it is (Players/Roll on your turn, empty otherwise), and as a flex child that
-   changing height used to resize the board underneath it every time a turn started or
-   ended. Out of the flow, the board never moves. --actions-h is published from JS
-   (see trayHeight in app.js) so .tray-float and the board's own corner buttons still
-   stack above it instead of sitting underneath. */
-.actions {
-  position: absolute;
-  left: 10px; right: 10px; bottom: 100%;
-  max-width: 520px;
-  margin: 0 auto 8px;
-  z-index: 4;
-  display: flex; gap: 7px;
-}
+.actions { display: flex; gap: 7px; }
 .act {
   /* Equal shares, always. `flex: 1` alone is not enough: a flex item's automatic minimum
      size stops it shrinking below its own content, so once the bar is tighter than the
