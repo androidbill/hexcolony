@@ -1530,17 +1530,16 @@ button {
    watermarked in — rather than the bare glyph it used to sit next to. */
 .chip-cards {
   display: inline-flex; align-items: center; gap: 3px;
-  font-size: 13px; font-weight: 700; opacity: 0.9;
+  opacity: 0.9;
 }
-.chip-row-stats { gap: 4px; justify-content: flex-start; }
-.chip-row-stats .chip-stat { flex: 0 0 auto; }
-/* The regular-card count is the reference: every number uses its same font stack, weight,
-   and size at each pill layout. The regular-card count's original values are preserved. */
-.chip-cards-n, .chip-count {
+.chip-row-stats {
+  gap: 4px; justify-content: flex-start;
   font-family: ui-rounded, "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 13px; font-weight: 700;
 }
+.chip-row-stats .chip-stat { flex: 0 0 auto; }
+/* Counts stay unstyled themselves so the hand, road, army, and dev figures all inherit
+   from the single shared stats row above, instead of acquiring wrapper-specific fonts. */
 .chip-cards-card {
   position: relative;
   width: 11px; height: 15px;
@@ -1582,7 +1581,7 @@ button {
    ambiguous about which of the three it is. */
 .chip-stat {
   display: inline-flex; align-items: center; gap: 3px;
-  font-size: 13px; font-weight: 700; opacity: 0.9;
+  opacity: 0.9;
 }
 .chip-stat svg { width: 12px; height: 12px; display: block; }
 .chip-award-stat { gap: 4px; }
@@ -1615,10 +1614,8 @@ button {
   font-size: 12px;
   min-width: 0; max-width: none;
 }
-.score-strip.tight .chip-cards { font-size: 10.5px; }
-.score-strip.tight .chip-cards-n, .score-strip.tight .chip-count { font-size: 10.5px; }
 .score-strip.tight .chip-crown { font-size: 9px; width: 15px; height: 15px; }
-.score-strip.tight .chip-stat { font-size: 10.5px; }
+.score-strip.tight .chip-row-stats { font-size: 10.5px; }
 .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
 .score-strip.tight .chip-row { gap: 2px; }
 .score-strip.tight .chip-cards { gap: 1px; }
@@ -1630,9 +1627,8 @@ button {
 @media (max-width: 380px) {
   .score-strip.tight .chip { padding-inline: 3px; gap: 2px 3px; }
   .score-strip.tight .chip-row { gap: 0; }
-  .score-strip.tight .chip-cards { gap: 0; font-size: 9.5px; }
-  .score-strip.tight .chip-cards-n, .score-strip.tight .chip-count { font-size: 9.5px; }
-  .score-strip.tight .chip-stat { font-size: 9.5px; }
+  .score-strip.tight .chip-cards { gap: 0; }
+  .score-strip.tight .chip-row-stats { font-size: 9.5px; }
   .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
   .score-strip.tight .chip-award-stat { gap: 1px; }
 }
