@@ -4042,7 +4042,7 @@ function renderScoreStrip(g) {
     if (vpEl.textContent !== vp) vpEl.textContent = vp;
     // innerHTML rather than textContent: the count carries a little card face beside it,
     // the game's own mark watermarked in, rather than a plain glyph.
-    const cardsHtml = `<span class="chip-cards-n chip-count">${cards}</span><span class="chip-cards-card"></span>`;
+    const cardsHtml = `<span class="chip-cards-n">${cards}</span><span class="chip-cards-card"></span>`;
 
     // A player's own road length and knight count are not hidden information — in the
     // physical game they are two things anyone at the table can just count — so each
@@ -4063,7 +4063,7 @@ function renderScoreStrip(g) {
     const army = awardStat('army', p.knights || 0, armyHeld,
       armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played');
     const dev = `<span class="chip-cards chip-dev-cards" title="Development cards held">`
-      + `<span class="chip-cards-n chip-count">${R.devCount(p)}</span>`
+      + `<span class="chip-cards-n">${R.devCount(p)}</span>`
       + `<span class="chip-cards-card chip-cards-card-dev"></span></span>`;
     const allStats = cardsHtml + road + army + dev;
     if (statsEl.innerHTML !== allStats) statsEl.innerHTML = allStats;

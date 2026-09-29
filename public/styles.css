@@ -1532,14 +1532,11 @@ button {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 13px; font-weight: 700; opacity: 0.9;
 }
-.chip-row-stats { gap: 4px; justify-content: flex-start; --chip-count-size: 13px; }
+.chip-row-stats { gap: 4px; justify-content: flex-start; }
 .chip-row-stats .chip-stat { flex: 0 0 auto; }
-.chip-count {
-  font-family: inherit;
-  font-size: var(--chip-count-size);
-  font-weight: 700;
-  line-height: normal;
-}
+/* Road and army counts inherit the exact font settings of their stat group. Those groups
+   deliberately match .chip-cards, which remains the untouched reference styling. */
+.chip-count { font: inherit; }
 .chip-cards-card {
   position: relative;
   width: 11px; height: 15px;
@@ -1617,7 +1614,6 @@ button {
 .score-strip.tight .chip-cards { font-size: 10.5px; }
 .score-strip.tight .chip-crown { font-size: 9px; width: 15px; height: 15px; }
 .score-strip.tight .chip-stat { font-size: 10.5px; }
-.score-strip.tight .chip-row-stats { --chip-count-size: 10.5px; }
 .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
 .score-strip.tight .chip-row { gap: 2px; }
 .score-strip.tight .chip-cards { gap: 1px; }
@@ -1631,7 +1627,6 @@ button {
   .score-strip.tight .chip-row { gap: 0; }
   .score-strip.tight .chip-cards { gap: 0; font-size: 9.5px; }
   .score-strip.tight .chip-stat { font-size: 9.5px; }
-  .score-strip.tight .chip-row-stats { --chip-count-size: 9.5px; }
   .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
   .score-strip.tight .chip-award-stat { gap: 1px; }
 }
