@@ -1616,6 +1616,18 @@ button {
 .score-strip.tight .chip-cards { gap: 1px; }
 .score-strip.tight .chip-award-stat { gap: 2px; }
 
+/* Some phones expose a narrower CSS viewport (or use larger system text) than others.
+   Four stats must still fit on one line, so reclaim a little more horizontal room on
+   compact screens while keeping every icon at its normal size. */
+@media (max-width: 380px) {
+  .score-strip.tight .chip { padding-inline: 3px; gap: 2px 3px; }
+  .score-strip.tight .chip-row { gap: 0; }
+  .score-strip.tight .chip-cards { gap: 0; font-size: 9.5px; }
+  .score-strip.tight .chip-stat { font-size: 9.5px; }
+  .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
+  .score-strip.tight .chip-award-stat { gap: 1px; }
+}
+
 /* ------------------------------------------------------------ resource cards */
 /* The card faces are the board's own tile illustrations. Those files are cropped to the
    hexagon's BOUNDING BOX, so their four corners hold the printed cream border — fine on
