@@ -4275,7 +4275,10 @@ function renderHand(g) {
     // the board's tiles produce, and cards appearing and vanishing is hard to read.
     return card;
   }).join('') + (trading ? '' : `<button class="discard-card" data-open-dev="1" aria-label="Development cards">`
-    + `${devCard({ count: devs || null, dim: !devs, size: 'sm', stack: false })}</button>`);
+    // Not dimmed at zero the way a resource card is — this isn't a legend for what the
+    // board produces, it's the door into the dev card sheet, and that door is exactly
+    // as much there to press at zero cards (to go buy one) as at five.
+    + `${devCard({ count: devs || null, dim: false, size: 'sm', stack: false })}</button>`);
 }
 
 // Tapping your own card takes a whole trade's worth at once — three wheat on a 3:1 port
