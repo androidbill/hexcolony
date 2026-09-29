@@ -1575,7 +1575,7 @@ button {
    ambiguous about which of the three it is. */
 .chip-stat {
   display: inline-flex; align-items: center; gap: 3px;
-  font-size: 12px; font-weight: 700; opacity: 0.85;
+  font-size: 13px; font-weight: 700; opacity: 0.9;
 }
 .chip-stat svg { width: 12px; height: 12px; display: block; }
 .chip-award-stat { gap: 4px; }
