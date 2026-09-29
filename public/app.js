@@ -4016,8 +4016,8 @@ function renderScoreStrip(g) {
       + '<span class="chip-vp"></span>'
       + '<span class="chip-body">'
       + '<span class="chip-name"></span>'
-      + '<span class="chip-cards"></span>'
-      + '<span class="chip-awards"></span>'
+      + '<span class="chip-row chip-row-cards"></span>'
+      + '<span class="chip-row chip-row-pieces"></span>'
       + '</span>'
       + '</button>').join('');
   }
@@ -4056,11 +4056,13 @@ function renderScoreStrip(g) {
       + `${icon(kind, { size: 12 })}${n}</span>`;
     const crown = (kind, held, title) => held
       ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';
+    const dev = stat('dev', R.devCount(p), 'Development cards held');
+    const cardsRow = cardsHtml + dev;
+    if (cardsEl.innerHTML !== cardsRow) cardsEl.innerHTML = cardsRow;
     const stats = stat('road', p.roadLen || 0, 'Longest road')
       + crown('road', g.award.road === pid, `Longest Road (${g.award.roadLen})`)
       + stat('army', p.knights || 0, 'Knights played')
-      + crown('army', g.award.army === pid, `Largest Army (${g.award.armySize})`)
-      + stat('dev', R.devCount(p), 'Development cards held');
+      + crown('army', g.award.army === pid, `Largest Army (${g.award.armySize})`);
     if (awardsEl.innerHTML !== stats) awardsEl.innerHTML = stats;
 
     el.classList.toggle('up', pid === up);

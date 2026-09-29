@@ -1489,17 +1489,22 @@ button {
 }
 @keyframes chip-turn-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 .chip-body {
-  display: flex; flex-wrap: wrap; align-items: center; align-content: center; gap: 2px 5px;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto;
+  align-items: center; align-content: center; gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
 }
 /* The name owns a full line. It may wrap, but it never becomes an unhelpful ellipsis. */
 .chip-name {
-  flex: 1 0 100%;
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   line-height: 1.1;
   font-weight: 700;
+}
+.chip-row {
+  display: flex; align-items: center; gap: 7px;
+  min-width: 0;
+  flex-wrap: nowrap; white-space: nowrap; overflow: hidden;
 }
 /* The score, the same chit used for a tile's number token on the board — a cream disc,
    dark serif-weight digits — so the number reads as the same kind of number wherever it
@@ -1527,6 +1532,8 @@ button {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 13px; font-weight: 700; opacity: 0.9;
 }
+.chip-row-cards .chip-stat,
+.chip-row-pieces .chip-stat { flex: 0 0 auto; }
 .chip-cards-card {
   position: relative;
   width: 11px; height: 15px;
@@ -1576,8 +1583,7 @@ button {
    row keeps road, army and dev cards travelling together, wrapping as a block if it ever
    has to rather than fraying one stat at a time. */
 .chip-awards {
-  flex: 1 0 100%;
-  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px;
+  display: none;
 }
 
 /* More players still use the same readable two-column rhythm. */
@@ -1591,6 +1597,7 @@ button {
 .score-strip.tight .chip-crown { font-size: 9px; width: 15px; height: 15px; }
 .score-strip.tight .chip-stat { font-size: 10.5px; }
 .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
+.score-strip.tight .chip-row { gap: 5px; }
 
 /* ------------------------------------------------------------ resource cards */
 /* The card faces are the board's own tile illustrations. Those files are cropped to the
