@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.09.28.26">
+<link rel="stylesheet" href="styles.css?v=2026.09.28.27">
 </head>
 <body>
 
@@ -106,9 +106,16 @@
       <svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <div class="topbar-title">Lobby</div>
-    <button class="icon-btn" id="lobby-share" aria-label="Share room">
-      <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    </button>
+    <!-- No share button here any more — it sat in the same top-right corner as the
+         floating kebab (hidden only on the game screen, which owns both its own
+         corners; the lobby never got the same exception), so the two collided and
+         one showed through behind the other. The kebab's own Share entry already
+         shares the room code, not just the bare app link, whenever one is open —
+         see shareApp's inRoom check — so nothing here needed replacing.
+         The spacer stays: the title is centred in whatever space is left between the
+         two ends of this row, and a back button with nothing to balance it on the
+         right would drag "Lobby" off-centre by exactly its own width. -->
+    <div class="icon-btn" aria-hidden="true" style="visibility: hidden;"></div>
   </header>
 
   <div class="lobby-scroll">
@@ -796,7 +803,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.09.28.26"></script>
-<script type="module" src="app.js?v=2026.09.28.26"></script>
+<script src="iro.min.js?v=2026.09.28.27"></script>
+<script type="module" src="app.js?v=2026.09.28.27"></script>
 </body>
 </html>

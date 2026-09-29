@@ -2287,22 +2287,12 @@ $('btn-solo-start').addEventListener('click', () => {
 // ---------------------------------------------------------------- lobby
 $('lobby-back').addEventListener('click', () => leaveRoom(true));
 $('lobby-code').addEventListener('click', copyCode);
-$('lobby-share').addEventListener('click', shareRoom);
 
 async function copyCode() {
   try {
     await navigator.clipboard.writeText(roomCode);
     toast(`Copied ${roomCode}`);
   } catch { toast(`Room code: ${roomCode}`); }
-}
-
-async function shareRoom() {
-  const text = `Join my HexColony game — room code ${roomCode}`;
-  const url = location.href.split('?')[0];
-  if (navigator.share) {
-    try { await navigator.share({ title: 'HexColony', text, url }); return; } catch { /* cancelled */ }
-  }
-  copyCode();
 }
 
 for (const b of document.querySelectorAll('[data-set]')) {
