@@ -4042,7 +4042,7 @@ function renderScoreStrip(g) {
     if (vpEl.textContent !== vp) vpEl.textContent = vp;
     // innerHTML rather than textContent: the count carries a little card face beside it,
     // the game's own mark watermarked in, rather than a plain glyph.
-    const cardsHtml = `<span class="chip-cards-n">${cards}</span><span class="chip-cards-card"></span>`;
+    const cardsHtml = `<span class="chip-cards-n chip-count">${cards}</span><span class="chip-cards-card"></span>`;
 
     // A player's own road length and knight count are not hidden information — in the
     // physical game they are two things anyone at the table can just count — so each
@@ -4051,19 +4051,19 @@ function renderScoreStrip(g) {
     // to the number it is keeping score of, instead of grouped off on its own where it
     // said which award without saying by how much.
     const stat = (kind, n, title, extra = '') => `<span class="chip-stat chip-stat-${kind} ${extra}" title="${esc(title)}">`
-      + `${n}${icon(kind, { size: 12 })}</span>`;
+      + `<span class="chip-count">${n}</span>${icon(kind, { size: 12 })}</span>`;
     const crown = (kind, held, title) => held
       ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';
     const roadHeld = g.award.road === pid;
     const armyHeld = g.award.army === pid;
     const awardStat = (kind, count, held, title) => `<span class="chip-stat chip-award-stat" title="${esc(title)}">`
-      + `${count}<span class="chip-award-icon${held ? ' is-held' : ''}">${icon(kind, { size: 12 })}</span></span>`;
+      + `<span class="chip-count">${count}</span><span class="chip-award-icon${held ? ' is-held' : ''}">${icon(kind, { size: 12 })}</span></span>`;
     const road = awardStat('road', p.roadLen || 0, roadHeld,
       roadHeld ? `Longest Road (${g.award.roadLen})` : 'Longest road');
     const army = awardStat('army', p.knights || 0, armyHeld,
       armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played');
     const dev = `<span class="chip-cards chip-dev-cards" title="Development cards held">`
-      + `<span class="chip-cards-n">${R.devCount(p)}</span>`
+      + `<span class="chip-cards-n chip-count">${R.devCount(p)}</span>`
       + `<span class="chip-cards-card chip-cards-card-dev"></span></span>`;
     const allStats = cardsHtml + road + army + dev;
     if (statsEl.innerHTML !== allStats) statsEl.innerHTML = allStats;
