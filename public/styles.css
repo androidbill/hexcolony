@@ -1604,7 +1604,7 @@ button {
 /* More players still use the same readable two-column rhythm. */
 .score-strip.tight { gap: 4px; }
 .score-strip.tight .chip {
-  padding: 4px 8px; gap: 2px 5px;
+  padding: 4px 5px; gap: 2px 5px;
   font-size: 12px;
   min-width: 0; max-width: none;
 }
@@ -1612,7 +1612,9 @@ button {
 .score-strip.tight .chip-crown { font-size: 9px; width: 15px; height: 15px; }
 .score-strip.tight .chip-stat { font-size: 10.5px; }
 .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
-.score-strip.tight .chip-row { gap: 5px; }
+.score-strip.tight .chip-row { gap: 2px; }
+.score-strip.tight .chip-cards { gap: 1px; }
+.score-strip.tight .chip-award-stat { gap: 2px; }
 
 /* ------------------------------------------------------------ resource cards */
 /* The card faces are the board's own tile illustrations. Those files are cropped to the
