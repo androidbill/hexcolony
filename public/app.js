@@ -4016,8 +4016,7 @@ function renderScoreStrip(g) {
       + '<span class="chip-vp"></span>'
       + '<span class="chip-body">'
       + '<span class="chip-name"></span>'
-      + '<span class="chip-row chip-row-cards"></span>'
-      + '<span class="chip-row chip-row-pieces"></span>'
+      + '<span class="chip-row chip-row-stats"></span>'
       + '</span>'
       + '</button>').join('');
   }
@@ -4038,13 +4037,12 @@ function renderScoreStrip(g) {
     const vp = String(R.publicVP(g, pid));
     const cards = R.handSize(p);
     const [vpEl, bodyEl] = el.children;
-    const [nameEl, cardsEl, awardsEl] = bodyEl.children;
+    const [nameEl, statsEl] = bodyEl.children;
     if (nameEl.textContent !== name) nameEl.textContent = name;
     if (vpEl.textContent !== vp) vpEl.textContent = vp;
     // innerHTML rather than textContent: the count carries a little card face beside it,
     // the game's own mark watermarked in, rather than a plain glyph.
     const cardsHtml = `<span class="chip-cards-n">${cards}</span><span class="chip-cards-card"></span>`;
-    if (cardsEl.dataset.n !== String(cards)) { cardsEl.dataset.n = String(cards); cardsEl.innerHTML = cardsHtml; }
 
     // A player's own road length and knight count are not hidden information — in the
     // physical game they are two things anyone at the table can just count — so each
@@ -4058,12 +4056,12 @@ function renderScoreStrip(g) {
       ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';
     const dev = stat('dev', R.devCount(p), 'Development cards held');
     const cardsRow = cardsHtml + dev;
-    if (cardsEl.innerHTML !== cardsRow) cardsEl.innerHTML = cardsRow;
     const stats = stat('road', p.roadLen || 0, 'Longest road')
       + crown('road', g.award.road === pid, `Longest Road (${g.award.roadLen})`)
       + stat('army', p.knights || 0, 'Knights played')
       + crown('army', g.award.army === pid, `Largest Army (${g.award.armySize})`);
-    if (awardsEl.innerHTML !== stats) awardsEl.innerHTML = stats;
+    const allStats = cardsRow + stats;
+    if (statsEl.innerHTML !== allStats) statsEl.innerHTML = allStats;
 
     el.classList.toggle('up', pid === up);
   });

@@ -1489,7 +1489,7 @@ button {
 }
 @keyframes chip-turn-pulse { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
 .chip-body {
-  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto;
   align-items: center; align-content: center; gap: 2px;
   flex: 1 1 auto;
   min-width: 0;
@@ -1532,8 +1532,8 @@ button {
   display: inline-flex; align-items: center; gap: 3px;
   font-size: 13px; font-weight: 700; opacity: 0.9;
 }
-.chip-row-cards .chip-stat,
-.chip-row-pieces .chip-stat { flex: 0 0 auto; }
+.chip-row-stats { gap: 4px; justify-content: flex-start; }
+.chip-row-stats .chip-stat { flex: 0 0 auto; }
 .chip-cards-card {
   position: relative;
   width: 11px; height: 15px;
