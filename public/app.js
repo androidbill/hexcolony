@@ -3695,7 +3695,12 @@ function reactToLog(g) {
       case 'trade': sfx.trade(); playTradeSwap(e); break;
       case 'react': playReaction(e.p, e.emoji); break;
       case 'bankTrade': if (e.p === playerId) sfx.trade(); break;
-      case 'buyDev': if (e.p === playerId) sfx.card(); break;
+      case 'buyDev':
+        if (e.p === playerId) sfx.card();
+        // Which card, not just that one was bought, stays private — the shoutout says
+        // no more than the log line already did, same as a steal's onlooker text.
+        shoutout(`${e.p === playerId ? 'You' : nameFor(e.p)} bought a Dev Card`, colorFor(e.p));
+        break;
       // Both awards are two points changing hands, which is the biggest single swing in
       // the game outside somebody winning — so each is shown as the card it is, named in
       // the taker's own colour, for two seconds.
