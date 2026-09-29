@@ -4051,18 +4051,17 @@ function renderScoreStrip(g) {
     // to the number it is keeping score of, instead of grouped off on its own where it
     // said which award without saying by how much.
     const stat = (kind, n, title) => `<span class="chip-stat chip-stat-${kind}" title="${esc(title)}">`
-      + `${icon(kind, { size: 12 })}${n}</span>`;
+      + `${n}${icon(kind, { size: 12 })}</span>`;
     const crown = (kind, held, title) => held
       ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';
-    const dev = stat('dev', R.devCount(p), 'Development cards held');
-    const cardsRow = cardsHtml + dev;
     const roadHeld = g.award.road === pid;
     const armyHeld = g.award.army === pid;
-    const stats = stat(roadHeld ? 'card' : 'road', p.roadLen || 0,
+    const road = stat(roadHeld ? 'card' : 'road', p.roadLen || 0,
         roadHeld ? `Longest Road (${g.award.roadLen})` : 'Longest road')
-      + stat(armyHeld ? 'card' : 'army', p.knights || 0,
+    const army = stat(armyHeld ? 'card' : 'army', p.knights || 0,
         armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played');
-    const allStats = cardsRow + stats;
+    const dev = stat('dev', R.devCount(p), 'Development cards held');
+    const allStats = cardsHtml + road + army + dev;
     if (statsEl.innerHTML !== allStats) statsEl.innerHTML = allStats;
 
     el.classList.toggle('up', pid === up);
