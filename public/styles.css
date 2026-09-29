@@ -1579,14 +1579,16 @@ button {
   border-radius: 2.5px; background: #238bc4;
   color: #f4fbff; box-sizing: border-box;
 }
-.chip-award-stat svg {
-  width: 15px; height: 15px; padding: 1px;
-  box-sizing: border-box; border: 1.5px solid #101820;
-  border-radius: 3px; background: rgba(255,255,255,.16);
+.chip-award-stat { gap: 4px; }
+.chip-award-icon {
+  width: 17px; height: 17px; flex: 0 0 17px;
+  display: inline-grid; place-items: center;
+  border: 1.5px solid #101820; border-radius: 50%;
+  background: #fff; color: #101820; box-sizing: border-box;
 }
-.chip-award-stat.is-held svg {
-  border: 3px solid #168fda;
-  background: rgba(255,255,255,.28);
+.chip-award-icon svg { width: 12px; height: 12px; display: block; }
+.chip-award-icon.is-held {
+  border: 2px solid #168fda; background: #168fda; color: #fff;
 }
 .chip-crown + .chip-crown, .chip-stat + .chip-crown { margin-left: 2px; }
 .chip-crown svg { display: block; }

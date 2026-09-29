@@ -4056,12 +4056,12 @@ function renderScoreStrip(g) {
       ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';
     const roadHeld = g.award.road === pid;
     const armyHeld = g.award.army === pid;
-    const road = stat('road', p.roadLen || 0,
-        roadHeld ? `Longest Road (${g.award.roadLen})` : 'Longest road',
-        `chip-award-stat${roadHeld ? ' is-held' : ''}`);
-    const army = stat('army', p.knights || 0,
-        armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played',
-        `chip-award-stat${armyHeld ? ' is-held' : ''}`);
+    const awardStat = (kind, count, held, title) => `<span class="chip-stat chip-award-stat" title="${esc(title)}">`
+      + `${count}<span class="chip-award-icon${held ? ' is-held' : ''}">${icon(kind, { size: 12 })}</span></span>`;
+    const road = awardStat('road', p.roadLen || 0, roadHeld,
+      roadHeld ? `Longest Road (${g.award.roadLen})` : 'Longest road');
+    const army = awardStat('army', p.knights || 0, armyHeld,
+      armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played');
     const dev = stat('dev', R.devCount(p), 'Development cards held');
     const allStats = cardsHtml + road + army + dev;
     if (statsEl.innerHTML !== allStats) statsEl.innerHTML = allStats;
