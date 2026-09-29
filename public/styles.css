@@ -1542,7 +1542,11 @@ button {
    overrides font-weight, and body's own `font:` shorthand resets weight to normal rather
    than the 700 .chip-row-stats otherwise gives every number in this row. No tabular
    figures either, for the same reason: .ver has none. */
-.chip-count { font-weight: 400; }
+/* Pinned to 13px on the digits themselves, so the count stays this size regardless of
+   the row's own responsive size — .chip-row-stats still drops to 10.5px in "tight"
+   (3+ players) and 9.5px on a narrow phone, but a rule on the element itself always
+   wins over an inherited one, whatever the ancestor's own specificity. */
+.chip-count { font-weight: 400; font-size: 13px; }
 /* Counts stay unstyled themselves so the hand, road, army, and dev figures all inherit
    from the single shared stats row above, instead of acquiring wrapper-specific fonts. */
 .chip-cards-card {
