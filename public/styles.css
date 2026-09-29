@@ -1538,14 +1538,11 @@ button {
   font-size: 13px; font-weight: 700;
 }
 .chip-row-stats .chip-stat { flex: 0 0 auto; }
-/* The actual digits, in the same weight and the same tabular figures as the regular
-   card count badge on a hand card (.rcard-count) — heavier and evenly spaced, rather
-   than the row's own plain text weight, so a number reads as a count and not as label
-   copy sitting next to its icon. */
-.chip-count {
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
+/* The plain body weight the version number on the landing page (.ver) sets — .ver never
+   overrides font-weight, and body's own `font:` shorthand resets weight to normal rather
+   than the 700 .chip-row-stats otherwise gives every number in this row. No tabular
+   figures either, for the same reason: .ver has none. */
+.chip-count { font-weight: 400; }
 /* Counts stay unstyled themselves so the hand, road, army, and dev figures all inherit
    from the single shared stats row above, instead of acquiring wrapper-specific fonts. */
 .chip-cards-card {
