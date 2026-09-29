@@ -4050,16 +4050,18 @@ function renderScoreStrip(g) {
     // the award. The crown that used to be the only sign of either now sits right next
     // to the number it is keeping score of, instead of grouped off on its own where it
     // said which award without saying by how much.
-    const stat = (kind, n, title) => `<span class="chip-stat chip-stat-${kind}" title="${esc(title)}">`
+    const stat = (kind, n, title, extra = '') => `<span class="chip-stat chip-stat-${kind} ${extra}" title="${esc(title)}">`
       + `${n}${icon(kind, { size: 12 })}</span>`;
     const crown = (kind, held, title) => held
       ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';
     const roadHeld = g.award.road === pid;
     const armyHeld = g.award.army === pid;
-    const road = stat(roadHeld ? 'card' : 'road', p.roadLen || 0,
-        roadHeld ? `Longest Road (${g.award.roadLen})` : 'Longest road')
-    const army = stat(armyHeld ? 'card' : 'army', p.knights || 0,
-        armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played');
+    const road = stat('road', p.roadLen || 0,
+        roadHeld ? `Longest Road (${g.award.roadLen})` : 'Longest road',
+        `chip-award-stat${roadHeld ? ' is-held' : ''}`);
+    const army = stat('army', p.knights || 0,
+        armyHeld ? `Largest Army (${g.award.armySize})` : 'Knights played',
+        `chip-award-stat${armyHeld ? ' is-held' : ''}`);
     const dev = stat('dev', R.devCount(p), 'Development cards held');
     const allStats = cardsHtml + road + army + dev;
     if (statsEl.innerHTML !== allStats) statsEl.innerHTML = allStats;

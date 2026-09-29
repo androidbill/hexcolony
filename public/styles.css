@@ -1579,6 +1579,15 @@ button {
   border-radius: 2.5px; background: #238bc4;
   color: #f4fbff; box-sizing: border-box;
 }
+.chip-award-stat svg {
+  width: 15px; height: 15px; padding: 1px;
+  box-sizing: border-box; border: 1.5px solid #101820;
+  border-radius: 3px; background: rgba(255,255,255,.16);
+}
+.chip-award-stat.is-held svg {
+  border: 3px solid #168fda;
+  background: rgba(255,255,255,.28);
+}
 .chip-crown + .chip-crown, .chip-stat + .chip-crown { margin-left: 2px; }
 .chip-crown svg { display: block; }
 /* Its own full-width row, the same way the name gets one — not display:contents any
