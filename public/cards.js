@@ -73,7 +73,7 @@ export function devCard({ count = null, size = '', dim = false, dataset = '', la
     ? `<span class="rcard-count">${count}</span>` : '';
   const name = label ? `<span class="rcard-label">${esc(label)}</span>` : '';
   return `<span class="rcard-wrap rcard--dev"${dataset}>${edges}`
-    + `<span class="${cls.join(' ')}"><span class="rcard-face rcard-face--dev">?</span>${badge}</span>`
+    + `<span class="${cls.join(' ')}"><span class="rcard-face rcard-face--dev"></span>${badge}</span>`
     + `${name}</span>`;
 }
 

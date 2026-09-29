@@ -3996,7 +3996,11 @@ function bumpCards(list) {
 function renderScoreStrip(g) {
   const up = R.currentPid(g);
   const strip = $('score-strip');
-  strip.classList.toggle('tight', g.seats.length > 2);
+  // No more .tight toggle at 3+ players — the grid is a flat two columns whatever the
+  // seat count is, so a 2-player chip was never actually any wider than a 4-player one,
+  // just spread across fewer rows. The compact sizing that used to switch on here is
+  // unconditional in the CSS now, since the column width it was solving for never
+  // changed with seat count in the first place.
 
   // Rebuilt only when the row of players is not the row already on screen.
   const seatKey = g.seats.join(',');

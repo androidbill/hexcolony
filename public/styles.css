@@ -1465,13 +1465,13 @@ button {
   position: relative;
   display: flex; align-items: center; gap: 6px;
   width: 100%;
-  padding: 4px 8px;
+  padding: 4px 5px;
   border-radius: 999px;
   /* The chip IS the player's colour — quicker to find yourself than reading names. */
   background: var(--c, #888);
   color: var(--ink, #fff);
   border: 1px solid rgba(0, 0, 0, 0.35);
-  min-width: 0;
+  min-width: 0; max-width: none;
   font-size: 12px;
   opacity: 0.72;
   transition: opacity .18s, box-shadow .18s, transform .18s;
@@ -1514,7 +1514,7 @@ button {
   font-weight: 700;
 }
 .chip-row {
-  display: flex; align-items: center; gap: 7px;
+  display: flex; align-items: center; gap: 2px;
   min-width: 0;
   flex-wrap: nowrap; white-space: nowrap; overflow: hidden;
 }
@@ -1541,13 +1541,13 @@ button {
 /* The hand-card count, with a little card face beside it — the game's own mark
    watermarked in — rather than the bare glyph it used to sit next to. */
 .chip-cards {
-  display: inline-flex; align-items: center; gap: 3px;
+  display: inline-flex; align-items: center; gap: 1px;
   opacity: 0.9;
 }
 .chip-row-stats {
   gap: 4px; justify-content: flex-start;
   font-family: ui-rounded, "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: 13px; font-weight: 700;
+  font-size: 10.5px; font-weight: 700;
 }
 .chip-row-stats .chip-stat { flex: 0 0 auto; }
 /* The plain body weight the version number on the landing page (.ver) sets — .ver never
@@ -1555,9 +1555,10 @@ button {
    than the 700 .chip-row-stats otherwise gives every number in this row. No tabular
    figures either, for the same reason: .ver has none. */
 /* Pinned to 13px on the digits themselves, so the count stays this size regardless of
-   the row's own responsive size — .chip-row-stats still drops to 10.5px in "tight"
-   (3+ players) and 9.5px on a narrow phone, but a rule on the element itself always
-   wins over an inherited one, whatever the ancestor's own specificity. */
+   the row's own responsive size — .chip-row-stats itself runs smaller (10.5px, 9.5px on
+   a narrow phone) so the icons and gaps around the count stay compact, but a rule on the
+   element itself always wins over an inherited one, whatever the ancestor's own
+   specificity. */
 .chip-count { font-weight: 400; font-size: 13px; }
 /* Counts stay unstyled themselves so the hand, road, army, and dev figures all inherit
    from the single shared stats row above, instead of acquiring wrapper-specific fonts. */
@@ -1585,9 +1586,9 @@ button {
    about as close to invisible as a two-point swing gets. A pale disc with a gold ring
    reads as something awarded, and separates it from the numbers either side. */
 .chip-crown {
-  font-size: 10px; line-height: 1;
+  font-size: 9px; line-height: 1;
   display: inline-grid; place-items: center;
-  width: 17px; height: 17px;
+  width: 15px; height: 15px;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: 0 0 0 1.5px var(--gold);
@@ -1604,8 +1605,8 @@ button {
   display: inline-flex; align-items: center; gap: 3px;
   opacity: 0.9;
 }
-.chip-stat svg { width: 12px; height: 12px; display: block; }
-.chip-award-stat { gap: 4px; }
+.chip-stat svg { width: 10.5px; height: 10.5px; display: block; }
+.chip-award-stat { gap: 2px; }
 .chip-award-icon {
   width: 17px; height: 17px; flex: 0 0 17px;
   display: inline-grid; place-items: center;
@@ -1628,30 +1629,25 @@ button {
   display: none;
 }
 
-/* More players still use the same readable two-column rhythm. */
-.score-strip.tight { gap: 4px; }
-.score-strip.tight .chip {
-  padding: 4px 5px; gap: 2px 5px;
-  font-size: 12px;
-  min-width: 0; max-width: none;
-}
-.score-strip.tight .chip-crown { font-size: 9px; width: 15px; height: 15px; }
-.score-strip.tight .chip-row-stats { font-size: 10.5px; }
-.score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
-.score-strip.tight .chip-row { gap: 2px; }
-.score-strip.tight .chip-cards { gap: 1px; }
-.score-strip.tight .chip-award-stat { gap: 2px; }
+/* This compact sizing used to apply only past 2 players (.score-strip.tight, on a
+   count g.seats.length > 2), on the reasoning that more players meant less room. They
+   don't: the grid is a flat two columns whatever the seat count is (see .score-strip
+   above), so a 2-player chip is exactly as wide as a 4-player one — only the ROW count
+   changes, not the column width the card count actually has to fit in. Two players was
+   getting the spacious, non-tight sizing in the one dimension that never had the room
+   for it, and overflowing the same way four players used to before this was tightened.
+   Now every rule above is unconditional, and this class-and-count distinction is gone. */
 
 /* Some phones expose a narrower CSS viewport (or use larger system text) than others.
    Four stats must still fit on one line, so reclaim a little more horizontal room on
    compact screens while keeping every icon at its normal size. */
 @media (max-width: 380px) {
-  .score-strip.tight .chip { padding-inline: 3px; gap: 2px 3px; }
-  .score-strip.tight .chip-row { gap: 0; }
-  .score-strip.tight .chip-cards { gap: 0; }
-  .score-strip.tight .chip-row-stats { font-size: 9.5px; }
-  .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
-  .score-strip.tight .chip-award-stat { gap: 1px; }
+  .chip { padding-inline: 3px; gap: 2px 3px; }
+  .chip-row { gap: 0; }
+  .chip-cards { gap: 0; }
+  .chip-row-stats { font-size: 9.5px; }
+  .chip-stat svg { width: 10.5px; height: 10.5px; }
+  .chip-award-stat { gap: 1px; }
 }
 
 /* ------------------------------------------------------------ resource cards */
@@ -1750,15 +1746,25 @@ button.rcard-wrap, .rcard-wrap[role="button"] { cursor: pointer; }
 button.rcard-wrap:active .rcard { transform: scale(.94); }
 
 /* The one card with no tile behind it. */
+/* The same blue and the same watermark the name pill's own dev-card icon uses
+   (.chip-cards-card-dev) — one face for "a development card" everywhere it appears,
+   rather than this one place still showing the bare "?" the pill dropped. The logo
+   is a separate layer at its own opacity, which a background-image shorthand cannot
+   give one layer of a multi-layer background and not the other — the same reason the
+   pill's version uses a ::before rather than folding it into one declaration. */
 .rcard--dev { --rc: #2f7fd0; }
 .rcard-face--dev {
+  position: relative;
+  overflow: hidden;
   background-image: none;
-  background: linear-gradient(160deg, #3d8fe0, #1b528c);
-  color: rgba(255, 255, 255, .92);
-  font-size: 26px; font-weight: 800;
-  display: grid; place-items: center;
+  background: linear-gradient(155deg, #42b9f2, #167bb5);
 }
-.rcard--xs .rcard-face--dev { font-size: 16px; }
+.rcard-face--dev::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: url('icons/icon-192.png') center / 62% no-repeat;
+  opacity: 0.4;
+}
 
 /* Fallback colours, and the artwork each face uses. */
 .rcard--wood  { --rc: #2f6b3a; --rc-art: url('art/wood.jpg'); }
