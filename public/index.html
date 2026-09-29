@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.09.28.28">
+<link rel="stylesheet" href="styles.css?v=2026.09.28.29">
 </head>
 <body>
 
@@ -488,9 +488,9 @@
   <h3 class="sheet-title">Pause game</h3>
   <p class="sheet-sub" id="pause-sub">Choose how long to pause. Everyone at the table must accept.</p>
   <div class="pause-options" id="pause-options">
-    <button class="btn btn-ghost" data-pause-duration="60">1 minute</button>
-    <button class="btn btn-ghost" data-pause-duration="180">3 minutes</button>
     <button class="btn btn-ghost" data-pause-duration="300">5 minutes</button>
+    <button class="btn btn-ghost" data-pause-duration="600">10 minutes</button>
+    <button class="btn btn-ghost" data-pause-duration="900">15 minutes</button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
@@ -803,7 +803,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.09.28.28"></script>
-<script type="module" src="app.js?v=2026.09.28.28"></script>
+<script src="iro.min.js?v=2026.09.28.29"></script>
+<script type="module" src="app.js?v=2026.09.28.29"></script>
 </body>
 </html>

@@ -3129,9 +3129,9 @@ function renderPauseSheet() {
   if (!p || p.status === 'ended' || (p.status === 'active' && !pauseIsActive(p))) {
     sub.textContent = 'Choose how long to pause. Everyone at the table must accept.';
     options.innerHTML = `
-      <button class="btn btn-ghost" data-pause-duration="60">1 minute</button>
-      <button class="btn btn-ghost" data-pause-duration="180">3 minutes</button>
-      <button class="btn btn-ghost" data-pause-duration="300">5 minutes</button>`;
+      <button class="btn btn-ghost" data-pause-duration="300">5 minutes</button>
+      <button class="btn btn-ghost" data-pause-duration="600">10 minutes</button>
+      <button class="btn btn-ghost" data-pause-duration="900">15 minutes</button>`;
     for (const b of options.querySelectorAll('[data-pause-duration]')) {
       b.addEventListener('click', () => requestPause(Number(b.dataset.pauseDuration)));
     }
