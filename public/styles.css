@@ -1569,10 +1569,16 @@ button {
 .chip-stat svg { width: 12px; height: 12px; display: block; }
 .chip-crown + .chip-crown, .chip-stat + .chip-crown { margin-left: 2px; }
 .chip-crown svg { display: block; }
-/* The awards live in their own span so the chip can be updated in place, but they should
-   sit in the chip's flex row exactly as they did when they were written straight into it —
-   and an empty wrapper must not leave a gap behind on a chip that has won nothing. */
-.chip-awards { display: contents; }
+/* Its own full-width row, the same way the name gets one — not display:contents any
+   more. That let each stat wrap independently of the others once there were three of
+   them plus up to two crowns, so a double-digit hand size on a two-player chip (nothing
+   "tight" about it) was enough to strand "dev 0" alone on a line by itself. A dedicated
+   row keeps road, army and dev cards travelling together, wrapping as a block if it ever
+   has to rather than fraying one stat at a time. */
+.chip-awards {
+  flex: 1 0 100%;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 2px 5px;
+}
 
 /* More players still use the same readable two-column rhythm. */
 .score-strip.tight { gap: 4px; }
