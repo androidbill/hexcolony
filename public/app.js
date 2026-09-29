@@ -4050,7 +4050,7 @@ function renderScoreStrip(g) {
     // the award. The crown that used to be the only sign of either now sits right next
     // to the number it is keeping score of, instead of grouped off on its own where it
     // said which award without saying by how much.
-    const stat = (kind, n, title) => `<span class="chip-stat" title="${esc(title)}">`
+    const stat = (kind, n, title) => `<span class="chip-stat chip-stat-${kind}" title="${esc(title)}">`
       + `${icon(kind, { size: 12 })}${n}</span>`;
     const crown = (kind, held, title) => held
       ? `<span class="chip-crown" title="${esc(title)}" aria-label="${esc(title)}">${icon(kind, { size: 13 })}</span>` : '';

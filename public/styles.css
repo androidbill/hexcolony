@@ -1574,6 +1574,11 @@ button {
   font-size: 12px; font-weight: 700; opacity: 0.85;
 }
 .chip-stat svg { width: 12px; height: 12px; display: block; }
+.chip-stat-dev svg {
+  width: 13px; height: 15px; padding: 1px;
+  border-radius: 2.5px; background: #238bc4;
+  color: #f4fbff; box-sizing: border-box;
+}
 .chip-crown + .chip-crown, .chip-stat + .chip-crown { margin-left: 2px; }
 .chip-crown svg { display: block; }
 /* Its own full-width row, the same way the name gets one — not display:contents any
