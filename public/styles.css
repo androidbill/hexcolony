@@ -1534,14 +1534,12 @@ button {
 }
 .chip-row-stats { gap: 4px; justify-content: flex-start; }
 .chip-row-stats .chip-stat { flex: 0 0 auto; }
-/* Road and army numbers use the regular-card count's typeface explicitly. The size is
-   inherited from their stat group, which tracks the regular-card count at each layout. */
-.chip-count {
+/* The regular-card count is the reference: every number uses its same font stack, weight,
+   and size at each pill layout. The regular-card count's original values are preserved. */
+.chip-cards-n, .chip-count {
   font-family: ui-rounded, "Segoe UI", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-  font-size: inherit;
+  font-size: 13px;
   font-weight: 700;
-  font-style: normal;
-  font-variant: normal;
 }
 .chip-cards-card {
   position: relative;
@@ -1618,6 +1616,7 @@ button {
   min-width: 0; max-width: none;
 }
 .score-strip.tight .chip-cards { font-size: 10.5px; }
+.score-strip.tight .chip-cards-n, .score-strip.tight .chip-count { font-size: 10.5px; }
 .score-strip.tight .chip-crown { font-size: 9px; width: 15px; height: 15px; }
 .score-strip.tight .chip-stat { font-size: 10.5px; }
 .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
@@ -1632,6 +1631,7 @@ button {
   .score-strip.tight .chip { padding-inline: 3px; gap: 2px 3px; }
   .score-strip.tight .chip-row { gap: 0; }
   .score-strip.tight .chip-cards { gap: 0; font-size: 9.5px; }
+  .score-strip.tight .chip-cards-n, .score-strip.tight .chip-count { font-size: 9.5px; }
   .score-strip.tight .chip-stat { font-size: 9.5px; }
   .score-strip.tight .chip-stat svg { width: 10.5px; height: 10.5px; }
   .score-strip.tight .chip-award-stat { gap: 1px; }
