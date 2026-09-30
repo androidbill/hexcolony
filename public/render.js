@@ -487,8 +487,16 @@ export class BoardView {
     const vh = this.visibleH();
     const limX = Math.max(0, halfW - this.w / 2 + this.w * 0.35);
     const limY = Math.max(0, halfH - vh / 2 + vh * 0.35);
-    this.ox = Math.max(-limX, Math.min(limX, this.ox));
-    this.oy = Math.max(-limY, Math.min(limY, this.oy));
+    // fit() centres the island at the zoom it was fitted at, and zooming afterwards only
+    // adjusts ox/oy — so once zoomed, ox = oy = 0 is not "centred" unless the island's own
+    // middle happens to sit on the world origin. The classic board does; the expansion
+    // sits well below it, which made the limit lopsided and cut off its bottom edge.
+    // Measure the pan from where the island is actually centred.
+    const midX = (ext.minX + ext.maxX) / 2, midY = (ext.minY + ext.maxY) / 2;
+    const homeX = this.w / 2 - (this.cx + midX * this.scale);
+    const homeY = vh / 2 - (this.cy + midY * this.scale);
+    this.ox = homeX + Math.max(-limX, Math.min(limX, this.ox - homeX));
+    this.oy = homeY + Math.max(-limY, Math.min(limY, this.oy - homeY));
   }
 
   // ------------------------------------------------------------ input
