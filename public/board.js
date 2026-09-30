@@ -106,14 +106,28 @@ function dynamicCoords(seed, wanted) {
   // one shape in twenty-five, so this almost always takes the first attempt and cannot
   // plausibly take twelve. Each attempt draws its own stream keyed on the attempt, so
   // every device walks the same sequence and lands on the same island.
+  //
+  // The first attempt's stream is left exactly as it always was, so every seed that already
+  // produced a good island still produces the same one — boards are rebuilt from the seed on
+  // every move, and a game under way must not change shape under its players.
+  //
+  // Later attempts cannot be seeded the same way. `seed * 2654435761` runs to about 2^62, far
+  // past the 2^53 a double holds exactly, so adding the attempt number to it was rounded
+  // away and all twelve attempts replayed the same island. A shape with a lake then failed
+  // every time, came back with more tiles than the bags held, and makeBoard threw for that
+  // seed. Math.imul stays exact in 32 bits.
   let best = null;
-  for (let attempt = 0; attempt < 12; attempt++) {
-    const coords = growIsland(wanted, bias, mulberry32((seed * 2654435761 + attempt) >>> 0));
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const stream = attempt === 0
+      ? (seed * 2654435761) >>> 0
+      : (Math.imul(seed, 2654435761) + Math.imul(attempt, 0x9e3779b9)) >>> 0;
+    const coords = growIsland(wanted, bias, mulberry32(stream));
     if (coords.length === wanted) return coords;
     if (!best || Math.abs(coords.length - wanted) < Math.abs(best.length - wanted)) best = coords;
   }
-  // Never reached in practice; the closest island beats no island at all.
-  return best;
+  // Practically unreachable now. Filled-in lake tiles are appended after the grown ones, so
+  // trimming from the end drops those first and keeps the tile count the bags are built for.
+  return best.slice(0, wanted);
 }
 
 /** Grow one island to `target` tiles and fill in anything it wrapped around. */
