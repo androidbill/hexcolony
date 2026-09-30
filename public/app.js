@@ -962,6 +962,15 @@ const STALE_PULL_MS = 34000;
 const STALE_RESET_MS = 52000;
 const TAKEOVER_MS = 24000;
 
+// A game nobody is actually playing shouldn't get to sit on the remembered-room rejoin
+// for the rest of its eight-hour TTL — that's what silently handed a "new" game back
+// someone's old, abandoned one. If not one real move lands in this stretch, whichever
+// phone is currently on beat duty (see shouldPulse) closes the room outright, the same
+// way leaving it as its last player does. A stalled turn timing out on its own, or a
+// trade offer expiring unanswered, doesn't reset this clock — those are the game
+// advancing itself, not somebody still at the table.
+const IDLE_KILL_MS = 10 * 60 * 1000;
+
 let unsubPulse = null;
 let pulseMode = 'doc';
 let lastFreshAt = 0, lastResubAt = 0, lastPullAt = 0, lastPulseWrite = 0;
@@ -1234,7 +1243,13 @@ async function writePulse(force = false) {
 
 function healthCheck() {
   if (!roomRef) return;
-  if (shouldPulse()) writePulse();
+  if (shouldPulse()) {
+    writePulse();
+    // Only the phone currently on beat duty ever checks this, so at most one of them
+    // is ever mid-delete at a time. roomRef is never set for a solo game, so this
+    // function would already have returned above before reaching here.
+    if (idleKillDue(room)) killIdleRoom();
+  }
 
   const stale = Date.now() - lastFreshAt;
   if (stale > STALE_RESET_MS) hardReset();
@@ -1487,6 +1502,56 @@ function tradeDeadlinePassed(data, id) {
   return serverNow() >= made + R.TRADE_SECONDS * 1000;
 }
 
+/**
+ * Whether this room has gone quiet long enough to call it abandoned — see
+ * IDLE_KILL_MS. lastActionAt is stamped by postMove on every move except a `timeout`
+ * or an `expireTrade`, which are the game advancing on its own rather than proof
+ * anyone is still there; falling back to startedAt covers the gap before the very
+ * first move of a fresh game has landed.
+ */
+function idleKillDue(data) {
+  if (!data || data.state !== 'playing' || !data.game) return false;
+  if (['active', 'resuming'].includes(data.pause?.status)) return false; // stepping away on purpose
+  const last = stampMs(data.lastActionAt) ?? stampMs(data.startedAt);
+  if (last === null) return false;
+  return serverNow() - last >= IDLE_KILL_MS;
+}
+
+let killingIdleRoom = false;
+/**
+ * Closes a room nobody has actually played in for IDLE_KILL_MS, the same way leaving
+ * it as its last player already does. Re-reads straight from the server first —
+ * healthCheck only calls this off the locally cached room, and a move landing in the
+ * last second or two would not have reached that cache yet. Only the current beat
+ * leader (see shouldPulse) ever calls this, so a second phone finding the document
+ * already gone is the expected, harmless case, not a bug.
+ */
+async function killIdleRoom() {
+  if (!roomRef || killingIdleRoom) return;
+  killingIdleRoom = true;
+  try {
+    let fresh;
+    if (roomRef.backend === 'rtdb') {
+      const snap = await withTimeout(rtdbGet(roomRef.ref), 6000);
+      if (!snap.exists()) return;
+      fresh = snap.val();
+      normalizeRtdbGame(fresh.game);
+    } else {
+      const snap = await withTimeout(getDocFromServer(roomRef), 6000);
+      if (!snap.exists()) return;
+      fresh = snap.data();
+    }
+    if (!idleKillDue(fresh)) return;
+    if (roomRef.backend === 'rtdb') {
+      await rtdbRemove(roomRef.ref);
+    } else {
+      await deleteDoc(roomRef);
+      if (pulseRef) deleteDoc(pulseRef).catch(() => {});
+    }
+  } catch { /* another phone may already be closing it, or the connection dropped — next beat retries */ }
+  finally { killingIdleRoom = false; }
+}
+
 async function postMove(move, opts, drew, era) {
   // A move queued behind one the server refused was reasoned from a state that never
   // happened. Sending it anyway would be asking for a second, more confusing refusal.
@@ -1510,6 +1575,11 @@ async function postMove(move, opts, drew, era) {
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
         data.game = res.game;
+        // Proof somebody is actually at the table — see IDLE_KILL_MS. A stalled turn
+        // timing out or a trade offer expiring is the game moving on its own, not that.
+        if (move.type !== 'timeout' && move.type !== 'expireTrade') {
+          data.lastActionAt = rtdbServerTimestamp();
+        }
         if (res.game.phase === 'over') {
           data.state = 'over';
           if (!data.endedAt) data.endedAt = rtdbServerTimestamp();
@@ -1536,6 +1606,11 @@ async function postMove(move, opts, drew, era) {
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
         const patch = { game: res.game };
+        // Proof somebody is actually at the table — see IDLE_KILL_MS. A stalled turn
+        // timing out or a trade offer expiring is the game moving on its own, not that.
+        if (move.type !== 'timeout' && move.type !== 'expireTrade') {
+          patch.lastActionAt = serverTimestamp();
+        }
         if (res.game.phase === 'over') {
           patch.state = 'over';
           // Only on the move that ends it, and only if nothing has stamped it yet, so the
@@ -1706,6 +1781,9 @@ async function startGameWithSeed(seed) {
       // other time in this app: turnStartedAt is overwritten on every turn, so it cannot
       // be the one, and no phone's idea of when the game began should reach the room.
       startedAt: stamp(), endedAt: null,
+      // The idle-room clock's own starting point — see IDLE_KILL_MS — so a table that
+      // never makes its first move is covered exactly like one that stopped mid-game.
+      lastActionAt: stamp(),
       // Offer ids restart at 1 with the new game, so last game's stamps would be read as
       // this game's deadlines.
       tradeDeadlines: {},
