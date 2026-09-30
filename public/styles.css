@@ -1476,6 +1476,20 @@ button {
   opacity: 0.72;
   transition: opacity .18s, box-shadow .18s, transform .18s;
 }
+/* An invisible twin of .chip-vp on the far side, so .chip-body — and the centred name
+   inside it — sits in the middle of the whole pill instead of the middle of whatever
+   is left over after the score disc. `::before` rather than `::after`: `.up` already
+   uses `::after` for the turn ring, and that ring only exists on some chips some of the
+   time, which would have pulled this spacer out of the flex row right when a turn
+   started and shoved the name sideways. */
+.chip::before {
+  content: '';
+  flex: 0 0 30px;
+  width: 30px;
+  /* Source order puts a ::before first, ahead of .chip-vp — `order` moves it to the
+     visual end of the row instead, mirroring .chip-vp without changing the DOM. */
+  order: 1;
+}
 /* Whose turn it is: the same white ring and the same pulse as the border around the
    whole window on your own turn — that ring only ever shows on the active player's own
    screen, so this is the one place everyone else at the table gets the same cue, in the
