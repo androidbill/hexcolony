@@ -244,9 +244,29 @@ function shoutout(msg, accent, duration = 2000) {
  * stay on screen while you answer them — and only this side knows how tall the tray
  * currently is, because it changes: trade mode adds two rows to it.
  */
+let actionsRowH = 71; // the Players/Roll row plus its gap; remembered from the last time it showed
+let trayInset = 0;
+let viewReady = false; // `view` is created further down; trayHeight first runs before it exists
+function applyTrayInset() { if (viewReady && trayInset) view.setInset(trayInset); }
 function trayHeight() {
   const t = $('tray');
   if (t) document.documentElement.style.setProperty('--tray-h', `${t.offsetHeight}px`);
+  // The board camera fits and clamps to what is NOT under the tray. The reserve is the
+  // tray as it is on your own turn — Players/Roll row included even while it is hidden —
+  // so the map doesn't re-fit and jump every time a turn starts or ends. Trade mode adds
+  // rows on top of that, but only while it lasts, so it is left out rather than re-fitting
+  // the map in and out of it.
+  const a = $('actions');
+  if (t && t.offsetHeight && a) {
+    const rowShowing = !a.hidden && a.offsetHeight > 0;
+    if (rowShowing) actionsRowH = a.offsetHeight + 8;
+    const trading = !!$('trade-bar') && !$('trade-bar').hidden;
+    // The tray without that row, plus the row: the same number whichever state it is in.
+    if (!trading) {
+      trayInset = t.offsetHeight - (rowShowing ? a.offsetHeight + 8 : 0) + actionsRowH;
+      applyTrayInset();
+    }
+  }
   // And how much the floating trade layer is currently covering, so the board's own
   // buttons can sit above it rather than under an offer.
   const f = $('tray-float');
@@ -328,6 +348,8 @@ const view = new BoardView($('board-cv'));
 // Illustrated terrain tiles load in the background. Until they arrive (or if they are
 // not there at all) the board draws its procedural motifs, so play never waits on art.
 loadTerrainArt(() => view.draw(performance.now()));
+viewReady = true;
+applyTrayInset();
 let board = null;              // regenerated whenever the seed changes
 let boardSeed = null;
 let lastSeq = 0;               // highest game-log id already reacted to

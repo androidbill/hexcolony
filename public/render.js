@@ -287,6 +287,10 @@ export class BoardView {
     this.ox = 0; this.oy = 0;          // pan, in screen pixels
     this.userScale = 1;                // pinch zoom on top of the fit scale
     this.fitScale = 40;
+    // Pixels at the bottom of the canvas that the tray floats over. The canvas runs the
+    // full height of the screen so the tray never resizes it, which means part of it is
+    // always covered — fit and pan limits have to work within what is actually visible.
+    this.inset = 0;
     this.pulse = 0;
     this.onPick = null;                // ({ kind, id }) => void
     this._pointers = new Map();
@@ -432,15 +436,27 @@ export class BoardView {
     const ext = boardExtent();
     // Leave room for the port badges, which float outside the coastline.
     const pad = 1.25;
+    const vh = this.visibleH();
     const sx = this.w / (ext.w + pad * 2);
-    const sy = this.h / (ext.h + pad * 2);
+    const sy = vh / (ext.h + pad * 2);
     this.fitScale = Math.min(sx, sy);
     this.scale = this.fitScale * this.userScale;
     // Centre on the island's own middle rather than on the world origin. The classic
     // board happens to straddle the origin; the expansion does not, and assuming it
     // does would hang it off the bottom of the screen.
     this.cx = this.w / 2 - ((ext.minX + ext.maxX) / 2) * this.scale;
-    this.cy = this.h / 2 - ((ext.minY + ext.maxY) / 2) * this.scale;
+    this.cy = vh / 2 - ((ext.minY + ext.maxY) / 2) * this.scale;
+  }
+
+  /** The part of the canvas not under the tray. */
+  visibleH() { return Math.max(1, this.h - this.inset); }
+
+  /** Tell the camera how much of the bottom edge is covered, and refit around the rest. */
+  setInset(px) {
+    const next = Math.max(0, Math.round(px));
+    if (next === this.inset) return;
+    this.inset = next;
+    this.resize();
   }
 
   toScreen(x, y) {
@@ -468,8 +484,9 @@ export class BoardView {
     const ext = boardExtent();
     const halfW = (ext.w / 2 + 1.5) * this.scale;
     const halfH = (ext.h / 2 + 1.5) * this.scale;
+    const vh = this.visibleH();
     const limX = Math.max(0, halfW - this.w / 2 + this.w * 0.35);
-    const limY = Math.max(0, halfH - this.h / 2 + this.h * 0.35);
+    const limY = Math.max(0, halfH - vh / 2 + vh * 0.35);
     this.ox = Math.max(-limX, Math.min(limX, this.ox));
     this.oy = Math.max(-limY, Math.min(limY, this.oy));
   }
