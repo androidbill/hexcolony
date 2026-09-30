@@ -34,6 +34,12 @@ import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
 const LOBBY_IDLE_TTL_MS = 30 * 60 * 1000;
+// How long "Create a Room" will still treat a remembered room as its OWN previous
+// attempt retrying (a cellular handoff can make a create look failed even after it
+// landed) rather than an old game you never actually left. Past this window it is
+// just history — tapping Create makes a genuinely new room instead of silently
+// resurrecting whatever you closed the tab on hours or days ago. See createRoom().
+const CREATE_RETRY_WINDOW_MS = 2 * 60 * 1000;
 const CHAT_EMOJIS = ['😀', '😄', '😂', '🤣', '😊', '😎', '😍', '🤔', '😭', '😡', '🙌', '👋', '👍', '👎', '❤️', '🔥', '🎉', '✅', '💯', '⚡', '🌊', '🏝️', '🎲', '🏆'];
 
 // Firestore promises can hang forever on a bad mobile connection — never let a UI flow
@@ -661,22 +667,32 @@ async function createRoom() {
   $('btn-rooms-create').disabled = true;
   try {
     // A cellular handoff can make the previous create look failed even after it was
-    // actually accepted. Rejoin the remembered room before creating another — whichever
-    // database it turns out to be on, read straight off its own code shape. A finished
-    // game does not count: there is nothing left in it worth recovering, and it is
-    // exactly the room a fresh "Create a Room" tap should never land back in.
+    // actually accepted — but only in the few seconds right after the tap. Past that
+    // window, a remembered room is not this create quietly retrying, it is an old game
+    // nobody tapped Leave on, and rejoining it here silently handed a "new" game to
+    // whoever it was shared with — bots, settings and all — instead of the fresh one
+    // they were told they were getting. So this only fires for a room this device
+    // entered moments ago and that never left the lobby: a game already past setup
+    // is definitely not an ack that got lost.
     const remembered = localStorage.getItem('hexcolony_room');
-    if (remembered) {
+    const rememberedAt = Number(localStorage.getItem('hexcolony_room_at') || 0);
+    const recent = remembered && Date.now() - rememberedAt < CREATE_RETRY_WINDOW_MS;
+    if (remembered && !recent) {
+      localStorage.removeItem('hexcolony_room');
+      localStorage.removeItem('hexcolony_room_at');
+    } else if (remembered) {
       try {
         const data = await getRoomData(remembered, 5000);
-        if (data && !roomIsStale(data) && data.state !== 'over' && data.players?.[playerId]) {
+        if (data && data.state === 'lobby' && !roomIsStale(data) && data.players?.[playerId]) {
           enterRoom(remembered);
           return;
         }
-        if (!data || roomIsStale(data) || data.state === 'over') localStorage.removeItem('hexcolony_room');
+        localStorage.removeItem('hexcolony_room');
+        localStorage.removeItem('hexcolony_room_at');
       } catch {
-        // Preserve the remembered code when offline; the normal room listener
-        // will reconnect and recover it instead of creating a duplicate.
+        // Preserve the remembered code when offline — but only within the same recent
+        // window, for the same reason: this has to still plausibly be the create that
+        // just happened, not an old game surviving an unrelated offline blip.
         enterRoom(remembered);
         return;
       }
@@ -1250,6 +1266,11 @@ function enterRoom(code) {
     pulseRef = doc(db, 'pulses', code);
   }
   localStorage.setItem('hexcolony_room', code);
+  // When THIS device last actually entered this room — not when the room was created,
+  // which a rejoin days later would still read as fresh. createRoom()'s "was that
+  // create secretly acked" guard uses this to tell a moments-ago retry from an old
+  // game nobody ever tapped Leave on.
+  localStorage.setItem('hexcolony_room_at', String(Date.now()));
   const now = Date.now();
   lastFreshAt = now; lastPulseSeenAt = now;
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
@@ -1355,6 +1376,7 @@ async function leaveRoom(removeSelf = true) {
   board = null; boardSeed = null;
   resetGuess(); resetTrade();
   localStorage.removeItem('hexcolony_room');
+  localStorage.removeItem('hexcolony_room_at');
   keepAwake(false);
   closeSheet();
   renderChatButton();
