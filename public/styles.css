@@ -1225,10 +1225,14 @@ button {
 .board-tools {
   position: absolute;
   left: 12px;
-  /* Above whatever the floating trade layer is currently holding. Both live in the
-     bottom-left corner of the board, so an offer arriving would otherwise land straight
-     on top of these and bury the name of whoever sent it. */
-  bottom: calc(12px + var(--float-h, 0px));
+  /* The tray now floats over the board instead of sitting beside it (see .tray), so
+     board-wrap runs the full height of the screen and this corner handle would
+     otherwise land right under the tray — clear the tray's own height first, then
+     whatever the floating trade layer is currently holding above that. Both this and
+     the trade layer live in the bottom-left corner of the board, so an offer arriving
+     would otherwise land straight on top of the handle and bury the name of whoever
+     sent it. */
+  bottom: calc(12px + var(--tray-h, 0px) + var(--float-h, 0px));
   z-index: 5;
   transition: bottom .18s;
 }
