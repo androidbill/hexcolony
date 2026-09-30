@@ -704,7 +704,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
+      settings: { targetVP: 12, discardLimit: 7, boardMode: 'random', layout: 'expansion', useRobber: false, turnSeconds: 30, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
       players: { [playerId]: freshPlayer(name) },
       order: [],
       game: null,
@@ -805,7 +805,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 10, discardLimit: 7, boardMode: 'random', layout: 'classic', useRobber: true, turnSeconds: 0, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
+        settings: { targetVP: 12, discardLimit: 7, boardMode: 'random', layout: 'expansion', useRobber: false, turnSeconds: 30, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
         players: { [playerId]: freshPlayer(name) },
         order: [],
         game: null,
@@ -2132,12 +2132,12 @@ function refreshResume() {
 // ---- solo setup sheet
 let soloLevel = localStorage.getItem('hexcolony_solo_level') || 'medium';
 let soloBots = Number(localStorage.getItem('hexcolony_solo_bots') || 3);
-let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 10);
-let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'classic';
-let soloRobber = localStorage.getItem('hexcolony_solo_robber') !== 'off';
+let soloTarget = Number(localStorage.getItem('hexcolony_solo_target') || 12);
+let soloLayout = localStorage.getItem('hexcolony_solo_layout') || 'expansion';
+let soloRobber = localStorage.getItem('hexcolony_solo_robber') === 'on';
 let soloFog = localStorage.getItem('hexcolony_solo_fog') === 'on';
 let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
-let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 0);
+let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 30);
 let soloSea = localStorage.getItem('hexcolony_solo_sea') || SEA_DEFAULT;
 
 function drawSoloSheet() {
@@ -2422,9 +2422,9 @@ function renderLobby() {
   syncColourPicker();
 
   const s = room.settings || {};
-  $('set-target').textContent = String(s.targetVP || 10);
+  $('set-target').textContent = String(s.targetVP || 12);
   $('set-discard').textContent = String(s.discardLimit || 7);
-  const turnSeconds = R.TURN_OPTIONS.includes(s.turnSeconds) ? s.turnSeconds : 0;
+  const turnSeconds = R.TURN_OPTIONS.includes(s.turnSeconds) ? s.turnSeconds : 30;
   for (const b of document.querySelectorAll('[data-timer]')) {
     b.classList.toggle('on', Number(b.dataset.timer) === turnSeconds);
   }
@@ -2432,7 +2432,7 @@ function renderLobby() {
     ? `${turnSeconds}s to act, ${R.ROLL_SECONDS}s to roll. Doing something adds 10s.`
     : 'No limit — take as long as you like.';
 
-  const useRobber = s.useRobber !== false;
+  const useRobber = s.useRobber === true;
   for (const b of document.querySelectorAll('[data-robber]')) {
     b.classList.toggle('on', (b.dataset.robber === 'on') === useRobber);
   }
@@ -2444,7 +2444,7 @@ function renderLobby() {
   const discardRow = $('set-discard').closest('.opt-row');
   if (discardRow) discardRow.style.opacity = useRobber ? '' : '0.4';
 
-  const layout = s.layout || 'classic';
+  const layout = s.layout || 'expansion';
   const dyn = dynamicSize(layout);
   for (const b of document.querySelectorAll('[data-layout]')) {
     // The Dynamic button lights for any of its three sizes.
