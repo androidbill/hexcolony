@@ -2306,6 +2306,36 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .final-name { flex: 1; font-weight: 700; }
 .final-vp { font-weight: 800; font-size: 17px; }
 
+/* The win screen is one look at the result, not a page to scroll: with four players and
+   a points breakdown under each, the default spacing ran past the bottom of a phone.
+   Tightened here rather than in the shared rules above, which the Players sheet also uses.
+   The play-again button keeps the full width; the two secondary ones share a row. */
+#sheet-over {
+  padding-top: 12px; padding-bottom: calc(var(--safe-b) + 12px);
+  max-height: calc(var(--app-height) - var(--safe-t) - 8px);
+}
+#sheet-over .sheet-title { margin-bottom: 0; }
+#sheet-over .over-hero {
+  padding: 2px 0 8px;
+  display: flex; flex-wrap: wrap; justify-content: center; column-gap: 8px;
+}
+#sheet-over .over-name { flex: 0 0 100%; }
+#sheet-over .over-sub, #sheet-over .over-meta { margin-top: 2px; }
+#sheet-over .over-sub::after { content: ' ·'; }
+#sheet-over .over-name { font-size: 22px; margin-top: 2px; }
+#sheet-over .over-meta { margin-top: 2px; }
+#sheet-over .final-table { gap: 5px; }
+#sheet-over .final-row { padding: 6px 10px; flex-direction: column; align-items: stretch; gap: 0; }
+#sheet-over .final-sources { margin-top: 3px; gap: 2px 9px; }
+#sheet-over .src, #sheet-over .src-none { font-size: 11.5px; }
+#sheet-over .sheet-actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  margin-top: 10px;
+}
+#sheet-over .sheet-actions .btn-key { grid-column: 1 / -1; }
+#sheet-over .sheet-actions .btn { margin: 0; padding: 10px 14px; }
+#sheet-over .btn-label { font-size: 16px; }
+
 /* ------------------------------------------------------------ chrome */
 /* Whose turn it is, said out loud on every screen for three seconds.
    It sits over the board but cannot be touched — pointer-events stay off the whole
