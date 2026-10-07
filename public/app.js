@@ -334,6 +334,11 @@ let roomRef = null;
 let pulseRef = null;
 let room = null;
 let unsub = null;
+// Async work belongs to one visit to one room. A phone can wake with callbacks and
+// moves still queued from yesterday; none may be applied to the next table.
+let roomSession = 0;
+let roomIntent = 0;
+const currentSession = (session, ref) => session === roomSession && ref === roomRef;
 
 // Solo play is a whole game with no network at all: the same room shape lives in
 // memory, `send` applies moves locally, and the bots take their turns on a timer. Every
@@ -685,6 +690,7 @@ async function createRoom() {
   unlock();
   const name = usableName();
   if (!name) return;
+  roomIntent += 1;
   localStorage.setItem('hexcolony_name', name);
   $('btn-rooms-create').disabled = true;
   try {
@@ -779,6 +785,7 @@ async function joinCode(code, btn = null) {
   unlock();
   const name = usableName();
   if (!name) return;
+  roomIntent += 1;
   localStorage.setItem('hexcolony_name', name);
   if (btn) btn.disabled = true;
   const backend = roomBackendOf(code);
@@ -824,6 +831,7 @@ async function joinDiscordRoom() {
   if (!code) return toast('Could not read the Discord session.');
   const name = usableName();
   if (!name) return;
+  roomIntent += 1;
   localStorage.setItem('hexcolony_name', name);
 
   const btn = $('btn-discord-join');
@@ -919,16 +927,23 @@ $('join-code-input').addEventListener('keydown', (e) => {
 });
 
 // ---------------------------------------------------------------- clock sync
-// Phone clocks disagree, sometimes by minutes. Each phone measures its own offset from
-// the Firestore server clock, riding along on the heartbeat the room already writes.
+// Phone clocks disagree, sometimes by minutes. Firestore uses confirmed heartbeats;
+// RTDB uses its connection's serverTimeOffset. Both anchor to monotonic elapsed time.
 let clockSamples = [];
 let clockOffset = null;
+let clockAnchor = null;
+let unsubClock = null;
+function resetClock() {
+  clockSamples = []; clockOffset = null; clockAnchor = null;
+}
 function noteServerTime(serverMs) {
-  // Every sample UNDER-estimates the offset by its own network latency, so the largest
+  // Every heartbeat sample under-estimates server time by its network latency, so the largest
   // recent sample is the one that travelled fastest and is closest to the truth.
-  clockSamples.push(serverMs - Date.now());
+  clockSamples.push(serverMs - performance.now());
   if (clockSamples.length > 8) clockSamples.shift();
   clockOffset = Math.max(...clockSamples);
+  const at = performance.now();
+  clockAnchor = { at, serverMs: at + clockOffset };
 }
 const clockReady = () => clockOffset !== null;
 /**
@@ -937,7 +952,9 @@ const clockReady = () => clockOffset !== null;
  * same number without having to tick together. In solo the offset is zero and this is
  * just the local clock.
  */
-const serverNow = () => Date.now() + (clockOffset || 0);
+// Elapsed time is monotonic: changing the phone's wall clock must never expire a turn.
+const serverNow = () => clockAnchor
+  ? clockAnchor.serverMs + performance.now() - clockAnchor.at : Date.now();
 
 /**
  * Whether this device has actually measured its distance from the server clock.
@@ -948,7 +965,7 @@ const serverNow = () => Date.now() + (clockOffset || 0);
  * on a single handset. Solo has no server and no other player to disagree with, so the
  * local clock is authoritative there by definition.
  */
-const clockTrusted = () => solo || clockReady();
+const clockTrusted = () => document.visibilityState === 'visible' && (solo || clockReady());
 
 // ---------------------------------------------------------------- liveness
 // Phones dim, lock, background the browser or drop wifi, any of which can silently
@@ -1010,6 +1027,7 @@ function setConnBadge(level) {
 }
 
 function applyRoom(data, fresh) {
+  if (data.code !== roomCode || solo) return;
   if (fresh) markFresh();
   if (data.players?.[playerId]) wasSeated = true;
   // Removed from the lobby by the host. Nothing used to be able to take a player out of
@@ -1086,13 +1104,39 @@ function applyPulse(data, fresh) {
   if (fresh) markFresh();
   const ms = stampMs(data?.at) ?? 0;
   // Only a newly arrived beat is a usable clock sample; re-reading an old one would
-  // look like a hugely delayed beat and drag the measurement off.
-  if (ms > lastPulseServerMs) {
+  // look like a hugely delayed beat and drag the measurement off. Pending writes
+  // cannot advance this marker either: their estimated stamp can exceed the real one.
+  if (fresh && ms > lastPulseServerMs) {
     lastPulseServerMs = ms;
     lastPulseSeenAt = Date.now();
     lastPulseBy = data.by || null;
-    if (fresh) noteServerTime(ms);
+    // RTDB has its own server offset; room events can include local timestamp
+    // estimates and must not be used as server-clock measurements.
+    if (roomRef?.backend !== 'rtdb') noteServerTime(ms);
   }
+}
+
+function subscribeClock() {
+  if (unsubClock) { unsubClock(); unsubClock = null; }
+  if (roomRef?.backend !== 'rtdb') return;
+  const session = roomSession, ref = roomRef;
+  let connected = false, offset = null;
+  const measure = () => {
+    if (!connected || !Number.isFinite(offset)) return;
+    resetClock();
+    noteServerTime(Date.now() + offset);
+  };
+  const stopOffset = rtdbOnValue(rtdbRef(rtdb, '.info/serverTimeOffset'), (snap) => {
+    if (!currentSession(session, ref)) return;
+    offset = snap.val();
+    measure();
+  });
+  const stopConnected = rtdbOnValue(rtdbRef(rtdb, '.info/connected'), (snap) => {
+    if (!currentSession(session, ref)) return;
+    connected = snap.val() === true;
+    if (connected) measure(); else resetClock();
+  });
+  unsubClock = () => { stopOffset(); stopConnected(); };
 }
 
 function pulseUnavailable() {
@@ -1106,18 +1150,24 @@ function pulseUnavailable() {
 function subscribePulse() {
   if (!pulseRef || pulseMode !== 'doc') return;
   if (unsubPulse) { unsubPulse(); unsubPulse = null; }
+  const session = roomSession, ref = roomRef;
   unsubPulse = onSnapshot(pulseRef, { includeMetadataChanges: true }, (snap) => {
-    if (snap.exists()) applyPulse(snap.data(), !snap.metadata.fromCache);
-  }, (err) => { if (err?.code === 'permission-denied') pulseUnavailable(); });
+    if (!currentSession(session, ref)) return;
+    if (snap.exists()) applyPulse(snap.data(), !snap.metadata.fromCache && !snap.metadata.hasPendingWrites);
+  }, (err) => {
+    if (currentSession(session, ref) && err?.code === 'permission-denied') pulseUnavailable();
+  });
 }
 
 function subscribeRoom() {
   if (!roomRef) return;
   if (unsub) { unsub(); unsub = null; }
+  const session = roomSession, ref = roomRef;
   if (roomRef.backend === 'rtdb') {
-    // RTDB's web SDK has no offline cache by default, so unlike Firestore there is no
-    // "was this from the cache" question to ask — every delivery here is live.
+    // RTDB has no snapshot metadata separating local events from server replies.
+    // These events update the board; only .info supplies the clock measurement.
     unsub = rtdbOnValue(roomRef.ref, (snap) => {
+      if (!currentSession(session, ref)) return;
       if (!snap.exists()) {
         if (!sawRoomDoc) return;
         toast('The room was closed.');
@@ -1129,8 +1179,9 @@ function subscribeRoom() {
       normalizeRtdbGame(data.game);
       applyRoom(data, true);
     }, (err) => {
+      if (!currentSession(session, ref)) return;
       console.error(err);
-      setTimeout(() => resubscribe(true), 1500);
+      setTimeout(() => { if (currentSession(session, ref)) resubscribe(true); }, 1500);
     });
     return;
   }
@@ -1138,6 +1189,7 @@ function subscribeRoom() {
   // replay. Without it, re-attaching a listener always looks healthy even when the
   // connection underneath is dead — which is exactly how phones get stuck.
   unsub = onSnapshot(roomRef, { includeMetadataChanges: true }, (snap) => {
+    if (!currentSession(session, ref)) return;
     if (!snap.exists()) {
       if (snap.metadata.fromCache) return;
       // Never seen it, so it has not gone — it has not arrived. Announcing "the room was
@@ -1149,10 +1201,11 @@ function subscribeRoom() {
       return;
     }
     sawRoomDoc = true;
-    applyRoom(snap.data(), !snap.metadata.fromCache);
+    applyRoom(snap.data(), !snap.metadata.fromCache && !snap.metadata.hasPendingWrites);
   }, (err) => {
+    if (!currentSession(session, ref)) return;
     console.error(err);
-    setTimeout(() => resubscribe(true), 1500);
+    setTimeout(() => { if (currentSession(session, ref)) resubscribe(true); }, 1500);
   });
 }
 
@@ -1170,23 +1223,26 @@ async function pullFromServer(force = false) {
   if (!force && Date.now() - lastPullAt < 5000) return;
   lastPullAt = Date.now();
   pulling = true;
+  const session = roomSession, ref = roomRef;
   try {
-    if (roomRef.backend === 'rtdb') {
+    if (ref.backend === 'rtdb') {
       // RTDB has no cache-bypassing sibling of getDocFromServer — a bare get() on a
       // reference with no cached value already goes to the server, which is the same
       // thing this rung wants from Firestore's version.
-      const snap = await withTimeout(rtdbGet(roomRef.ref), 6000);
+      const snap = await withTimeout(rtdbGet(ref.ref), 6000);
+      if (!currentSession(session, ref)) return;
       if (snap.exists()) {
         const data = snap.val();
         normalizeRtdbGame(data.game);
         applyRoom(data, true);
       }
     } else {
-      const snap = await withTimeout(getDocFromServer(roomRef), 6000);
+      const snap = await withTimeout(getDocFromServer(ref), 6000);
+      if (!currentSession(session, ref)) return;
       if (snap.exists()) applyRoom(snap.data(), true);
     }
   } catch { /* still wedged — the next rung handles it */ }
-  finally { pulling = false; }
+  finally { if (currentSession(session, ref)) pulling = false; }
 }
 
 // Rung 3: tear the transport down and rebuild it. This is the one that actually cures
@@ -1194,21 +1250,25 @@ async function pullFromServer(force = false) {
 async function hardReset() {
   if (!roomRef || resetting) return;
   resetting = true;
+  const session = roomSession, ref = roomRef;
   try {
     if (unsub) { unsub(); unsub = null; }
     if (unsubPulse) { unsubPulse(); unsubPulse = null; }
-    if (roomRef.backend === 'rtdb') {
+    resetClock();
+    if (ref.backend === 'rtdb') {
       await withTimeout(rtdbGoOffline(), 4000);
       await withTimeout(rtdbGoOnline(), 4000);
     } else {
       await withTimeout(disableNetwork(db), 4000);
       await withTimeout(enableNetwork(db), 4000);
     }
+    if (!currentSession(session, ref)) return;
+    subscribeClock();
     subscribeRoom();
     subscribePulse();
     await pullFromServer(true);
   } catch { /* try again next cycle */ }
-  finally { setTimeout(() => { resetting = false; }, 8000); }
+  finally { setTimeout(() => { if (currentSession(session, ref)) resetting = false; }, 8000); }
 }
 
 // Exactly one phone beats at a time: the host by preference, then everyone else in a
@@ -1242,23 +1302,26 @@ async function writePulse(force = false) {
   // wherever this one would have landed once the table actually goes quiet.
   if (!force && room?.state === 'playing' && Date.now() - lastMoveAt < PULSE_QUIET_MS) return;
   lastPulseWrite = Date.now();
+  const session = roomSession, ref = roomRef, beatRef = pulseRef, code = roomCode;
   if (pulseMode === 'doc' && pulseRef) {
     try {
-      await setDoc(pulseRef, {
-        at: serverTimestamp(), by: playerId, code: roomCode,
+      await setDoc(beatRef, {
+        at: serverTimestamp(), by: playerId, code,
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       });
       return;
     } catch (e) {
+      if (!currentSession(session, ref)) return;
       if (e?.code !== 'permission-denied') return;
       pulseUnavailable();
     }
   }
+  if (!currentSession(session, ref)) return;
   try {
-    if (roomRef.backend === 'rtdb') {
-      await rtdbUpdate(roomRef.ref, { pulseAt: rtdbServerTimestamp(), pulseBy: playerId });
+    if (ref.backend === 'rtdb') {
+      await rtdbUpdate(ref.ref, { pulseAt: rtdbServerTimestamp(), pulseBy: playerId });
     } else {
-      await updateDoc(roomRef, { pulseAt: serverTimestamp(), pulseBy: playerId });
+      await updateDoc(ref, { pulseAt: serverTimestamp(), pulseBy: playerId });
     }
   } catch { /* fine */ }
 }
@@ -1291,6 +1354,8 @@ function healthCheck() {
 }
 
 function enterRoom(code) {
+  roomIntent += 1;
+  resetRoomSession();
   sawRoomDoc = false;
   roomCode = code;
   if (roomBackendOf(code) === 'rtdb') {
@@ -1311,7 +1376,7 @@ function enterRoom(code) {
   const now = Date.now();
   lastFreshAt = now; lastPulseSeenAt = now;
   lastPulseWrite = 0; lastPulseServerMs = 0; lastPulseBy = null;
-  clockSamples = []; clockOffset = null;
+  subscribeClock();
   lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
   trackedGameSeed = undefined;
   announcedUp = null;
@@ -1326,19 +1391,45 @@ function enterRoom(code) {
   showScreen('screen-lobby');
 }
 
+/** Retire the previous table synchronously, before any new subscription or await. */
+function resetRoomSession() {
+  roomSession += 1;
+  sendEra += 1;
+  sendChain = Promise.resolve();
+  for (const stop of [unsub, unsubPulse, unsubClock]) if (stop) stop();
+  unsub = null; unsubPulse = null; unsubClock = null;
+  clearInterval(healthInterval); healthInterval = null;
+  clearInterval(timerInterval); timerInterval = null;
+  clearTimeout(soloTimer); soloTimer = null;
+  stopChat(); clearUndo();
+  solo = false;
+  roomCode = null; roomRef = null; pulseRef = null; room = null;
+  board = null; boardSeed = null;
+  resetClock(); resetGuess(); resetTrade();
+  autoFiredFor = null; lastBeat = null; pauseBeat = null; pauseBannerKey = null;
+  pulling = false; resetting = false; killingIdleRoom = false;
+  lastResubAt = 0; lastPullAt = 0; lastMoveAt = 0;
+  nudgeCount = 0; nudgedAt = 0;
+}
+
 async function leaveRoom(removeSelf = true) {
+  roomIntent += 1;
   if (solo) { exitSolo(); return; }
   const wasPlaying = room?.state === 'playing' && game();
   const ref = roomRef;
-  const others = Object.keys(room?.players || {}).filter((id) => id !== playerId);
-  const isHost = room?.hostId === playerId;
+  const oldRoom = room, oldPulseRef = pulseRef;
+  const others = Object.keys(oldRoom?.players || {}).filter((id) => id !== playerId);
+  const isHost = oldRoom?.hostId === playerId;
+  resetRoomSession();
+  localStorage.removeItem('hexcolony_room');
+  localStorage.removeItem('hexcolony_room_at');
+  setConnBadge(false);
+  keepAwake(false);
+  closeSheet();
+  renderChatButton();
+  showScreen('screen-home');
 
-  if (unsub) { unsub(); unsub = null; }
-  if (unsubPulse) { unsubPulse(); unsubPulse = null; }
-  if (healthInterval) { clearInterval(healthInterval); healthInterval = null; }
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-
-  if (removeSelf && ref && room) {
+  if (removeSelf && ref && oldRoom) {
     try {
       if (ref.backend === 'rtdb') {
         if (!others.length || isHost) {
@@ -1367,14 +1458,14 @@ async function leaveRoom(removeSelf = true) {
           }, { applyLocally: false });
         } else {
           const patch = { [`players/${playerId}`]: null };
-          if (room.hostId === playerId) patch.hostId = others[0];
+          if (oldRoom.hostId === playerId) patch.hostId = others[0];
           await rtdbUpdate(ref.ref, patch);
         }
       } else if (!others.length || isHost) {
         // The creator owns the table: leaving shuts it down for everyone and frees
         // the code immediately, rather than transferring a room that can linger.
         await deleteDoc(ref);
-        if (pulseRef) deleteDoc(pulseRef).catch(() => {});
+        if (oldPulseRef) deleteDoc(oldPulseRef).catch(() => {});
       } else if (wasPlaying) {
         // Hand the seat to the engine so the turn never waits on a phone that left.
         await runTransaction(db, async (tx) => {
@@ -1401,23 +1492,11 @@ async function leaveRoom(removeSelf = true) {
         });
       } else {
         const patch = { [`players.${playerId}`]: deleteField() };
-        if (room.hostId === playerId) patch.hostId = others[0];
+        if (oldRoom.hostId === playerId) patch.hostId = others[0];
         await updateDoc(ref, patch);
       }
     } catch { /* best effort — walking out must never hang */ }
   }
-
-  setConnBadge(false);
-  stopChat();
-  roomCode = null; roomRef = null; pulseRef = null; room = null;
-  board = null; boardSeed = null;
-  resetGuess(); resetTrade();
-  localStorage.removeItem('hexcolony_room');
-  localStorage.removeItem('hexcolony_room_at');
-  keepAwake(false);
-  closeSheet();
-  renderChatButton();
-  showScreen('screen-home');
 }
 
 // ---------------------------------------------------------------- posting moves
@@ -1470,18 +1549,25 @@ function send(move, opts = {}) {
   if (solo) return Promise.resolve(sendLocal(move, opts));
   if (!roomRef) return Promise.resolve(false);
   const g = room?.game;
+  const context = { session: roomSession, ref: roomRef, seed: g?.seed };
+  if (move.type === 'timeout' || move.type === 'expireTrade') {
+    if (!clockTrusted()) return Promise.resolve(false);
+    // The automatic move expires this exact step, never whatever step happens to
+    // be current when a sleeping phone's queued transaction eventually runs.
+    if (move.type === 'timeout') context.turn = turnIdentity(room);
+  }
   const undoable = move.type === 'build' && g && g.phase === 'build';
   const drew = drawGuess(move);
   const era = sendEra;
   const waited = withTimeout(sendChain, SEND_QUEUE_MAX_MS).catch(() => {});
-  const run = waited.then(() => postMove(move, opts, drew, era));
+  const run = waited.then(() => postMove(move, opts, drew, era, context));
   // The chain must survive a failed move, or every later tap queues behind a rejection
   // that already resolved.
   sendChain = run.then(() => {}, () => {});
   // A reaction is the one move that can land after a build without meaning anything
   // changed, so it is the one thing that does not retire a pending undo.
   run.then((okRes) => {
-    if (!okRes) return;
+    if (!okRes || !currentSession(context.session, context.ref)) return;
     if (undoable) armUndo(UNDO_LABEL[move.what] || 'Built');
     else if (move.type !== 'react') clearUndo();
   });
@@ -1502,12 +1588,20 @@ function send(move, opts = {}) {
  * transaction itself just read closes that gap for every caller, not just the stale one.
  */
 function turnDeadlinePassed(data) {
+  if (!clockTrusted()) return false;
   const g = data.game;
+  if (data.state !== 'playing' || !g || g.phase === 'over') return false;
   if (!g.turn.allowMs) return false; // this step was never on the clock
   if (['active', 'resuming'].includes(data.pause?.status)) return false; // clock is frozen
   const started = stampMs(data.turnStartedAt);
   if (started === null) return false; // no stamped deadline to have passed yet
   return serverNow() >= started + g.turn.allowMs;
+}
+
+function turnIdentity(data) {
+  const g = data?.game;
+  return JSON.stringify([g?.seed, g?.turn?.num, g?.turn?.seat, g?.phase,
+    g?.seq, stampMs(data?.turnStartedAt)]);
 }
 
 /**
@@ -1518,6 +1612,7 @@ function turnDeadlinePassed(data) {
  * easily kill a live offer somebody else was about to accept.
  */
 function tradeDeadlinePassed(data, id) {
+  if (!clockTrusted()) return false;
   if (['active', 'resuming'].includes(data.pause?.status)) return false; // clock is frozen
   const made = stampMs(data.tradeDeadlines?.[id]);
   if (made === null) return false; // no stamped deadline to have passed yet
@@ -1532,6 +1627,7 @@ function tradeDeadlinePassed(data, id) {
  * first move of a fresh game has landed.
  */
 function idleKillDue(data) {
+  if (!clockTrusted()) return false;
   if (!data || data.state !== 'playing' || !data.game) return false;
   if (['active', 'resuming'].includes(data.pause?.status)) return false; // stepping away on purpose
   const last = stampMs(data.lastActionAt) ?? stampMs(data.startedAt);
@@ -1551,45 +1647,51 @@ let killingIdleRoom = false;
 async function killIdleRoom() {
   if (!roomRef || killingIdleRoom) return;
   killingIdleRoom = true;
+  const session = roomSession, ref = roomRef, beatRef = pulseRef;
   try {
     let fresh;
-    if (roomRef.backend === 'rtdb') {
-      const snap = await withTimeout(rtdbGet(roomRef.ref), 6000);
+    if (ref.backend === 'rtdb') {
+      const snap = await withTimeout(rtdbGet(ref.ref), 6000);
       if (!snap.exists()) return;
       fresh = snap.val();
       normalizeRtdbGame(fresh.game);
     } else {
-      const snap = await withTimeout(getDocFromServer(roomRef), 6000);
+      const snap = await withTimeout(getDocFromServer(ref), 6000);
       if (!snap.exists()) return;
       fresh = snap.data();
     }
-    if (!idleKillDue(fresh)) return;
-    if (roomRef.backend === 'rtdb') {
-      await rtdbRemove(roomRef.ref);
+    if (!currentSession(session, ref) || !idleKillDue(fresh)) return;
+    if (ref.backend === 'rtdb') {
+      await rtdbRemove(ref.ref);
     } else {
-      await deleteDoc(roomRef);
-      if (pulseRef) deleteDoc(pulseRef).catch(() => {});
+      await deleteDoc(ref);
+      if (beatRef) deleteDoc(beatRef).catch(() => {});
     }
   } catch { /* another phone may already be closing it, or the connection dropped — next beat retries */ }
-  finally { killingIdleRoom = false; }
+  finally { if (currentSession(session, ref)) killingIdleRoom = false; }
 }
 
-async function postMove(move, opts, drew, era) {
+async function postMove(move, opts, drew, era, context) {
   // A move queued behind one the server refused was reasoned from a state that never
   // happened. Sending it anyway would be asking for a second, more confusing refusal.
   if (era !== sendEra) return false;
-  if (!roomRef) return false;
+  if (!currentSession(context.session, context.ref) || room?.game?.seed !== context.seed) return false;
+  const ref = context.ref;
+  const canApply = (data) => currentSession(context.session, ref)
+    && data.game?.seed === context.seed
+    && (!context.turn || (clockTrusted() && turnIdentity(data) === context.turn));
   let rejected = null;
   try {
-    if (roomRef.backend === 'rtdb') {
+    if (ref.backend === 'rtdb') {
       // RTDB's transaction hands back the whole subtree and wants the whole new subtree
       // back — there is no field-path patch the way Firestore's tx.update takes. So the
       // merge that Firestore does server-side (dotted paths onto the existing document)
       // is done here instead, on the snapshot the transaction itself hands in, and the
       // full result is what gets returned.
-      await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
+      await withTimeout(rtdbRunTransaction(ref.ref, (data) => {
         if (data === null) { rejected = 'The room is gone.'; return data; }
         if (!data.game) { rejected = 'The game has not started.'; return; }
+        if (!canApply(data)) { rejected = 'The game has moved on.'; return; }
         normalizeRtdbGame(data.game);
         if (move.type === 'timeout' && !turnDeadlinePassed(data)) { rejected = 'Not yet.'; return; }
         if (move.type === 'expireTrade' && !tradeDeadlinePassed(data, move.id)) { rejected = 'Not yet.'; return; }
@@ -1619,10 +1721,11 @@ async function postMove(move, opts, drew, era) {
       }, { applyLocally: false }), 15000);
     } else {
       await withTimeout(runTransaction(db, async (tx) => {
-        const snap = await tx.get(roomRef);
+        const snap = await tx.get(ref);
         if (!snap.exists()) { rejected = 'The room is gone.'; return; }
         const data = snap.data();
         if (!data.game) { rejected = 'The game has not started.'; return; }
+        if (!canApply(data)) { rejected = 'The game has moved on.'; return; }
         if (move.type === 'timeout' && !turnDeadlinePassed(data)) { rejected = 'Not yet.'; return; }
         if (move.type === 'expireTrade' && !tradeDeadlinePassed(data, move.id)) { rejected = 'Not yet.'; return; }
         const res = R.applyMove(data.game, playerId, move);
@@ -1662,13 +1765,14 @@ async function postMove(move, opts, drew, era) {
           res.game.turn.clockRestart = false;
           patch.turnStartedAt = serverTimestamp();
         }
-        tx.update(roomRef, patch);
+        tx.update(ref, patch);
       }), 15000);
     }
   } catch (e) {
     console.error(e);
     rejected = 'That did not go through — check your connection.';
   }
+  if (!currentSession(context.session, ref) || room?.game?.seed !== context.seed) return false;
   if (rejected) {
     // Whatever was drawn for this move did not happen. Put the server's state back
     // before saying so, so the message and the board agree.
@@ -2015,7 +2119,8 @@ function scheduleBots(delay = 620) {
   if (!solo) return;
   const who = botActor(room?.game);
   if (!who) return;
-  soloTimer = setTimeout(() => runBot(who), delay);
+  const session = roomSession;
+  soloTimer = setTimeout(() => { if (session === roomSession) runBot(who); }, delay);
 }
 
 /**
@@ -2075,6 +2180,7 @@ function fallbackMove(g, pid) {
 function runBot(pid) {
   if (!solo || !room?.game) return;
   const g = room.game;
+  if (botActor(g) !== pid) return;
   const board = ensureBoard();
   const level = room.players[pid]?.level || 'medium';
   // Who at the table is a person rather than another bot — see NO_BOT_TRADE_VP in
@@ -2139,6 +2245,8 @@ function clearSolo() { try { localStorage.removeItem(SOLO_KEY); } catch { /* fin
 function enterSolo(saved) {
   const name = usableName();
   if (!name) return false;
+  roomIntent += 1;
+  resetRoomSession();
   localStorage.setItem('hexcolony_name', name);
   saved.players[playerId] = { ...saved.players[playerId], name };
   solo = true;
@@ -2180,6 +2288,8 @@ const LAST_FIRST_KEY = 'hexcolony_last_first';
 function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = true, discardLimit = 7, reuseBotNames = null) {
   const name = usableName();
   if (!name) return false;
+  roomIntent += 1;
+  resetRoomSession();
   clearUndo();
   const bots = makeBots(botCount, level, myColorIdx,
     reuseBotNames ? [] : lastBotNames(), reuseBotNames);
@@ -2225,12 +2335,8 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
 }
 
 function exitSolo() {
-  clearUndo();
-  clearTimeout(soloTimer);
-  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
-  solo = false;
-  room = null;
-  board = null; boardSeed = null;
+  roomIntent += 1;
+  resetRoomSession();
   clearSolo();
   closeSheet();
   keepAwake(false);
@@ -2955,7 +3061,9 @@ function subscribeChat() {
   if (unsubChat) { unsubChat(); unsubChat = null; }
   if (!roomCode || solo || !NET_READY) return;
   chatPrimed = false;
+  const session = roomSession, ref = roomRef;
   const onChatSnapshot = (rows) => {
+    if (!currentSession(session, ref)) return;
     const newIds = new Set(rows.map((m) => m.id));
     const chatWasOpen = openSheet === 'sheet-chat';
     if (chatPrimed && !chatWasOpen) {
@@ -3359,6 +3467,7 @@ async function resumePause() {
 }
 
 async function finishPause() {
+  if (!clockTrusted()) return;
   if (!roomRef || !room?.pause) return;
   const p = room.pause;
   if (p.status === 'active') {
@@ -3470,7 +3579,10 @@ function drawOfferClocks() {
     const mine = t.from === playerId;
     if (left <= 0 && (mine || left <= -3) && !expiredOffers.has(t.id)) {
       expiredOffers.add(t.id);
-      send({ type: 'expireTrade', id: t.id }, { quiet: true });
+      const session = roomSession;
+      send({ type: 'expireTrade', id: t.id }, { quiet: true }).then((sent) => {
+        if (!sent && session === roomSession) expiredOffers.delete(t.id);
+      });
     }
   }
 }
@@ -3554,7 +3666,8 @@ async function fireTimeout() {
   // Keyed on the move counter, so each automatic move can be followed by another. The
   // old key could not tell one forced discard from the next and stopped after one, which
   // left the rest of a seven's discards stuck.
-  const key = `${g.turn.num}:${g.phase}:${g.seq}`;
+  const session = roomSession;
+  const key = `${session}:${turnIdentity(room)}`;
   if (autoFiredFor === key) return;
   autoFiredFor = key;
 
@@ -3562,7 +3675,10 @@ async function fireTimeout() {
   // it to whoever owed it — this used to send `endTurn` as the local player, which the
   // engine rightly refused as "Not your turn", and then showed that refusal to every
   // innocent bystander at the table.
-  await send({ type: 'timeout' }, { quiet: true });
+  const sent = await send({ type: 'timeout' }, { quiet: true });
+  if (!sent) setTimeout(() => {
+    if (session === roomSession && autoFiredFor === key) autoFiredFor = null;
+  }, 1000);
 }
 
 function startTimerLoop() {
@@ -6244,13 +6360,16 @@ async function keepAwake(on) {
     else if (wakeLock) { await wakeLock.release(); wakeLock = null; }
   } catch { /* not supported, or denied — harmless */ }
 }
-document.addEventListener('visibilitychange', () => {
+function handleRoomVisibility() {
+  resetClock();
+  lastPulseServerMs = 0;
   if (document.visibilityState === 'visible') {
     if (localStorage.getItem('hexcolony_awake') === 'on') keepAwake(true);
     // Coming back from a locked screen is exactly when the stream is likely wedged.
-    if (roomRef) { resubscribe(true); pullFromServer(true); }
+    if (roomRef) { subscribeClock(); resubscribe(true); writePulse(true); pullFromServer(true); }
   }
-});
+}
+document.addEventListener('visibilitychange', handleRoomVisibility);
 
 // ---------------------------------------------------------------- app menu
 function closeKebab() {
@@ -6707,6 +6826,28 @@ window.HEXCOLONY = {
 };
 
 // ---------------------------------------------------------------- boot
+async function resumeOnlineRoom() {
+  const last = localStorage.getItem('hexcolony_room');
+  if (!last) return false;
+  const intent = roomIntent;
+  try {
+    const data = await getRoomData(last, 5000);
+    // The home screen is usable while this read runs. A Create/Join/Solo/Leave
+    // action wins over an old room's late reply, including a failed lookup.
+    if (intent !== roomIntent) return true;
+    if (data && !roomIsStale(data) && data.state !== 'over' && data.players?.[playerId]) {
+      enterRoom(last);
+      toast(`Back in room ${last}`);
+      return true;
+    }
+  } catch {
+    if (intent !== roomIntent) return true;
+  }
+  localStorage.removeItem('hexcolony_room');
+  localStorage.removeItem('hexcolony_room_at');
+  return false;
+}
+
 (async function boot() {
   // Drop the cache-busting marker fullRefresh added, so it is not carried into shares
   // or bookmarks.
@@ -6744,22 +6885,7 @@ window.HEXCOLONY = {
   // should not cost you your settlements. A finished game is excluded: it has nothing
   // left to rejoin, and silently pulling somebody back into it is exactly wrong the
   // moment they are trying to get into a different room instead.
-  const last = localStorage.getItem('hexcolony_room');
-  let rejoinedOnline = false;
-  if (last) {
-    try {
-      const data = await getRoomData(last, 5000);
-      if (data && !roomIsStale(data) && data.state !== 'over' && data.players?.[playerId]) {
-        enterRoom(last);
-        toast(`Back in room ${last}`);
-        rejoinedOnline = true;
-      } else {
-        localStorage.removeItem('hexcolony_room');
-      }
-    } catch {
-      localStorage.removeItem('hexcolony_room');
-    }
-  }
+  const rejoinedOnline = await resumeOnlineRoom();
 
   // The same idea for a solo game, which refreshResume() above only ever offered as a
   // button to notice and tap. A locked phone or a killed tab is exactly as much an
