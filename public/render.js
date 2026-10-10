@@ -181,13 +181,14 @@ const ROLL_SHRINK_MS = 380;
 // resize, not so much that it lands on the tiles next door.
 const ROLL_OVERSHOOT = 1.9;
 
-// A piece landing on the board. The same envelope as the roll flash but half its length
-// and without the long hold: the rolled number is a callout you have to be able to read,
-// and this is only ever "look here, something happened".
-const BUILD_POP_MS = 900;
-const BUILD_GROW_MS = 170;
-const BUILD_SHRINK_MS = 360;
-const BUILD_PEAK = 1.85;
+// A settlement or city arriving: it starts very large, as if close to the screen, and comes
+// down spinning until it lands on its corner. One second from first frame to touchdown,
+// with a puff of dust over the last quarter of it.
+const BUILD_DROP_MS = 1000;
+const BUILD_DROP_SIZE = 9;          // times its resting size at the start
+const BUILD_DROP_TURNS = 2;         // full spins on the way down
+const BUILD_DUST_AT = 760;          // when the landing dust starts, and how long it lasts
+const BUILD_DUST_MS = BUILD_DROP_MS - BUILD_DUST_AT;
 
 // ---------------------------------------------------------------- terrain art
 // Illustrated tiles, if they are present in art/. Each terrain is tried in extension
@@ -336,7 +337,7 @@ export class BoardView {
   }
 
   /**
-   * A piece just went up here: make it jump.
+   * A piece just went up here: bring it down.
    *
    * Keyed by corner rather than kept as a single value, because two can land at once —
    * a city replacing a settlement while somebody else's snake placement lands elsewhere,
@@ -348,24 +349,19 @@ export class BoardView {
   }
 
   /**
-   * How far through its jump a piece is: 0 at rest, 1 at full size.
+   * How far through its drop a piece is, from 0 (just appeared) to 1 (landed), or null once
+   * it is at rest and should be drawn like any other piece.
    *
    * Expired entries are dropped as they are read, so the map never holds more than the
    * pieces currently moving.
    */
-  buildPop(v) {
+  buildDrop(v) {
     const at = this.built.get(v);
-    if (at === undefined) return 0;
+    if (at === undefined) return null;
     const ms = this.now - at;
     if (ms < 0) return 0;
-    if (ms > BUILD_POP_MS) { this.built.delete(v); return 0; }
-    if (ms < BUILD_GROW_MS) {
-      const u = ms / BUILD_GROW_MS - 1;
-      return Math.max(0, u * u * ((ROLL_OVERSHOOT + 1) * u + ROLL_OVERSHOOT) + 1);
-    }
-    if (ms < BUILD_POP_MS - BUILD_SHRINK_MS) return 1;
-    const u = (BUILD_POP_MS - ms) / BUILD_SHRINK_MS;
-    return Math.max(0, u * u);
+    if (ms > BUILD_DROP_MS) { this.built.delete(v); return null; }
+    return ms / BUILD_DROP_MS;
   }
 
   /**
@@ -1142,41 +1138,63 @@ export class BoardView {
 
   drawBuildings() {
     if (!this.game) return;
-    // A piece mid-jump is drawn after the settled ones. Corners are close enough together
-    // that at nearly twice size a neighbour would otherwise paint over the very piece the
-    // jump is pointing at.
-    const jumping = [];
+    // A piece mid-drop is drawn after the settled ones. It starts many times its size, so a
+    // neighbour drawn later would otherwise paint over it.
+    const dropping = [];
     const activePid = this.game.seats?.[this.game.turn?.seat];
     for (const [vid, b] of Object.entries(this.game.bldg)) {
       const v = Number(vid);
-      const k = this.buildPop(v);
-      if (k > 0) { jumping.push([v, b, k]); continue; }
+      const p = this.buildDrop(v);
+      if (p !== null) { dropping.push([v, b, p]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const spin = this.spinPieces && b.p === activePid;
       b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, spin) : this.drawSettlement(x, y, this.colorOf(b.p), 1, spin);
     }
-    for (const [v, b, k] of jumping) {
+    for (const [v, b, p] of dropping) {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
-      const grow = 1 + k * (BUILD_PEAK - 1);
-      const spin = this.spinPieces && b.p === activePid;
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), grow, spin) : this.drawSettlement(x, y, this.colorOf(b.p), grow, spin);
-      const at = this.built.get(v);
-      if (at !== undefined) this.drawBuildDust(x, y, this.now - at, v);
+      // Size comes down slowly at first and then fast, like something falling toward the
+      // board; the spin does the opposite, quick up top and easing to nothing so it touches
+      // down upright. Both reach their resting values exactly at p = 1.
+      const grow = 1 + (BUILD_DROP_SIZE - 1) * (1 - p ** 1.7);
+      const angle = (1 - p) ** 1.5 * Math.PI * 2 * BUILD_DROP_TURNS;
+      // Where it will land, darkening as it nears: the one cue that it is coming down onto
+      // this corner rather than just shrinking in place.
+      this.drawDropShadow(x, y, p);
+      this.ctx.save();
+      this.ctx.globalAlpha = Math.min(1, p / 0.08);
+      b.t === 'c'
+        ? this.drawCity(x, y, this.colorOf(b.p), grow, false, angle)
+        : this.drawSettlement(x, y, this.colorOf(b.p), grow, false, angle);
+      this.ctx.restore();
+      this.drawBuildDust(x, y, p * BUILD_DROP_MS - BUILD_DUST_AT, v);
     }
   }
 
-  /**
-   * A scatter of dust kicked up from under a piece as it lands — a beat behind the jump
-   * itself, so the piece is already in the air before anything settles back down around
-   * its base. Each speck's angle and size come off the vertex id rather than Math.random,
-   * so the same landing looks the same on every frame instead of flickering.
-   */
-  drawBuildDust(x, y, elapsedMs, seed) {
-    const DUST_MS = 480;
-    if (elapsedMs < 0 || elapsedMs > DUST_MS) return;
+  /** The soft patch on the ground a falling piece is about to land on. */
+  drawDropShadow(x, y, p) {
     const c = this.ctx;
     const R = this.scale;
-    const p = elapsedMs / DUST_MS;
+    const rad = R * (0.18 + 0.16 * p);
+    c.save();
+    c.globalAlpha = 0.5 * p * p;
+    c.fillStyle = '#000';
+    c.beginPath();
+    c.ellipse(x, y + R * 0.04, rad, rad * 0.5, 0, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+
+  /**
+   * A scatter of dust kicked up from under a piece as it lands — over the last quarter of
+   * the drop, so the piece is already down before anything settles around its base. Each
+   * speck's angle and size come off the vertex id rather than Math.random, so the same
+   * landing looks the same on every frame instead of flickering.
+   */
+  drawBuildDust(x, y, elapsedMs, seed) {
+    if (elapsedMs < 0 || elapsedMs > BUILD_DUST_MS) return;
+    const c = this.ctx;
+    const R = this.scale;
+    const p = elapsedMs / BUILD_DUST_MS;
     const n = 7;
     c.save();
     for (let i = 0; i < n; i++) {
@@ -1202,7 +1220,7 @@ export class BoardView {
    * Stand a piece on a corner, sized by height so a city reads as wider than a house
    * rather than merely taller.
    */
-  drawPiece(kind, x, y, color, height, spin = false) {
+  drawPiece(kind, x, y, color, height, spin = false, angle = 0) {
     const spec = PIECES[kind];
     if (!spec) return;
     const c = this.ctx;
@@ -1210,12 +1228,14 @@ export class BoardView {
 
     c.save();
     c.translate(x, y);
-    if (spin) {
+    if (spin || angle) {
       // Rotate around the building's screen-space centre before applying the
-      // local artwork transform, keeping the board corner fixed.
+      // local artwork transform, keeping the board corner fixed. `spin` is the setting
+      // that turns the active player's pieces continuously; `angle` is a fixed turn, which
+      // is what the landing animation uses.
       const centreY = -(spec.box.h * 0.28) * k;
       c.translate(0, centreY);
-      c.rotate(this.now / 900);
+      c.rotate((spin ? this.now / 900 : 0) + angle);
       c.translate(0, -centreY);
     }
     c.scale(k, k);
@@ -1243,8 +1263,8 @@ export class BoardView {
     c.restore();
   }
 
-  drawSettlement(x, y, color, grow = 1, spin = false) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow, spin); }
-  drawCity(x, y, color, grow = 1, spin = false) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow, spin); }
+  drawSettlement(x, y, color, grow = 1, spin = false, angle = 0) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow, spin, angle); }
+  drawCity(x, y, color, grow = 1, spin = false, angle = 0) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow, spin, angle); }
 
   drawRobber() {
     if (!this.game) return;

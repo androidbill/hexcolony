@@ -3871,9 +3871,9 @@ function reactToLog(g) {
         break;
       case 'build': {
         e.what === 'city' ? sfx.city() : e.what === 'road' ? sfx.road() : sfx.build();
-        // Houses and cities jump as they land. Roads have no `v` and get no jump: they
-        // are a thin bar between two corners, and scaling one up reads as a mistake
-        // rather than as a flourish.
+        // Houses and cities drop onto their corner as they land. Roads have no `v` and get
+        // no drop: they are a thin bar between two corners, and scaling one up reads as a
+        // mistake rather than as a flourish.
         if (e.v !== undefined) view.setBuilt(Number(e.v));
         // The first city of the game, same rarity budget as a steal or an award — it
         // happens exactly once, unlike every other build this switch stays quiet about.
