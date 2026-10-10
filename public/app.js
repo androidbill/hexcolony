@@ -162,7 +162,7 @@ function toast(msg) {
  * least afford it. Seventy of these cost the compositor almost nothing because every
  * piece is a transform.
  */
-const CONFETTI_MS = 4200;
+const CONFETTI_MS = 3000;
 function confetti(winnerColour) {
   const box = $('confetti');
   if (!box) return;
@@ -179,8 +179,10 @@ function confetti(winnerColour) {
     bit.style.setProperty('--c', palette[Math.floor(Math.random() * palette.length)]);
     bit.style.setProperty('--spin', `${Math.round(Math.random() * 900 - 450)}deg`);
     bit.style.setProperty('--drift', `${Math.round(Math.random() * 140 - 70)}px`);
-    bit.style.animationDelay = `${(Math.random() * 0.9).toFixed(2)}s`;
-    bit.style.animationDuration = `${(2.2 + Math.random() * 1.6).toFixed(2)}s`;
+    // Delay plus fall time tops out at CONFETTI_MS, so nothing is still falling when the
+    // layer is removed.
+    bit.style.animationDelay = `${(Math.random() * 0.6).toFixed(2)}s`;
+    bit.style.animationDuration = `${(1.6 + Math.random() * 0.8).toFixed(2)}s`;
     bits.appendChild(bit);
   }
   box.innerHTML = '';
@@ -3922,7 +3924,7 @@ function reactToLog(g) {
           `${e.p === playerId ? 'You' : nameFor(e.p)} played`,
           'Monopoly',
           { bigResource: e.res },
-        ], colorFor(e.p), 2800);
+        ], colorFor(e.p));
         break;
       case 'offer':
         // The chime is what makes you look down at the strip, so it has to agree with it:
@@ -4069,7 +4071,7 @@ function playGain(gains) {
  * knowledge already (the offer sheet shows both sides to everyone), so this plays for
  * the whole table, unlike a steal.
  */
-const TRADE_SHOW_MS = 2400;
+const TRADE_SHOW_MS = 1720;   // plus the leave below: two seconds in all
 const TRADE_LEAVE_MS = 280;
 let tradeTimer = null;
 let tradeLeaveTimer = null;
@@ -4186,11 +4188,11 @@ function playSteal(res, toMe) {
  * An award changing hands, as the card it is.
  *
  * Two points moving is the biggest single swing in the game outside somebody winning, and
- * it used to be a line of text sliding past. The card is held for two seconds — long
- * enough to read who took it and see which award it was, short enough that it is not in
- * the way of the turn it happened during.
+ * it used to be a line of text sliding past. The card is up for two seconds in all, exit
+ * included — long enough to read who took it and see which award it was, short enough
+ * that it is not in the way of the turn it happened during.
  */
-const AWARD_HOLD_MS = 2000;
+const AWARD_HOLD_MS = 1700;   // plus the exit below: two seconds in all
 const AWARD_OUT_MS = 300;
 let awardTimers = [];
 
@@ -4450,12 +4452,11 @@ function renderDice(g) {
 }
 
 // How long the producing tiles stay lit after a roll lands.
-const PAYOUT_MS = 6000;
+const PAYOUT_MS = 3000;
 let payoutKey = null;
 
 /**
- * Light up what the roll just paid: the tiles that came up, and every building standing
- * on one, haloed in its owner's colour.
+ * Light up the tiles the roll just paid.
  *
  * Keyed on the roll's own log id rather than on the dice, so the flash starts once and
  * is not restarted by the next unrelated snapshot — and so two 8s in a row are two
@@ -4478,17 +4479,7 @@ function updatePayout(g) {
     .filter((i) => !g.fog || (g.discovered || []).includes(i));
   if (!hexes.length) { view.setPayout(null); return; }
 
-  const spots = [];
-  for (const i of hexes) {
-    for (const v of HEXES[i].corners) {
-      const b = g.bldg[v];
-      // A player who has left still owns the building, but it is no longer paid.
-      if (!b || !g.seats.includes(b.p)) continue;
-      if (spots.some((sp) => sp.v === Number(v))) continue;
-      spots.push({ v: Number(v), colour: colorFor(b.p), city: b.t === 'c' });
-    }
-  }
-  view.setPayout({ hexes, spots, until: performance.now() + PAYOUT_MS });
+  view.setPayout({ hexes, until: performance.now() + PAYOUT_MS });
 }
 
 function renderHand(g) {

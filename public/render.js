@@ -259,14 +259,6 @@ const PIECES = {
 };
 for (const spec of Object.values(PIECES)) spec.path = new Path2D(spec.d);
 
-/** A #rrggbb from the player palette, at an alpha — canvas gradients need the components. */
-function hexToRgba(hex, alpha) {
-  const h = String(hex).replace('#', '');
-  const n = parseInt(h.length === 3 ? h.replace(/./g, (ch) => ch + ch) : h, 16);
-  if (!Number.isFinite(n)) return `rgba(255, 255, 255, ${alpha})`;
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-}
-
 export class BoardView {
   constructor(canvas) {
     this.cv = canvas;
@@ -326,7 +318,7 @@ export class BoardView {
   }
   setHighlights(h) { this.highlights = h || { verts: [], edges: [], hexes: [], cities: [] }; }
   setSea(key) { this.sea = seaAt(key); }
-  /** `{ hexes, spots: [{ v, colour, city }], until }`, or null for nothing to show. */
+  /** `{ hexes, until }`, or null for nothing to show. */
   setPayout(p) { this.payout = p; }
 
   /**
@@ -625,7 +617,6 @@ export class BoardView {
     this.drawHexHighlights();
     this.drawRoads();
     this.drawEdgeHighlights();
-    if (paying) this.drawPayingSpots(paying);
     this.drawBuildings();
     this.drawRobber();
     this.drawVertexHighlights();
@@ -1287,9 +1278,8 @@ export class BoardView {
 
   // ------------------------------------------------------------ the payout flash
   //
-  // The tiles that just came up, and every building standing on them. Between them these
-  // answer "what did that roll do, and who got it?" without anyone having to read the
-  // log or count corners.
+  // The tiles that just came up, answering "what did that roll do?" without anyone having
+  // to read the log or count number tokens.
 
   /** The producing tiles, lit from within and ringed. */
   drawPayingHexes(level) {
@@ -1320,29 +1310,6 @@ export class BoardView {
       c.strokeStyle = `rgba(255, 214, 92, ${0.9 * level * beat})`;
       c.lineWidth = Math.max(2, R * 0.07);
       c.stroke(path);
-    }
-  }
-
-  /** A halo in the owner's colour under every building that is being paid. */
-  drawPayingSpots(level) {
-    const c = this.ctx;
-    const R = this.scale;
-    const beat = 0.7 + this.pulse * 0.3;
-    for (const spot of this.payout.spots) {
-      const [x, y] = this.toScreen(VERTS[spot.v].x, VERTS[spot.v].y);
-      const rad = R * (spot.city ? 0.46 : 0.38) * (0.94 + this.pulse * 0.12);
-
-      // A soft disc of their colour first — this is the part that says WHO at a glance.
-      const halo = c.createRadialGradient(x, y, rad * 0.15, x, y, rad);
-      halo.addColorStop(0, hexToRgba(spot.colour, 0.9 * level));
-      halo.addColorStop(1, hexToRgba(spot.colour, 0));
-      c.fillStyle = halo;
-      c.beginPath(); c.arc(x, y, rad, 0, Math.PI * 2); c.fill();
-
-      c.beginPath(); c.arc(x, y, rad * 0.82, 0, Math.PI * 2);
-      c.strokeStyle = `rgba(255, 255, 255, ${0.85 * level * beat})`;
-      c.lineWidth = Math.max(1.5, R * 0.045);
-      c.stroke();
     }
   }
 
