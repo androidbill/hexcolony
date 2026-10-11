@@ -182,12 +182,12 @@ const ROLL_SHRINK_MS = 380;
 const ROLL_OVERSHOOT = 1.9;
 
 // A settlement or city arriving: it starts very large, as if close to the screen, and comes
-// down spinning until it lands on its corner. One second from first frame to touchdown,
+// down spinning until it lands on its corner. Half a second from first frame to touchdown,
 // with a puff of dust over the last quarter of it.
-const BUILD_DROP_MS = 1000;
+const BUILD_DROP_MS = 500;
 const BUILD_DROP_SIZE = 9;          // times its resting size at the start
 const BUILD_DROP_TURNS = 2;         // full spins on the way down
-const BUILD_DUST_AT = 760;          // when the landing dust starts, and how long it lasts
+const BUILD_DUST_AT = 380;          // when the landing dust starts, and how long it lasts
 const BUILD_DUST_MS = BUILD_DROP_MS - BUILD_DUST_AT;
 
 // ---------------------------------------------------------------- terrain art
