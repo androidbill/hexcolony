@@ -120,25 +120,17 @@ button {
 
 /* ------------------------------------------------------------ brand */
 .brand { text-align: center; padding: 6px 0 2px; }
-.brand-mark {
-  width: 92px; height: 92px;
-  margin: 0 auto 6px;
-  display: block;
-  border-radius: 18px;
-  /* The logo is a hexagon on paper, so it needs an edge of its own against the dark
-     landing page — without one the parchment just bleeds into the background. */
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(232, 214, 178, 0.28);
+/* The banner logo, which is both the mark and the name. It is 8:3, so the width is what
+   decides the height: capped here so it cannot grow tall on a wide window and push the
+   landing page's buttons off the bottom of the screen. */
+.brand-logo { margin: 0; line-height: 0; }
+.brand-logo img {
+  width: min(100%, 330px);
+  height: auto;
+  aspect-ratio: 2000 / 750;
+  border-radius: 14px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(232, 214, 178, 0.18);
 }
-
-.wordmark {
-  margin: 0;
-  font-size: 40px;
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  color: var(--parch);
-  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35);
-}
-.wordmark span { color: var(--sky); }
 
 .tagline { margin: 6px 0 0; color: var(--dim); font-size: 13.5px; }
 
@@ -313,9 +305,8 @@ button {
   padding-top: calc(var(--safe-t) + 10px);
   padding-bottom: calc(var(--safe-b) + 10px);
 }
-#screen-home .brand-mark { width: 68px; height: 68px; margin-bottom: 3px; }
-#screen-home .wordmark { font-size: 32px; }
-#screen-home .tagline { margin-top: 2px; font-size: 12px; }
+#screen-home .brand-logo img { width: min(100%, 300px); }
+#screen-home .tagline { margin-top: 6px; font-size: 12px; }
 #screen-home .card { padding: 10px; }
 #screen-home .field-label { margin: 0 0 4px; }
 #screen-home .text-input { padding: 9px 12px; }

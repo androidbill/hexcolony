@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.10.11.02">
+<link rel="stylesheet" href="styles.css?v=2026.10.11.03">
 </head>
 <body>
 
@@ -83,10 +83,11 @@
     <footer class="ver" id="ver-home"></footer>
 
     <div class="brand">
-      <img class="brand-mark" src="icons/icon-192.png" width="92" height="92"
-           alt="HexColony" decoding="async">
-      <h1 class="wordmark">Hex<span>Colony</span></h1>
-      <p class="tagline">Settle the island. Trade hard. Watch the robber.</p>
+      <h1 class="brand-logo">
+        <img src="art/logo.webp" width="2000" height="750" alt="HexColony"
+             decoding="async" fetchpriority="high">
+      </h1>
+      <p class="tagline">Settle the island. Trade hard. Play harder.</p>
     </div>
 
     <div class="card">
@@ -846,7 +847,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.10.11.02"></script>
-<script type="module" src="app.js?v=2026.10.11.02"></script>
+<script src="iro.min.js?v=2026.10.11.03"></script>
+<script type="module" src="app.js?v=2026.10.11.03"></script>
 </body>
 </html>
