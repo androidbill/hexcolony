@@ -9,6 +9,7 @@
 // pre-computed in `highlights`.
 
 import { HEXES, VERTS, EDGES, boardExtent, edgeOutward, pips, isRed } from './board.js';
+import { Effects, nightLevel } from './render-fx.js';
 
 const TERRAIN_STYLE = {
   forest:    { a: '#2f6b3a', b: '#1e4a27', ink: '#12331a' },
@@ -284,6 +285,16 @@ export class BoardView {
     // full height of the screen so the tray never resizes it, which means part of it is
     // always covered — fit and pan limits have to work within what is actually visible.
     this.inset = 0;
+    // The decoration layer (see render-fx.js). `effects` and `dayNight` are the two
+    // switches in Settings; `calm` is the phone's reduce-motion setting, which keeps the
+    // static looks (shading, textures, shields) and drops everything that moves.
+    this.fx = new Effects();
+    this.effects = true;
+    this.dayNight = true;
+    this.night = 0;
+    this.calm = !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+    this.pillPos = null;               // pid -> [x, y] of that player's pill, on this canvas
+    this.resIcon = RES_ICON;
     this.pulse = 0;
     this.onPick = null;                // ({ kind, id }) => void
     this._pointers = new Map();
@@ -301,7 +312,7 @@ export class BoardView {
     }
   }
 
-  setBoard(board) { this.board = board; this.built.clear(); this.flipped.clear(); this.fit(); }
+  setBoard(board) { this.board = board; this.built.clear(); this.flipped.clear(); this.fx.reset(); this.fit(); }
   /**
    * A hex going from fogged to known gets a flip rather than an instant swap. Detected
    * here, once per state update, by diffing against what was discovered a moment ago —
@@ -345,8 +356,19 @@ export class BoardView {
    */
   setBuilt(v) {
     if (!Number.isInteger(v)) return;
-    this.built.set(v, performance.now());
+    const now = performance.now();
+    this.built.set(v, now);
+    this.fx.landing(v, now + BUILD_DROP_MS);
   }
+
+  /** A road was just laid on this edge: it draws itself from one end. */
+  setBuiltRoad(e) {
+    if (!Number.isInteger(e)) return;
+    this.fx.roadLaid(e, performance.now());
+  }
+
+  /** Longest Road or Largest Army just changed hands. */
+  awardChanged(kind, pid) { this.fx.awardChanged(kind, pid, performance.now()); }
 
   /**
    * How far through its drop a piece is, from 0 (just appeared) to 1 (landed), or null once
@@ -604,20 +626,34 @@ export class BoardView {
     c.clearRect(0, 0, this.w, this.h);
 
     const paying = this.payoutLevel(t);
+    const fx = this.effects ? this.fx : null;
+    this.night = this.dayNight && this.game?.turn ? nightLevel(this.game.turn.num) : 0;
 
+    // The water is laid down before the board shakes, so a landing city never shows a
+    // strip of bare canvas at the edge of the screen.
     this.drawWater(t);
+    if (fx) {
+      const [sx, sy] = fx.shakeOffset(t);
+      if (sx || sy) c.setTransform(this.dpr, 0, 0, this.dpr, sx * this.dpr, sy * this.dpr);
+    }
     this.drawCoast();
     for (const tile of this.board.tiles) this.drawHex(tile);
     if (paying) this.drawPayingHexes(paying);
     this.drawPorts();
+    // Dusk and night go over the sea and the tiles only, so nothing a player has to read
+    // or tap — pieces, roads, highlights — is ever dimmed by the time of day.
+    if (fx && this.night) fx.drawSky(this, this.night);
     this.drawHexHighlights();
     this.drawRoads();
     this.drawEdgeHighlights();
+    if (fx) fx.drawRoadLight(this);
     this.drawBuildings();
+    if (fx) { fx.drawLandings(this); fx.drawArmyBadges(this); }
     this.drawRobber();
     this.drawVertexHighlights();
     this.drawCityHighlights();
     if (this.zoom) this.drawRolledTokens(this.zoom.k);
+    if (fx) fx.drawPops(this);
   }
 
   drawWater(t = 0) {
@@ -1113,15 +1149,22 @@ export class BoardView {
     if (!this.game) return;
     const c = this.ctx;
     const R = this.scale;
+    const fx = this.effects ? this.fx : null;
     for (const [eid, pid] of Object.entries(this.game.roads)) {
       const e = EDGES[eid];
-      const [ax, ay] = this.toScreen(VERTS[e.a].x, VERTS[e.a].y);
-      const [bx, by] = this.toScreen(VERTS[e.b].x, VERTS[e.b].y);
+      let [ax, ay] = this.toScreen(VERTS[e.a].x, VERTS[e.a].y);
+      let [bx, by] = this.toScreen(VERTS[e.b].x, VERTS[e.b].y);
+      // A road being laid grows out of the end that already touches something of its
+      // owner's, so swap the ends round when that is the far one.
+      const growing = fx && !this.calm ? fx.roadProgress(Number(eid), this.now, this.game) : null;
+      if (growing && !growing.fromA) { [ax, ay, bx, by] = [bx, by, ax, ay]; }
       // Pull the ends in so two roads meeting at a vertex read as two pieces.
       const t = 0.16;
       const x1 = ax + (bx - ax) * t, y1 = ay + (by - ay) * t;
-      const x2 = bx - (bx - ax) * t, y2 = by - (by - ay) * t;
+      let x2 = bx - (bx - ax) * t, y2 = by - (by - ay) * t;
+      if (growing) { x2 = x1 + (x2 - x1) * growing.p; y2 = y1 + (y2 - y1) * growing.p; }
       c.lineCap = 'round';
+      const color = this.colorOf(pid);
       // Three passes, widest first, so each one leaves a ring of the one beneath: a thin
       // dark edge on the outside, then the bright white outline, then the owner's colour
       // down the middle. See OUTLINE for why both edges are there.
@@ -1132,7 +1175,11 @@ export class BoardView {
       };
       stripe(R * 0.245, EDGE_INK);
       stripe(R * 0.215, OUTLINE);
-      stripe(R * 0.125, this.colorOf(pid));
+      stripe(R * 0.125, color);
+      if (fx) {
+        fx.roadTexture(this, x1, y1, x2, y2, color);
+        if (growing) fx.roadDust(this, x2, y2, Number(eid), growing.p);
+      }
     }
   }
 
@@ -1142,30 +1189,64 @@ export class BoardView {
     // neighbour drawn later would otherwise paint over it.
     const dropping = [];
     const activePid = this.game.seats?.[this.game.turn?.seat];
+    const fx = this.effects ? this.fx : null;
+    const c = this.ctx;
+    const R = this.scale;
     for (const [vid, b] of Object.entries(this.game.bldg)) {
       const v = Number(vid);
       const p = this.buildDrop(v);
       if (p !== null) { dropping.push([v, b, p]); continue; }
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const spin = this.spinPieces && b.p === activePid;
-      b.t === 'c' ? this.drawCity(x, y, this.colorOf(b.p), 1, spin) : this.drawSettlement(x, y, this.colorOf(b.p), 1, spin);
+      const color = this.colorOf(b.p);
+      if (!fx) {
+        b.t === 'c' ? this.drawCity(x, y, color, 1, spin) : this.drawSettlement(x, y, color, 1, spin);
+        continue;
+      }
+
+      // Pieces on the robber's tile are not being paid: they dim and flicker. The active
+      // player's own breathe gently instead, a quieter cousin of the spin setting.
+      const robbed = fx.robbed(this.game, v);
+      let grow = fx.payoutPulse(this, v);
+      let alpha = 1;
+      if (robbed) {
+        alpha = this.calm ? 0.6 : 0.58 + 0.09 * Math.sin(this.now / 120 + v * 3);
+      } else if (b.p === activePid && !spin && !this.calm) {
+        grow *= 1 + 0.035 * Math.sin(this.now / 430);
+        const glow = c.createRadialGradient(x, y - R * 0.2, 0, x, y - R * 0.2, R * 0.55);
+        glow.addColorStop(0, `rgba(255, 255, 255, ${0.16 + 0.07 * Math.sin(this.now / 430)})`);
+        glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        c.fillStyle = glow;
+        c.beginPath(); c.arc(x, y - R * 0.2, R * 0.55, 0, Math.PI * 2); c.fill();
+      }
+      const opts = { v, night: this.night, ground: true, alpha };
+      b.t === 'c' ? this.drawCity(x, y, color, grow, spin, 0, opts) : this.drawSettlement(x, y, color, grow, spin, 0, opts);
     }
     for (const [v, b, p] of dropping) {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
+      const color = this.colorOf(b.p);
       // Size comes down slowly at first and then fast, like something falling toward the
       // board; the spin does the opposite, quick up top and easing to nothing so it touches
       // down upright. Both reach their resting values exactly at p = 1.
       const grow = 1 + (BUILD_DROP_SIZE - 1) * (1 - p ** 1.7);
       const angle = (1 - p) ** 1.5 * Math.PI * 2 * BUILD_DROP_TURNS;
+      // A city is an upgrade: the settlement it replaces stays put until the city lands on
+      // it, which is what makes the landing a transformation and not a new piece appearing.
+      if (fx && b.t === 'c' && p < 0.88) {
+        this.drawSettlement(x, y, color, 1, false, 0, { v, night: this.night, ground: true });
+      }
       // Where it will land, darkening as it nears: the one cue that it is coming down onto
       // this corner rather than just shrinking in place.
       this.drawDropShadow(x, y, p);
-      this.ctx.save();
-      this.ctx.globalAlpha = Math.min(1, p / 0.08);
+      // The last stretch squashes the piece against the ground and lets it spring back.
+      const squash = fx && !this.calm && p > 0.88 ? Math.sin(((p - 0.88) / 0.12) * Math.PI) * 0.14 : 0;
+      c.save();
+      c.globalAlpha = Math.min(1, p / 0.08);
+      const opts = { v, night: this.night, squash };
       b.t === 'c'
-        ? this.drawCity(x, y, this.colorOf(b.p), grow, false, angle)
-        : this.drawSettlement(x, y, this.colorOf(b.p), grow, false, angle);
-      this.ctx.restore();
+        ? this.drawCity(x, y, color, grow, false, angle, opts)
+        : this.drawSettlement(x, y, color, grow, false, angle, opts);
+      c.restore();
       this.drawBuildDust(x, y, p * BUILD_DROP_MS - BUILD_DUST_AT, v);
     }
   }
@@ -1220,13 +1301,18 @@ export class BoardView {
    * Stand a piece on a corner, sized by height so a city reads as wider than a house
    * rather than merely taller.
    */
-  drawPiece(kind, x, y, color, height, spin = false, angle = 0) {
+  drawPiece(kind, x, y, color, height, spin = false, angle = 0, opts = null) {
     const spec = PIECES[kind];
     if (!spec) return;
     const c = this.ctx;
     const k = height / spec.box.h;
+    const fx = this.effects ? this.fx : null;
 
     c.save();
+    if (opts?.alpha !== undefined) c.globalAlpha *= opts.alpha;
+    // Sits on the board instead of hovering over it. Not while it is still falling, which
+    // has a shadow of its own, and not at the size it starts at.
+    if (fx && opts?.ground) fx.groundShadow(this, x, y, spec.box.w * k);
     c.translate(x, y);
     if (spin || angle) {
       // Rotate around the building's screen-space centre before applying the
@@ -1239,6 +1325,8 @@ export class BoardView {
       c.translate(0, -centreY);
     }
     c.scale(k, k);
+    // Squashed against the ground on landing, about the base so it stays on its corner.
+    if (opts?.squash) c.scale(1 + opts.squash * 0.6, 1 - opts.squash);
     // Bottom-centre of the drawing on the corner, nudged down so it sits on the
     // junction instead of floating above it.
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
@@ -1251,6 +1339,9 @@ export class BoardView {
     c.fill(path);
 
     c.shadowColor = 'transparent';
+    // Shading, a roof, windows: between the fill and the outlines, so the outlines still
+    // have the last word on the silhouette.
+    if (fx) fx.pieceBody(this, kind, path, color, opts?.v ?? 0, opts?.night ?? 0);
     c.lineJoin = 'round';
     // Same two edges as the roads. Widest first: the dark pass survives only as a hairline
     // outside the white, which is what keeps a pale piece from dissolving into it.
@@ -1260,11 +1351,13 @@ export class BoardView {
     c.lineWidth = 7;
     c.strokeStyle = OUTLINE;
     c.stroke(path);
+    // A city's flag and chimney smoke stand outside the silhouette.
+    if (fx) fx.pieceTop(this, kind, color, opts?.v ?? 0);
     c.restore();
   }
 
-  drawSettlement(x, y, color, grow = 1, spin = false, angle = 0) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow, spin, angle); }
-  drawCity(x, y, color, grow = 1, spin = false, angle = 0) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow, spin, angle); }
+  drawSettlement(x, y, color, grow = 1, spin = false, angle = 0, opts = null) { this.drawPiece('settlement', x, y, color, this.scale * 0.52 * grow, spin, angle, opts); }
+  drawCity(x, y, color, grow = 1, spin = false, angle = 0, opts = null) { this.drawPiece('city', x, y, color, this.scale * 0.58 * grow, spin, angle, opts); }
 
   drawRobber() {
     if (!this.game) return;

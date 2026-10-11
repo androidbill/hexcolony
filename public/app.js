@@ -500,6 +500,19 @@ function usableName() {
   return name;
 }
 view.colorOf = colorFor;
+// The two switches in Settings. On unless somebody has turned them off.
+view.effects = localStorage.getItem('hexcolony_fx') !== 'off';
+view.dayNight = localStorage.getItem('hexcolony_daynight') !== 'off';
+// Where a player's pill is, in the board's own pixels — the resource icons a roll pays
+// out fly there. Pills sit above the canvas, so the y is negative and the icon leaves by
+// the top edge, which is exactly the direction it is meant to go.
+view.pillPos = (pid) => {
+  const chip = document.querySelector(`.chip[data-pid="${pid}"]`);
+  if (!chip) return null;
+  const r = chip.getBoundingClientRect();
+  const cv = $('board-cv').getBoundingClientRect();
+  return [r.left + r.width / 2 - cv.left, r.top + r.height / 2 - cv.top];
+};
 
 function drawColourGrid() {
   const taken = takenColours();
@@ -3873,8 +3886,9 @@ function reactToLog(g) {
         e.what === 'city' ? sfx.city() : e.what === 'road' ? sfx.road() : sfx.build();
         // Houses and cities drop onto their corner as they land. Roads have no `v` and get
         // no drop: they are a thin bar between two corners, and scaling one up reads as a
-        // mistake rather than as a flourish.
+        // mistake rather than as a flourish. They draw themselves from one end instead.
         if (e.v !== undefined) view.setBuilt(Number(e.v));
+        if (e.what === 'road' && e.e !== undefined) view.setBuiltRoad(Number(e.e));
         // The first city of the game, same rarity budget as a steal or an award — it
         // happens exactly once, unlike every other build this switch stays quiet about.
         if (e.what === 'city' && !g.log.some((x) => x.t === 'build' && x.what === 'city' && x.i < e.i)) {
@@ -3951,8 +3965,8 @@ function reactToLog(g) {
       // Both awards are two points changing hands, which is the biggest single swing in
       // the game outside somebody winning — so each is shown as the card it is, named in
       // the taker's own colour, for two seconds.
-      case 'longest': playAward('road', e.p); maybeHalfway(g, e.p, 2); break;
-      case 'army': playAward('army', e.p); maybeHalfway(g, e.p, 2); break;
+      case 'longest': playAward('road', e.p); view.awardChanged('road', e.p); maybeHalfway(g, e.p, 2); break;
+      case 'army': playAward('army', e.p); view.awardChanged('army', e.p); maybeHalfway(g, e.p, 2); break;
       case 'turn':
         if (e.p === playerId) { sfx.yourTurn(); buzz([40, 40, 40]); }
         break;
@@ -4479,7 +4493,20 @@ function updatePayout(g) {
     .filter((i) => !g.fog || (g.discovered || []).includes(i));
   if (!hexes.length) { view.setPayout(null); return; }
 
-  view.setPayout({ hexes, until: performance.now() + PAYOUT_MS });
+  // One icon per card each building was paid — two for a city — which is what flies to its
+  // owner's pill. A player who has left still owns the building, but it is no longer paid.
+  const pops = [];
+  for (const i of hexes) {
+    const res = board.tiles[i]?.res;
+    if (!res) continue;
+    for (const v of HEXES[i].corners) {
+      const b = g.bldg[v];
+      if (!b || !g.seats.includes(b.p)) continue;
+      for (let n = 0; n < (b.t === 'c' ? 2 : 1); n++) pops.push({ v: Number(v), res, pid: b.p });
+    }
+  }
+  const now = performance.now();
+  view.setPayout({ hexes, pops, at: now, until: now + PAYOUT_MS });
 }
 
 function renderHand(g) {
@@ -6324,6 +6351,9 @@ function togState(key) {
   if (key === 'sound') return soundEnabled();
   if (key === 'haptics') return localStorage.getItem('hexcolony_haptics') === 'on';
   if (key === 'spin') return localStorage.getItem('hexcolony_spin_pieces') === 'on';
+  // These two are on until somebody turns them off, unlike every other switch here.
+  if (key === 'fx') return localStorage.getItem('hexcolony_fx') !== 'off';
+  if (key === 'daynight') return localStorage.getItem('hexcolony_daynight') !== 'off';
   return localStorage.getItem('hexcolony_awake') === 'on';
 }
 function syncToggles() {
@@ -6338,6 +6368,8 @@ for (const t of document.querySelectorAll('[data-tog]')) {
     if (key === 'sound') { setSound(now); if (now) { unlock(); sfx.tap(); } }
     else if (key === 'haptics') { localStorage.setItem('hexcolony_haptics', now ? 'on' : 'off'); if (now) buzz(40); }
     else if (key === 'spin') { localStorage.setItem('hexcolony_spin_pieces', now ? 'on' : 'off'); view.spinPieces = now; }
+    else if (key === 'fx') { localStorage.setItem('hexcolony_fx', now ? 'on' : 'off'); view.effects = now; }
+    else if (key === 'daynight') { localStorage.setItem('hexcolony_daynight', now ? 'on' : 'off'); view.dayNight = now; }
     else { localStorage.setItem('hexcolony_awake', now ? 'on' : 'off'); keepAwake(now); }
     syncToggles();
   });
