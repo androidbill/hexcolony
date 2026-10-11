@@ -6,7 +6,7 @@
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#071a2c",
+  "background_color": "#020708",
   "theme_color": "#071a2c",
   "orientation": "portrait",
   "categories": ["games", "board"],
