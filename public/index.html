@@ -30,9 +30,52 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.10.11.01">
+<link rel="stylesheet" href="styles.css?v=2026.10.11.02">
 </head>
 <body>
+
+<!-- ============================== SPLASH ==============================
+     The launch video, over everything, once per app launch. The app boots underneath it
+     the whole time, so it only ever delays what you can see, never what is loading.
+     Tap to skip. It removes itself, rather than leaving a black screen, if the video
+     cannot start: no autoplay, no network, reduced motion, or opened inside Discord.
+     sessionStorage rather than localStorage: a reload for an update or a resume from the
+     background is the same session and plays nothing, while swiping the app away and
+     opening it again is a new one.
+     The video file carries a caption strip along the bottom and a frame line down the
+     left edge that are not meant to be shown, so styles.css crops to the picture. -->
+<div id="splash" aria-hidden="true">
+  <div class="splash-frame">
+    <video id="splash-video" src="splash.mp4" muted playsinline autoplay preload="auto"></video>
+  </div>
+</div>
+<script>
+(function () {
+  var el = document.getElementById('splash');
+  var v = document.getElementById('splash-video');
+  var seen = false;
+  try { seen = sessionStorage.getItem('hexcolony_splash') === '1'; } catch (e) {}
+  var calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (seen || calm || /[?&]frame_id=/.test(location.search)) { el.remove(); return; }
+  try { sessionStorage.setItem('hexcolony_splash', '1'); } catch (e) {}
+
+  var done = false;
+  function close() {
+    if (done) return;
+    done = true;
+    el.classList.add('is-leaving');
+    setTimeout(function () { el.remove(); }, 300);
+  }
+  v.addEventListener('ended', close);
+  v.addEventListener('error', close);
+  v.addEventListener('playing', function () { setTimeout(close, 3600); });
+  el.addEventListener('click', close);
+  var started = v.play();
+  if (started && started.catch) started.catch(close);
+  // Never started — slow connection, blocked autoplay: get out of the way.
+  setTimeout(function () { if (!v.currentTime) close(); }, 2500);
+})();
+</script>
 
 <!-- ============================== LANDING ============================== -->
 <section class="screen" id="screen-home">
@@ -803,7 +846,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.10.11.01"></script>
-<script type="module" src="app.js?v=2026.10.11.01"></script>
+<script src="iro.min.js?v=2026.10.11.02"></script>
+<script type="module" src="app.js?v=2026.10.11.02"></script>
 </body>
 </html>

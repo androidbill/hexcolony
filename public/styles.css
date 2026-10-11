@@ -2611,3 +2611,36 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
      throw it off centre any more. */
   .score-strip { max-width: 640px; margin-left: auto; margin-right: auto; }
 }
+
+/* ------------------------------------------------------------ splash */
+/* The launch video (see #splash in index.html). It is 540x960, but the picture is only
+   x 26-522 and y 0-820: a frame line sits at x 22-23, a darker band runs down the right
+   edge, and a caption strip starts at y 838. The frame below is that crop, scaled to fit
+   the screen's width (or its height, on a wide window), with the cut bottom edge faded
+   into the background rather than ending in a hard line across the clouds. */
+#splash {
+  position: fixed; inset: 0;
+  z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+  background: #020708;
+  transition: opacity .3s ease;
+}
+#splash.is-leaving { opacity: 0; pointer-events: none; }
+.splash-frame {
+  position: relative;
+  width: min(100vw, calc(100vh * 496 / 820));
+  aspect-ratio: 496 / 820;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 3%, #000 84%, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 3%, #000 84%, transparent 100%);
+}
+@supports (width: 1dvh) {
+  .splash-frame { width: min(100vw, calc(100dvh * 496 / 820)); }
+}
+#splash-video {
+  position: absolute; top: 0;
+  left: calc(-26 / 496 * 100%);
+  width: calc(540 / 496 * 100%);
+  height: auto;
+  display: block;
+}

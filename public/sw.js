@@ -2,6 +2,13 @@
 const VERSION = new URL(self.location).searchParams.get('v') || 'dev';
 const CACHE = `hexcolony-${VERSION}`;
 
+// The launch video lives in a cache of its own, not the per-version one: it is 735 KB and
+// never changes with a deploy, and every build is a new version, so keeping it with the
+// rest would download it again on every update. Rename this (…-2) if the video is ever
+// replaced, which also clears out the old one on activate.
+const SPLASH_CACHE = 'hexcolony-splash-1';
+const SPLASH_FILE = 'splash.mp4';
+
 const CORE = [
   './',
   'index.html',
@@ -61,7 +68,49 @@ async function soundFiles() {
   } catch { return []; }
 }
 
+/**
+ * The launch video, from its own cache, with byte-range support.
+ *
+ * A <video> asks for the file in ranges, and Safari will not play one a service worker
+ * answers with a plain 200 for a range request — so a cached copy has to be cut up and
+ * sent back as a 206 itself. The first time through it is fetched whole and kept.
+ */
+async function serveSplash(request) {
+  const cache = await caches.open(SPLASH_CACHE);
+  let res = await cache.match(SPLASH_FILE);
+  if (!res) {
+    try {
+      res = await fetch(SPLASH_FILE);
+      if (res.ok) await cache.put(SPLASH_FILE, res.clone());
+    } catch { return new Response('', { status: 504 }); }
+  }
+  const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.get('range') || '');
+  if (!range) return res;
+  const buf = await res.arrayBuffer();
+  const size = buf.byteLength;
+  let start = range[1] === '' ? Math.max(0, size - Number(range[2])) : Number(range[1]);
+  let end = range[1] === '' || range[2] === '' ? size - 1 : Math.min(Number(range[2]), size - 1);
+  if (!(start <= end) || start >= size) {
+    return new Response('', { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+  }
+  return new Response(buf.slice(start, end + 1), {
+    status: 206,
+    headers: {
+      'Content-Type': 'video/mp4',
+      'Content-Range': `bytes ${start}-${end}/${size}`,
+      'Content-Length': String(end - start + 1),
+    },
+  });
+}
+
 self.addEventListener('install', (e) => {
+  // Fetched once into its own cache if it is not there already, so the next launch does
+  // not wait on the network for it. Failure is fine: serveSplash tries again on demand.
+  e.waitUntil(
+    caches.open(SPLASH_CACHE)
+      .then((c) => c.match(SPLASH_FILE).then((hit) => hit || fetch(SPLASH_FILE).then((r) => (r.ok ? c.put(SPLASH_FILE, r) : null))))
+      .catch(() => null)
+  );
   // cache:'reload' so a new VERSION always pulls fresh bytes. Plain addAll() may answer
   // from the browser's own HTTP cache, leaving new JS running against an old module.
   e.waitUntil(
@@ -76,7 +125,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE && k !== SPLASH_CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
       // Tell the pages we just took over. A worker knows a new build has landed before
       // any polling would, so this is the earliest anything can say so.
@@ -90,6 +139,7 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname.endsWith(`/${SPLASH_FILE}`)) { e.respondWith(serveSplash(e.request)); return; }
   e.respondWith(
     fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
