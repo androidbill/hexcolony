@@ -4182,31 +4182,53 @@ const AWARD_HOLD_MS = 1700;   // plus the exit below: two seconds in all
 const AWARD_OUT_MS = 300;
 let awardTimers = [];
 
+/** Both card faces, fetched up front so the right one is already there when it is needed. */
+const awardArt = {};
+for (const k of ['largest-army', 'longest-road']) {
+  const img = new Image();
+  img.src = `art/${k}.png`;
+  awardArt[k] = img;
+}
+
+let awardToken = 0;
+
 function playAward(kind, pid) {
   const stage = $('award-stage');
   if (!stage) return;
   for (const t of awardTimers) clearTimeout(t);
   awardTimers = [];
+  const token = ++awardToken;
 
   const what = kind === 'army' ? 'Largest Army' : 'Longest Road';
-  $('award-card').src = `art/${kind === 'army' ? 'largest-army' : 'longest-road'}.png`;
-  $('award-card').alt = what;
+  const face = kind === 'army' ? 'largest-army' : 'longest-road';
+  const card = $('award-card');
+  // The previous award's picture must not sit in the element while the new one loads: that
+  // was the flash of the other card before the right one appeared. Hidden until the new
+  // face has decoded, then the entrance starts from the first frame of the right picture.
+  stage.hidden = true;
+  stage.classList.remove('out');
+  card.removeAttribute('src');
+  card.alt = what;
   $('award-take-name').textContent = pid === playerId ? 'You take' : `${nameFor(pid)} takes`;
   $('award-take-what').textContent = what;
   stage.style.setProperty('--c', colorFor(pid));
 
-  stage.classList.remove('out');
-  stage.hidden = false;
-  // Restart the entrance rather than letting a second award continue the first one's.
-  for (const el of [$('award-take'), $('award-card')]) {
-    el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
-  }
-
-  awardTimers.push(setTimeout(() => stage.classList.add('out'), AWARD_HOLD_MS));
-  awardTimers.push(setTimeout(() => {
-    stage.hidden = true;
-    stage.classList.remove('out');
-  }, AWARD_HOLD_MS + AWARD_OUT_MS));
+  const show = () => {
+    if (token !== awardToken) return;      // a newer award took over while this one loaded
+    card.src = `art/${face}.png`;
+    stage.hidden = false;
+    for (const el of [$('award-take'), card]) {
+      el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
+    }
+    awardTimers.push(setTimeout(() => stage.classList.add('out'), AWARD_HOLD_MS));
+    awardTimers.push(setTimeout(() => {
+      stage.hidden = true;
+      stage.classList.remove('out');
+    }, AWARD_HOLD_MS + AWARD_OUT_MS));
+  };
+  const art = awardArt[face];
+  if (art?.complete && art.naturalWidth) show();
+  else (art?.decode ? art.decode() : Promise.reject()).then(show, show);
 }
 
 function bumpCards(list) {
