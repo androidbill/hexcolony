@@ -2184,7 +2184,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 }
 .menu-item b { font-weight: 700; }
 .menu-item.danger b { color: #ff9fa1; }
-.pause-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pause-options { display: grid; grid-template-columns: 1fr; gap: 8px; }
 .pause-status {
   padding: 12px;
   border: 1px solid var(--line);
@@ -2635,3 +2635,39 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   height: auto;
   display: block;
 }
+
+/* ------------------------------------------------------------ play again */
+/* Voted and waiting for the rest: still tappable (a second tap takes the vote back), but
+   no longer the bright call to action it was. */
+#btn-again.is-waiting {
+  background: rgba(53, 196, 255, 0.16);
+  color: var(--text);
+  box-shadow: none;
+  border: 1px solid rgba(53, 196, 255, 0.55);
+}
+#rematch-status { text-align: center; color: var(--gold); font-weight: 700; }
+
+/* ------------------------------------------------------------ player stats */
+/* One card per player: name and record, a bar of where their points come from, and what
+   they have won with. Built from the history this device has saved. */
+.stat-card {
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 10px 12px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.stat-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.stat-top b { font-size: 15px; color: var(--text); }
+.stat-top span { color: var(--dim); font-size: 12px; white-space: nowrap; }
+.stat-top em { color: var(--gold); font-style: normal; font-weight: 800; font-size: 14px; }
+.stat-bar { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: rgba(255, 255, 255, 0.08); }
+.stat-bar i { display: block; min-width: 3px; }
+.stat-bar i + i { border-left: 1px solid rgba(5, 18, 32, 0.7); }
+.stat-legend { display: flex; flex-wrap: wrap; gap: 3px 10px; font-size: 11px; color: var(--dim); }
+.stat-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.stat-legend b { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.stat-fav { font-size: 12px; color: var(--dim); }
+.stat-fav b { color: var(--sky); font-weight: 700; }
+.stat-how { font-size: 12px; color: var(--text); line-height: 1.45; }
+.stat-how span { color: var(--gold); font-weight: 800; text-transform: uppercase; letter-spacing: .06em; font-size: 10.5px; margin-right: 4px; }

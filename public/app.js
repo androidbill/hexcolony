@@ -312,6 +312,10 @@ function closeSheetAndRestoreResults() {
   if (closing === 'sheet-chat' && g?.phase === 'over') {
     renderOver(g);
     sheet('sheet-over');
+  } else if (closing === 'sheet-chat' && room) {
+    // Whatever was held back while chat was open — a discard, a card to take — opens now.
+    chatNudgedFor = '';
+    render();
   }
 }
 // Sheets the game is actually waiting on. Tapping the veil used to dismiss these, and
@@ -1563,6 +1567,13 @@ function send(move, opts = {}) {
   move = clone(move);
   if (solo) return Promise.resolve(sendLocal(move, opts));
   if (!roomRef) return Promise.resolve(false);
+  // A paused game takes no moves, whatever was tapped: the pause has no end of its own,
+  // so a stray tap on the board must not be able to carry on playing through it. A
+  // reaction is not a move in the game, and chat is not routed through here at all.
+  if (pauseBlocksGame() && move.type !== 'react') {
+    if (!opts.quiet) toast('The game is paused.');
+    return Promise.resolve(false);
+  }
   const g = room?.game;
   const context = { session: roomSession, ref: roomRef, seed: g?.seed };
   if (move.type === 'timeout' || move.type === 'expireTrade') {
@@ -1644,7 +1655,12 @@ function tradeDeadlinePassed(data, id) {
 function idleKillDue(data) {
   if (!clockTrusted()) return false;
   if (!data || data.state !== 'playing' || !data.game) return false;
-  if (['active', 'resuming'].includes(data.pause?.status)) return false; // stepping away on purpose
+  if (['active', 'resuming'].includes(data.pause?.status)) {
+    // Stepping away on purpose — but only for so long. A pause has no length of its own, so
+    // one whose host has simply gone must not keep the room alive indefinitely.
+    const since = stampMs(data.pause.startedAt);
+    if (since === null || serverNow() - since < PAUSE_KILL_MS) return false;
+  }
   const last = stampMs(data.lastActionAt) ?? stampMs(data.startedAt);
   if (last === null) return false;
   return serverNow() - last >= IDLE_KILL_MS;
@@ -2709,7 +2725,9 @@ function renderLobby() {
 
   const sea = s.sea;
   drawSeaRow('sea-row', sea, pickSea);
-  $('sea-blurb').textContent = `${seaAt(sea).name} — the water around the island`;
+  // (There used to be a line naming the sea under the swatch, written to #sea-blurb. The
+  // element went in a lobby tidy-up and this write did not, so it threw on every redraw —
+  // and everything below it, the Start button's state and both hints, never ran.)
   applySea();
 
   const enough = ids.length >= 2;
@@ -3336,31 +3354,40 @@ function stampMs(v) {
   return null;
 }
 
+// ---------------------------------------------------------------- pausing
+// Only the host can pause. There is no length and no vote: the game stays paused until the
+// host resumes it, and chat works throughout. Resuming gives a three-second "get ready"
+// before the clocks start again.
+//
+// While it is paused every countdown is frozen, by adding the time spent paused back onto
+// each one (pauseElapsedMs); when it ends, that time is folded into the stored deadlines
+// once and the sum goes back to zero (finishPause).
+const RESUME_MS = 3000;
+// A paused room whose host has vanished must not live forever, so the idle clock in
+// idleKillDue stops being suspended by a pause this old.
+const PAUSE_KILL_MS = 2 * 60 * 60 * 1000;
+
 function pauseIsActive(p = room?.pause) {
-  if (!p || p.status !== 'active') return false;
-  const started = stampMs(p.startedAt);
-  if (started === null) return true;
-  return serverNow() < started + Number(p.duration || 0) * 1000;
+  return p?.status === 'active';
 }
 
 function pauseBlocksGame() {
-  return pauseIsActive() || room?.pause?.status === 'resuming';
+  return room?.pause?.status === 'active' || room?.pause?.status === 'resuming';
 }
 
-/** Time spent paused is removed from every countdown that was already running. */
+/** Time spent paused is added back onto every countdown that was already running. */
 function pauseElapsedMs(p = room?.pause) {
   if (!p || !['active', 'resuming', 'ended'].includes(p.status)) return 0;
   if (p.status === 'ended' && Number.isFinite(p.shiftMs)) return 0;
   const started = stampMs(p.startedAt);
   if (started === null) return 0;
-  const finished = stampMs(p.endedAt);
   const resumeAt = stampMs(p.resumingAt);
-  const fixedEnd = p.status === 'resuming' || p.status === 'ended'
-    ? (resumeAt === null ? started + Number(p.duration || 0) * 1000 : resumeAt + 3000)
-    : started + Number(p.duration || 0) * 1000;
-  const end = finished === null ? Math.min(serverNow(), fixedEnd) : finished;
-  const elapsed = Math.max(0, end - started);
-  return p.status === 'active' ? Math.min(Number(p.duration || 0) * 1000, elapsed) : elapsed;
+  const resumeEnd = resumeAt === null ? null : resumeAt + RESUME_MS;
+  const finished = stampMs(p.endedAt);
+  let end;
+  if (p.status === 'active') end = serverNow();
+  else end = finished ?? Math.min(serverNow(), resumeEnd ?? serverNow());
+  return Math.max(0, end - started);
 }
 
 function renderPauseSheet() {
@@ -3371,133 +3398,63 @@ function renderPauseSheet() {
     closeSheet();
     return;
   }
-  if (!p || p.status === 'ended' || (p.status === 'active' && !pauseIsActive(p))) {
-    sub.textContent = 'Choose how long to pause. Everyone at the table must accept.';
-    options.innerHTML = `
-      <button class="btn btn-ghost" data-pause-duration="300">5 minutes</button>
-      <button class="btn btn-ghost" data-pause-duration="600">10 minutes</button>
-      <button class="btn btn-ghost" data-pause-duration="900">15 minutes</button>`;
-    for (const b of options.querySelectorAll('[data-pause-duration]')) {
-      b.addEventListener('click', () => requestPause(Number(b.dataset.pauseDuration)));
-    }
-    return;
-  }
 
-  if (p.status === 'active') {
-    if (p.requestedBy !== playerId && openSheet === 'sheet-pause') {
-      closeSheet();
-      return;
-    }
-    const started = stampMs(p.startedAt);
-    const left = started === null ? Number(p.duration || 0) : Math.max(0, Math.ceil((started + Number(p.duration || 0) * 1000 - serverNow()) / 1000));
-    sub.textContent = 'The game is paused. Chat is still available.';
-    options.innerHTML = `<div class="pause-status"><strong>${left}s</strong><small>Pause remaining</small></div>`
-      + (p.requestedBy === playerId ? '<button class="btn btn-key" id="pause-resume">Resume game</button>' : '');
-    $('pause-resume')?.addEventListener('click', resumePause);
-    return;
-  }
-
-  if (p.status === 'resuming') {
+  if (p?.status === 'resuming') {
     const at = stampMs(p.resumingAt);
-    const left = at === null ? 3 : Math.max(1, Math.ceil((at + 3000 - serverNow()) / 1000));
+    const left = at === null ? 3 : Math.max(1, Math.ceil((at + RESUME_MS - serverNow()) / 1000));
     sub.textContent = 'The game is about to resume. Get ready.';
     options.innerHTML = `<div class="pause-status"><strong>${left}</strong><small>Game resuming…</small></div>`;
     return;
   }
 
-  const ids = Object.keys(room.players || {});
-  const accepted = p.accepted || {};
-  const names = ids.map((id) => `${esc(nameFor(id))}${accepted[id] ? ' ✓' : ' …'}`).join(' · ');
-  const waiting = !accepted[playerId];
-  const mins = Math.round(p.duration / 60);
-  sub.textContent = `${esc(nameFor(p.requestedBy))} requested a ${mins}-minute pause. Everyone must accept.`;
-  options.innerHTML = `
-    <div class="pause-status"><strong>${Object.keys(accepted).filter((id) => accepted[id]).length}/${ids.length}</strong><small>Players accepted</small></div>
-    <div class="pause-accepts">${names}</div>
-    ${waiting ? '<button class="btn btn-key" id="pause-accept">Accept pause</button>' : '<p class="hint">Waiting for the other players…</p>'}
-    <button class="btn btn-ghost" id="pause-decline">Decline and cancel</button>`;
-  $('pause-accept')?.addEventListener('click', acceptPause);
-  $('pause-decline').addEventListener('click', declinePause);
+  if (p?.status === 'active') {
+    sub.textContent = 'The game is paused for everyone. Chat is still available.';
+    options.innerHTML = `<div class="pause-status"><strong>Paused</strong><small>Until the host resumes</small></div>`
+      + (isHost() ? '<button class="btn btn-key" id="pause-resume">Resume game</button>' : '');
+    $('pause-resume')?.addEventListener('click', resumePause);
+    return;
+  }
+
+  sub.textContent = 'Pause the game for everyone. It stays paused until you resume it, and chat keeps working.';
+  options.innerHTML = '<button class="btn btn-key" id="pause-start">Pause game</button>';
+  $('pause-start').addEventListener('click', requestPause);
 }
 
 function openPause() {
   if (solo) return toast('Pausing is available in shared games.');
+  if (!isHost()) return toast('Only the host can pause the game.');
   renderPauseSheet();
   sheet('sheet-pause');
 }
 
-async function requestPause(duration) {
-  if (!roomRef || solo || room?.state !== 'playing') return;
-  if (room.pause?.status === 'pending' || pauseIsActive()) return toast('A pause is already in progress.');
+async function requestPause() {
+  if (!roomRef || solo || !isHost() || room?.state !== 'playing') return;
+  if (pauseBlocksGame()) return;
   try {
     const stamp = roomRef.backend === 'rtdb' ? rtdbServerTimestamp : serverTimestamp;
-    const pause = { status: 'pending', duration, requestedBy: playerId, accepted: { [playerId]: true }, requestedAt: stamp() };
-    await withTimeout(updateRoom({ pause }), 8000);
-    closeSheet();
-  } catch { toast('Could not request a pause.'); }
-}
-
-async function acceptPause() {
-  if (!roomRef || !room?.pause || room.pause.status !== 'pending') return;
-  try {
-    if (roomRef.backend === 'rtdb') {
-      await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
-        if (!data) return data;
-        const p = data.pause;
-        if (!p || p.status !== 'pending') return data;
-        const accepted = { ...(p.accepted || {}), [playerId]: true };
-        const all = Object.keys(data.players || {}).every((id) => accepted[id]);
-        data.pause = { ...p, accepted, ...(all ? { status: 'active', startedAt: rtdbServerTimestamp() } : {}) };
-        return data;
-      }, { applyLocally: false }), 8000);
-    } else {
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(roomRef);
-        if (!snap.exists()) return;
-        const data = snap.data();
-        const p = data.pause;
-        if (!p || p.status !== 'pending') return;
-        const accepted = { ...(p.accepted || {}), [playerId]: true };
-        const all = Object.keys(data.players || {}).every((id) => accepted[id]);
-        tx.update(roomRef, { pause: { ...p, accepted, ...(all ? { status: 'active', startedAt: serverTimestamp() } : {}) } });
-      });
-    }
-  } catch { toast('Could not accept the pause.'); }
-}
-
-async function declinePause() {
-  if (!roomRef || room?.pause?.status !== 'pending') return;
-  try { await withTimeout(updateRoom({ pause: null }), 8000); }
-  catch { toast('Could not cancel the pause.'); }
+    await withTimeout(updateRoom({ pause: { status: 'active', requestedBy: playerId, startedAt: stamp() } }), 8000);
+    renderPauseSheet();
+  } catch { toast('Could not pause the game.'); }
 }
 
 async function resumePause() {
-  if (!roomRef || room?.pause?.status !== 'active' || room.pause.requestedBy !== playerId) return;
+  if (!roomRef || room?.pause?.status !== 'active' || !isHost()) return;
   try {
     const stamp = roomRef.backend === 'rtdb' ? rtdbServerTimestamp : serverTimestamp;
     const pause = { ...room.pause, status: 'resuming', resumingAt: stamp() };
     await withTimeout(updateRoom({ pause }), 8000);
-  }
-  catch { toast('Could not resume the game.'); }
+  } catch { toast('Could not resume the game.'); }
 }
 
+/** After the three-second countdown, fold the pause into the deadlines and end it. */
 async function finishPause() {
   if (!clockTrusted()) return;
-  if (!roomRef || !room?.pause) return;
+  if (!roomRef || room?.pause?.status !== 'resuming') return;
   const p = room.pause;
-  if (p.status === 'active') {
-    const started = stampMs(p.startedAt);
-    if (started === null || serverNow() < started + Number(p.duration || 0) * 1000) return;
-  } else if (p.status === 'resuming') {
-    const at = stampMs(p.resumingAt);
-    if (at === null || serverNow() < at + 3000) return;
-  } else return;
+  const at = stampMs(p.resumingAt);
+  if (at === null || serverNow() < at + RESUME_MS) return;
   const started = stampMs(p.startedAt);
-  const resumeAt = stampMs(p.resumingAt);
-  const fixedEnd = p.status === 'resuming' && resumeAt !== null
-    ? resumeAt + 3000
-    : (started === null ? null : started + Number(p.duration || 0) * 1000);
-  const shiftMs = started === null || fixedEnd === null ? 0 : Math.max(0, fixedEnd - started);
+  const shiftMs = started === null ? 0 : Math.max(0, at + RESUME_MS - started);
   const stamp = roomRef.backend === 'rtdb' ? rtdbServerTimestamp : serverTimestamp;
   const patch = { pause: { ...p, status: 'ended', endedAt: stamp(), shiftMs } };
   const turnStart = stampMs(room.turnStartedAt);
@@ -3640,22 +3597,26 @@ function drawPauseCountdown() {
     return;
   }
 
-  const started = stampMs(p.status === 'resuming' ? p.resumingAt : p.startedAt);
-  const duration = p.status === 'resuming' ? 3 : Number(p.duration || 0);
-  const left = started === null ? duration
-    : Math.max(0, Math.ceil((started + duration * 1000 - serverNow()) / 1000));
   const key = `${p.status}:${stampMs(p.startedAt) || ''}:${stampMs(p.resumingAt) || ''}`;
   if (key !== pauseBannerKey) { pauseBannerKey = key; pauseBeat = null; }
-
-  badge.textContent = p.status === 'resuming' ? `Game resuming · ${left}s` : `Game paused · ${left}s`;
   badge.classList.add('pause-badge');
-  badge.classList.toggle('pause-urgent', left <= 5);
   $('turn-timer').hidden = true;
 
-  if (left > 0 && left <= 5 && left !== pauseBeat) {
+  // Paused has no clock: it lasts until the host resumes. Only the get-ready that follows
+  // is counted down.
+  if (p.status !== 'resuming') {
+    badge.textContent = 'Game paused';
+    badge.classList.remove('pause-urgent');
+    return;
+  }
+  const at = stampMs(p.resumingAt);
+  const left = at === null ? 3 : Math.max(0, Math.ceil((at + RESUME_MS - serverNow()) / 1000));
+  badge.textContent = `Game resuming · ${left}s`;
+  badge.classList.toggle('pause-urgent', left <= 3);
+  if (left > 0 && left !== pauseBeat) {
     pauseBeat = left;
     sfx.heartbeat();
-    buzz(left <= 3 ? [45, 85, 55] : [28, 95, 34]);
+    buzz(left <= 1 ? [45, 85, 55] : [28, 95, 34]);
   }
 }
 
@@ -3700,22 +3661,11 @@ function startTimerLoop() {
   if (timerInterval) return;
   timerInterval = setInterval(() => {
     if (!room || room.state !== 'playing') return;
-    if ((room.pause?.status === 'active' && !pauseIsActive())
-        || room.pause?.status === 'resuming') finishPause();
+    if (room.pause?.status === 'resuming') finishPause();
     if (pauseBlocksGame()) {
       drawTimer();
       drawPauseCountdown();
-      if (openSheet === 'sheet-pause') {
-        if (room.pause?.status === 'resuming') {
-          renderPauseSheet();
-        } else if (room.pause?.status === 'active') {
-          const started = stampMs(room.pause.startedAt);
-          const left = started === null ? Number(room.pause.duration || 0)
-            : Math.max(0, Math.ceil((started + Number(room.pause.duration || 0) * 1000 - serverNow()) / 1000));
-          const countdown = $('pause-options').querySelector('.pause-status strong');
-          if (countdown) countdown.textContent = `${left}s`;
-        }
-      }
+      if (openSheet === 'sheet-pause' && room.pause?.status === 'resuming') renderPauseSheet();
       return;
     }
     drawTimer();
@@ -3731,8 +3681,8 @@ function render() {
 
   if (room.state === 'lobby') {
     // A rematch can move everyone here from the results sheet at once. Close only the
-    // results/prompt sheets; an already-open chat should remain available in the lobby.
-    if (openSheet === 'sheet-over' || openSheet === 'sheet-rematch') closeSheet();
+    // results sheet; an already-open chat stays open, in the lobby, until its owner closes it.
+    if (openSheet === 'sheet-over') closeSheet();
     if (!$('screen-lobby').classList.contains('is-active')) showScreen('screen-lobby');
     renderLobby();
     return;
@@ -5853,148 +5803,146 @@ $('log-scrub-next').addEventListener('click', () => {
   renderLogList(g);
 });
 
-function rematchNeedsAnswer() {
-  const request = room?.rematch;
-  return room?.state === 'over'
-    && request
-    && request.requester !== playerId
-    && typeof request.votes?.[playerId] !== 'boolean';
+// ---------------------------------------------------------------- play again
+// Everyone seated at the end of a game votes for another by pressing Play again; pressing
+// it a second time takes the vote back. The votes live on the room, the results screen
+// shows who is in and how many are still needed, and the room returns to the lobby the
+// moment every player who is still seated has voted. Nobody is ever asked a question in a
+// popup — the old prompt took you out of whatever you were doing, chat included.
+
+/** Everyone still seated who has said they want another game. */
+function rematchVoters(data = room) {
+  const votes = data?.rematch?.votes || {};
+  return Object.keys(data?.players || {}).filter((pid) => votes[pid] === true);
 }
 
-function openRematchPrompt() {
-  const request = room?.rematch;
-  if (!request || request.requester === playerId) return;
-  $('rematch-sub').textContent = `${nameFor(request.requester)} would like to play again.`;
-  sheet('sheet-rematch');
-}
+/**
+ * What a vote does to a room, as a patch — or null when it changes nothing. Pure, so the
+ * same decision is made whichever database the room is on.
+ *
+ * `voters` forces a start with just those players (the host's "go without the others").
+ * A player who left is simply not in `players`, which is how "3 of 3" becomes "2 of 2"
+ * without anything having to notice them going.
+ */
+function planRematch(data, pid, on, voters = null) {
+  if (!data || data.state !== 'over') return null;
+  if (pid && !data.players?.[pid]) return null;
+  const ids = Object.keys(data.players || {});
+  const votes = { ...(data.rematch?.votes || {}) };
+  if (pid) { if (on) votes[pid] = true; else delete votes[pid]; }
+  const yes = voters || ids.filter((id) => votes[id] === true);
 
-async function requestRematch() {
-  if (solo || !roomRef || !room || room.state !== 'over') return;
-  try {
-    if (roomRef.backend === 'rtdb') {
-      let rejected = null;
-      await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
-        if (!data || data.state !== 'over' || !data.players?.[playerId]) return data;
-        if (data.rematch?.requester && data.rematch.requester !== playerId) {
-          rejected = 'A rematch request is already waiting for replies.';
-          return data;
-        }
-        data.rematch = { requester: playerId, votes: { [playerId]: true } };
-        return data;
-      }, { applyLocally: false }), 10000);
-      if (rejected) throw new Error(rejected);
-    } else {
-      await withTimeout(runTransaction(db, async (tx) => {
-        const snap = await tx.get(roomRef);
-        const data = snap.data();
-        if (!data || data.state !== 'over' || !data.players?.[playerId]) return;
-        if (data.rematch?.requester && data.rematch.requester !== playerId) {
-          throw new Error('A rematch request is already waiting for replies.');
-        }
-        tx.update(roomRef, {
-          rematch: { requester: playerId, votes: { [playerId]: true } },
-        });
-      }), 10000);
-    }
-    toast('Rematch request sent.');
-  } catch (err) {
-    toast(err?.message || 'Could not request another game.');
+  if (yes.length >= 2 && (voters || yes.length === ids.length)) {
+    const players = Object.fromEntries(yes.map((id) => [id, data.players[id]]));
+    return {
+      outcome: 'started',
+      patch: {
+        state: 'lobby',
+        hostId: yes.includes(data.hostId) ? data.hostId : yes[0],
+        players,
+        game: null,
+        order: [],
+        tradeDeadlines: {},
+        startedAt: null,
+        endedAt: null,
+        rematch: null,
+      },
+    };
   }
+  return {
+    outcome: 'waiting',
+    patch: { rematch: yes.length ? { votes: Object.fromEntries(yes.map((id) => [id, true])) } : null },
+  };
 }
 
-async function answerRematch(wantsToPlay) {
-  if (solo || !roomRef || !room) return;
-  let outcome = 'waiting';
+/** Cast, withdraw or re-check a vote, atomically. Returns what happened, or null. */
+async function castRematch(pid, on, voters = null) {
+  if (solo || !roomRef || !room) return null;
+  let outcome = null;
+  const session = roomSession;
   try {
     if (roomRef.backend === 'rtdb') {
       await withTimeout(rtdbRunTransaction(roomRef.ref, (data) => {
-        const request = data?.rematch;
-        if (!data || data.state !== 'over' || !request || !data.players?.[playerId]) return data;
-
-        const votes = { ...(request.votes || {}), [playerId]: wantsToPlay };
-        const ids = Object.keys(data.players);
-        const allVoted = ids.every((pid) => typeof votes[pid] === 'boolean');
-        if (!allVoted) {
-          data.rematch = { ...request, votes };
-          return data;
-        }
-
-        const accepted = ids.filter((pid) => votes[pid] === true);
-        if (accepted.length < 2) {
-          outcome = 'not-enough';
-          data.rematch = null;
-          return data;
-        }
-
-        const players = Object.fromEntries(accepted.map((pid) => [pid, data.players[pid]]));
-        const hostId = accepted.includes(data.hostId)
-          ? data.hostId
-          : (accepted.includes(request.requester) ? request.requester : accepted[0]);
-        outcome = 'started';
-        data.state = 'lobby';
-        data.hostId = hostId;
-        data.players = players;
-        data.game = null;
-        data.order = [];
-        data.tradeDeadlines = {};
-        data.startedAt = null;
-        data.endedAt = null;
-        data.rematch = null;
+        const plan = planRematch(data, pid, on, voters);
+        if (!plan) return data;
+        Object.assign(data, plan.patch);
+        outcome = plan.outcome;
         return data;
       }, { applyLocally: false }), 10000);
     } else {
       await withTimeout(runTransaction(db, async (tx) => {
         const snap = await tx.get(roomRef);
-        const data = snap.data();
-        const request = data?.rematch;
-        if (!data || data.state !== 'over' || !request || !data.players?.[playerId]) return;
-
-        const votes = { ...(request.votes || {}), [playerId]: wantsToPlay };
-        const ids = Object.keys(data.players);
-        const allVoted = ids.every((pid) => typeof votes[pid] === 'boolean');
-        if (!allVoted) {
-          tx.update(roomRef, { rematch: { ...request, votes } });
-          return;
-        }
-
-        const accepted = ids.filter((pid) => votes[pid] === true);
-        if (accepted.length < 2) {
-          outcome = 'not-enough';
-          tx.update(roomRef, { rematch: null });
-          return;
-        }
-
-        const players = Object.fromEntries(accepted.map((pid) => [pid, data.players[pid]]));
-        const hostId = accepted.includes(data.hostId)
-          ? data.hostId
-          : (accepted.includes(request.requester) ? request.requester : accepted[0]);
-        outcome = 'started';
-        tx.update(roomRef, {
-          state: 'lobby',
-          hostId,
-          players,
-          game: null,
-          order: [],
-          tradeDeadlines: {},
-          startedAt: null,
-          endedAt: null,
-          rematch: null,
-        });
+        const plan = planRematch(snap.data(), pid, on, voters);
+        if (!plan) return;
+        tx.update(roomRef, plan.patch);
+        outcome = plan.outcome;
       }), 10000);
-    }
-    closeSheet();
-    if (outcome === 'not-enough') toast('Not enough players accepted the rematch.');
-    else if (outcome === 'waiting') toast(wantsToPlay ? 'You are in for the rematch.' : 'You declined the rematch.');
-    if (outcome !== 'started' && room?.state === 'over') {
-      renderOver(game());
-      sheet('sheet-over');
     }
   } catch {
-    toast('Could not save your rematch choice.');
+    if (session === roomSession) toast('Could not save that — check your connection.');
   }
+  return outcome;
+}
+
+function toggleRematch() {
+  const iAmIn = rematchVoters().includes(playerId);
+  castRematch(playerId, !iAmIn);
+}
+
+/** The host going ahead with only the players who have said yes. */
+function startRematchWithVoters() {
+  const yes = rematchVoters();
+  if (yes.length >= 2) castRematch(null, false, yes);
+}
+
+// Every device that sees the votes complete tries to finish the job, because the player
+// whose tap completed them may have left in the same moment (3 votes of 3, then the third
+// leaves and it is 2 of 2 with nobody left to press anything). The transaction lets only
+// the first through; the rest find the room already in the lobby and do nothing.
+let rematchFinishKey = '';
+function maybeFinishRematch() {
+  if (solo || !roomRef || room?.state !== 'over' || !room.rematch || !room.players?.[playerId]) return;
+  const ids = Object.keys(room.players);
+  if (ids.length < 2 || rematchVoters().length !== ids.length) return;
+  const key = ids.sort().join(',');
+  if (rematchFinishKey === key) return;
+  rematchFinishKey = key;
+  castRematch(null, false);
+  setTimeout(() => { if (rematchFinishKey === key) rematchFinishKey = ''; }, 4000);
+}
+
+// Who has already been announced, so each person's vote makes one small toast and not one
+// per snapshot. A toast, not a popup: it must never pull you out of the chat you are in.
+let rematchAnnounced = new Set();
+function announceRematchVotes() {
+  if (room?.state !== 'over') { rematchAnnounced = new Set(); return; }
+  for (const pid of rematchVoters()) {
+    if (rematchAnnounced.has(pid)) continue;
+    rematchAnnounced.add(pid);
+    if (pid !== playerId) toast(`${nameFor(pid)} wants to play again`);
+  }
+  for (const pid of [...rematchAnnounced]) if (!rematchVoters().includes(pid)) rematchAnnounced.delete(pid);
+}
+
+/** "Bill wants to play again" / "Bill and Vera want…" / "Bill, Vera and Lars want…". */
+function rematchLine() {
+  const names = rematchVoters().map((pid) => (pid === playerId ? 'You' : nameFor(pid)));
+  if (!names.length) return '';
+  const who = names.length === 1 ? names[0]
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  const verb = names.length === 1 && names[0] !== 'You' ? 'wants' : 'want';
+  return `${who} ${verb} to play again`;
 }
 
 // ---------------------------------------------------------------- mandatory sheets
+// One toast per thing owed, not one per snapshot while chat stays open.
+let chatNudgedFor = '';
+function nudgeFromChat(message, key) {
+  if (chatNudgedFor === key) return;
+  chatNudgedFor = key;
+  toast(message);
+}
+
 // Some phases stop the game until you act. Those sheets reopen if dismissed; optional
 // ones (a trade offer) stay closed once you've waved them away.
 function syncSheets(g) {
@@ -6011,17 +5959,19 @@ function syncSheets(g) {
   const changed = key !== lastPhaseKey;
   lastPhaseKey = key;
 
-  if (room.pause?.status === 'pending' && !['sheet-discard', 'sheet-steal', 'sheet-pause'].includes(openSheet)) {
-    openPause();
-    return;
-  }
   if (openSheet === 'sheet-pause') renderPauseSheet();
 
+  // While chat is open nothing may take you out of it — not even a sheet the game is
+  // waiting on. You get one line saying what is owed, and the sheet opens as soon as chat
+  // is closed (closeSheetAndRestoreResults renders again for exactly that).
+  const chatOpen = openSheet === 'sheet-chat';
   if (g.phase === 'discard' && g.pending.discard[playerId]) {
+    if (chatOpen) { nudgeFromChat('You have cards to discard — close chat to choose them.', key); return; }
     if (openSheet !== 'sheet-discard') openDiscard(g);
     return;
   }
   if ((g.phase === 'steal' || g.phase === 'take') && R.isTurn(g, playerId)) {
+    if (chatOpen) { nudgeFromChat('You need to pick a card to take — close chat to choose.', key); return; }
     if (openSheet !== 'sheet-steal') openSteal(g);
     return;
   }
@@ -6039,15 +5989,16 @@ function syncSheets(g) {
   // a reload, or joining late — never sets that flag, so the results are there at once
   // rather than after a pause for a celebration nobody saw.
   if (g.phase === 'over' && !celebrating) {
-    if (openSheet !== 'sheet-over' && openSheet !== 'sheet-rematch' && openSheet !== 'sheet-chat') {
+    // Never while chat is open: somebody pressing Play again, or the results arriving
+    // late, must not take you out of a conversation you are in the middle of.
+    if (openSheet !== 'sheet-over' && openSheet !== 'sheet-chat') {
       renderOver(g);
       sheet('sheet-over');
     }
-    if (rematchNeedsAnswer()) {
-      if (openSheet !== 'sheet-rematch') openRematchPrompt();
-    } else if (openSheet === 'sheet-rematch') {
-      closeSheet();
-    }
+  }
+  if (g.phase === 'over') {
+    announceRematchVotes();
+    maybeFinishRematch();
   }
 }
 
@@ -6103,9 +6054,15 @@ function recordHistory(g) {
   const history = loadHistory();
   if (history.some((entry) => entry.id === key)) return;
 
+  // `pts` is where each player's points came from — the same five sources the results
+  // screen lists — so the stats can say HOW people win and what they lean on over time,
+  // not just who won. Games saved before this was added have no `pts` and are counted
+  // for wins only.
   const players = g.seats.map((pid) => ({
     id: pid,
     name: nameFor(pid),
+    vp: R.totalVP(g, pid),
+    pts: Object.fromEntries(pointSources(g, pid).map((s) => [s.key, s.vp])),
   }));
   history.unshift({
     id: key,
@@ -6152,28 +6109,103 @@ function renderMyStats(history) {
       <div class="my-stat"><b>${esc(c.value)}</b><span>${esc(c.label)}</span></div>`).join('')}</div>`;
 }
 
-function openHistory() {
-  const history = loadHistory();
-  renderMyStats(history);
-  const totals = new Map();
+// The five places a point can come from, in the order the results screen lists them, with
+// the colour each gets in the stats bars.
+const STAT_SOURCES = [
+  { key: 'houses', label: 'Settlements', color: '#35c4ff' },
+  { key: 'cities', label: 'Cities', color: '#e3ba57' },
+  { key: 'road', label: 'Longest road', color: '#ff7a59' },
+  { key: 'army', label: 'Largest army', color: '#b388ff' },
+  { key: 'cards', label: 'VP cards', color: '#4cd48a' },
+];
+
+/**
+ * Per-player totals across every game this device saw finish. Everyone at a table records
+ * the same finished game, so every device's picture of the table matches.
+ *
+ * "How they won" counts each win once under the big engine it ran on — settlements, cities
+ * or VP cards, whichever gave the most — and separately notes whether it came with Longest
+ * Road or Largest Army, because those are two-point swings that can sit on top of any of
+ * the three.
+ */
+function buildPlayerStats(history) {
+  const rows = new Map();
   for (const game of history) {
     for (const player of game.players || []) {
       const key = historyNameKey(player.name);
-      const row = totals.get(key) || { name: player.name, games: 0, wins: 0 };
-      row.games++;
-      if (player.id === game.winner) row.wins++;
-      totals.set(key, row);
+      const row = rows.get(key) || {
+        name: player.name, games: 0, wins: 0, scored: 0,
+        pts: Object.fromEntries(STAT_SOURCES.map((s) => [s.key, 0])),
+        wonRoad: 0, wonArmy: 0, engine: { houses: 0, cities: 0, cards: 0 },
+      };
+      row.name = player.name;
+      row.games += 1;
+      const won = player.id === game.winner;
+      if (won) row.wins += 1;
+      if (player.pts) {
+        row.scored += 1;
+        for (const s of STAT_SOURCES) row.pts[s.key] += player.pts[s.key] || 0;
+        if (won) {
+          if (player.pts.road > 0) row.wonRoad += 1;
+          if (player.pts.army > 0) row.wonArmy += 1;
+          const main = ['houses', 'cities', 'cards']
+            .reduce((a, b) => ((player.pts[b] || 0) > (player.pts[a] || 0) ? b : a));
+          row.engine[main] += 1;
+        }
+      }
+      rows.set(key, row);
     }
   }
-  const standings = [...totals.values()].sort((a, b) => b.wins - a.wins || b.games - a.games || a.name.localeCompare(b.name));
-  $('history-summary').innerHTML = standings.length
-    ? `<div class="history-heading">Win totals</div>${standings.map((row) => `
-        <div class="history-total">
-          <span>${esc(row.name)}</span>
-          <b>${row.wins} win${row.wins === 1 ? '' : 's'}</b>
-          <i>${row.games} game${row.games === 1 ? '' : 's'}</i>
-        </div>`).join('')}`
-    : '<p class="hint">No completed games on this device yet.</p>';
+  return [...rows.values()]
+    .sort((a, b) => b.wins - a.wins || b.games - a.games || a.name.localeCompare(b.name));
+}
+
+function renderPlayerStats(history) {
+  const stats = buildPlayerStats(history);
+  if (!stats.length) return '<p class="hint">No completed games on this device yet.</p>';
+  const label = Object.fromEntries(STAT_SOURCES.map((s) => [s.key, s.label]));
+
+  const cards = stats.map((row) => {
+    const total = STAT_SOURCES.reduce((n, s) => n + row.pts[s.key], 0);
+    const rate = row.games ? Math.round((row.wins / row.games) * 100) : 0;
+    let breakdown = '';
+    if (row.scored && total) {
+      const share = STAT_SOURCES.map((s) => ({ ...s, pct: (row.pts[s.key] / total) * 100 }));
+      const top = share.reduce((a, b) => (b.pct > a.pct ? b : a));
+      breakdown = `
+        <div class="stat-bar" role="img" aria-label="Where ${esc(row.name)}'s points come from">
+          ${share.filter((s) => s.pct > 0).map((s) => `<i style="flex:${s.pct};background:${s.color}"></i>`).join('')}
+        </div>
+        <div class="stat-legend">${share.filter((s) => s.pct > 0).map((s) => `
+          <span><b style="background:${s.color}"></b>${s.label} ${Math.round(s.pct)}%</span>`).join('')}</div>
+        <div class="stat-fav">Favours <b>${top.label.toLowerCase()}</b></div>`;
+    }
+    let how = '';
+    if (row.wins && row.scored) {
+      const bits = [];
+      if (row.engine.cities) bits.push(`${row.engine.cities}× on cities`);
+      if (row.engine.houses) bits.push(`${row.engine.houses}× on settlements`);
+      if (row.engine.cards) bits.push(`${row.engine.cards}× on VP cards`);
+      if (row.wonRoad) bits.push(`${row.wonRoad}× with ${label.road.toLowerCase()}`);
+      if (row.wonArmy) bits.push(`${row.wonArmy}× with ${label.army.toLowerCase()}`);
+      if (bits.length) how = `<div class="stat-how"><span>Won</span> ${bits.map(esc).join(' · ')}</div>`;
+    }
+    return `<div class="stat-card">
+      <div class="stat-top"><b>${esc(row.name)}</b>
+        <span><em>${row.wins}</em> win${row.wins === 1 ? '' : 's'} · ${row.games} game${row.games === 1 ? '' : 's'} · ${rate}%</span></div>
+      ${breakdown}${how}
+    </div>`;
+  }).join('');
+
+  const anyScored = stats.some((r) => r.scored);
+  return `<div class="history-heading">Players</div>${cards}${anyScored ? ''
+    : '<p class="hint">How people score is tracked from now on — it fills in as games finish.</p>'}`;
+}
+
+function openHistory() {
+  const history = loadHistory();
+  renderMyStats(history);
+  $('history-summary').innerHTML = renderPlayerStats(history);
 
   $('history-list').innerHTML = history.length
     ? `<div class="history-heading">Games</div>${history.map((game) => {
@@ -6256,20 +6288,28 @@ function renderOver(g) {
     </div>`;
   }).join('');
 
+  // Play again: who is in, how many are still needed, and what the button says. Counted
+  // against whoever is still seated, so someone leaving moves 2/3 to 2/2 by itself.
   const rematchStatus = $('rematch-status');
-  if (rematchStatus) {
-    const request = room?.rematch;
-    if (!request) {
-      rematchStatus.hidden = true;
-      rematchStatus.textContent = '';
-    } else {
-      const ids = Object.keys(room.players || {});
-      const answered = ids.filter((pid) => typeof request.votes?.[pid] === 'boolean').length;
-      rematchStatus.hidden = false;
-      rematchStatus.textContent = request.requester === playerId
-        ? `Waiting for replies (${answered}/${ids.length})…`
-        : (request.votes?.[playerId] === true ? 'You said yes. Waiting for the others…' : 'You said no.');
-    }
+  const again = $('btn-again');
+  const now = $('btn-again-now');
+  if (solo) {
+    rematchStatus.hidden = true;
+    now.hidden = true;
+    again.classList.remove('is-waiting');
+    again.querySelector('.btn-label').textContent = 'Play again';
+  } else {
+    const voters = rematchVoters();
+    const total = Object.keys(room?.players || {}).length;
+    const mine = voters.includes(playerId);
+    rematchStatus.hidden = !voters.length;
+    rematchStatus.textContent = voters.length ? `${rematchLine()} · ${voters.length}/${total}` : '';
+    again.classList.toggle('is-waiting', mine);
+    again.querySelector('.btn-label').textContent = mine
+      ? `You're in · ${voters.length}/${total} (tap to cancel)` : 'Play again';
+    // Somebody who has stopped answering must not hold everyone else on this screen.
+    now.hidden = !(isHost() && voters.length >= 2 && voters.length < total);
+    now.textContent = `Play now with ${voters.length}`;
   }
 }
 
@@ -6287,25 +6327,20 @@ $('btn-again').addEventListener('click', async () => {
     }
     return;
   }
-  if (!isHost()) return requestRematch();
-  closeSheet();
-  try {
-    await updateRoom({
-      state: 'lobby', game: null, order: [], tradeDeadlines: {}, rematch: null,
-      startedAt: null, endedAt: null,
-    });
-    lastSeq = 0;
-    announcedUp = null;
-    resetGuess(); resetTrade();
-  } catch { toast('Could not reset the room.'); }
+  // Everyone, the host included, votes. The room goes back to the lobby when all are in.
+  toggleRematch();
 });
+$('btn-again-now').addEventListener('click', () => { unlock(); startRematchWithVoters(); });
 $('btn-home').addEventListener('click', () => leaveRoom(true));
 $('btn-recap').addEventListener('click', () => { sfx.tap(); shareRecap(); });
-$('btn-rematch-yes').addEventListener('click', () => { unlock(); answerRematch(true); });
-$('btn-rematch-no').addEventListener('click', () => { unlock(); answerRematch(false); });
 
 // ---------------------------------------------------------------- menus
-$('btn-menu').addEventListener('click', () => { unlock(); sfx.tap(); sheet('sheet-menu'); });
+$('btn-menu').addEventListener('click', () => {
+  unlock(); sfx.tap();
+  // Only the host can pause, so nobody else is shown the option.
+  $('menu-pause').hidden = solo || !isHost();
+  sheet('sheet-menu');
+});
 $('game-log-btn').addEventListener('click', () => { const g = game(); if (g) openLog(g); });
 $('menu-players').addEventListener('click', openPlayers);
 $('menu-history').addEventListener('click', openHistory);

@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.10.11.05">
+<link rel="stylesheet" href="styles.css?v=2026.10.12.01">
 </head>
 <body>
 
@@ -497,7 +497,7 @@
   <h3 class="sheet-title">Menu</h3>
   <div class="menu-list">
     <button class="menu-item" id="menu-players"><b>Players</b></button>
-    <button class="menu-item" id="menu-history"><b>Game history</b></button>
+    <button class="menu-item" id="menu-history"><b>Stats &amp; history</b></button>
     <button class="menu-item" id="menu-pause"><b>Pause game</b></button>
     <button class="menu-item" id="menu-how"><b>How to Play</b></button>
     <button class="menu-item" id="menu-settings"><b>Settings</b></button>
@@ -530,11 +530,9 @@
 
 <div class="sheet" id="sheet-pause">
   <h3 class="sheet-title">Pause game</h3>
-  <p class="sheet-sub" id="pause-sub">Choose how long to pause. Everyone at the table must accept.</p>
+  <p class="sheet-sub" id="pause-sub">Pause the game for everyone. It stays paused until you resume it, and chat keeps working.</p>
   <div class="pause-options" id="pause-options">
-    <button class="btn btn-ghost" data-pause-duration="300">5 minutes</button>
-    <button class="btn btn-ghost" data-pause-duration="600">10 minutes</button>
-    <button class="btn btn-ghost" data-pause-duration="900">15 minutes</button>
+    <button class="btn btn-key" id="pause-start">Pause game</button>
   </div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
@@ -726,17 +724,9 @@
   <p class="hint" id="rematch-status" hidden></p>
   <div class="sheet-actions">
     <button class="btn btn-key" id="btn-again"><span class="btn-label">Play again</span></button>
+    <button class="btn btn-ghost" id="btn-again-now" hidden>Play now</button>
     <button class="btn btn-ghost" id="btn-recap">Share recap</button>
     <button class="btn btn-ghost" id="btn-home">Back to the start</button>
-  </div>
-</div>
-
-<div class="sheet" id="sheet-rematch">
-  <h3 class="sheet-title">Play again?</h3>
-  <p class="sheet-sub" id="rematch-sub"></p>
-  <div class="sheet-actions">
-    <button class="btn btn-key" id="btn-rematch-yes"><span class="btn-label">Yes</span></button>
-    <button class="btn btn-ghost" id="btn-rematch-no">No</button>
   </div>
 </div>
 
@@ -749,7 +739,7 @@
   </button>
   <div class="kebab-menu" id="kebab-menu" hidden role="menu">
     <button id="kebab-refresh" role="menuitem"><span>&#128260;</span>Refresh</button>
-    <button id="kebab-history" role="menuitem"><span>🏆</span>Game history</button>
+    <button id="kebab-history" role="menuitem"><span>🏆</span>Stats &amp; history</button>
     <button id="kebab-share" role="menuitem"><span>&#128228;</span>Share</button>
     <button id="kebab-about" role="menuitem"><span>&#8505;&#65039;</span>About</button>
     <!-- Only shown on the landing page, and only once Realtime Database is actually
@@ -761,7 +751,7 @@
 </div>
 
 <div class="sheet" id="sheet-history">
-  <h3 class="sheet-title">Game history</h3>
+  <h3 class="sheet-title">Stats &amp; history</h3>
   <div class="my-stats" id="my-stats"></div>
   <div class="history-summary" id="history-summary"></div>
   <div class="history-list" id="history-list"></div>
@@ -849,7 +839,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.10.11.05"></script>
-<script type="module" src="app.js?v=2026.10.11.05"></script>
+<script src="iro.min.js?v=2026.10.12.01"></script>
+<script type="module" src="app.js?v=2026.10.12.01"></script>
 </body>
 </html>
