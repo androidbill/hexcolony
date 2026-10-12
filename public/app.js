@@ -4498,7 +4498,7 @@ function playDevReveal(e) {
     ? `<div class="dev-take">took ${e.count ?? ''} ${resCard(e.res, { size: 'xs' })}</div>` : '';
   stage.style.setProperty('--c', colorFor(e.p));
   stage.innerHTML = `<div class="dev-wrap">
-      <div class="dev-card">
+      <div class="reveal-card">
         <div class="dev-face dev-back">🎴</div>
         <img class="dev-face dev-front" src="art/dev-${e.card}.webp" alt="${esc(name)}" decoding="async">
       </div>
