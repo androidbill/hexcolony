@@ -1702,6 +1702,9 @@ async function killIdleRoom() {
   finally { if (currentSession(session, ref)) killingIdleRoom = false; }
 }
 
+/** Moves that count as really doing something on a turn, for the shortest-turn award. */
+const ACTING_MOVES = new Set(['build', 'buyDev']);
+
 async function postMove(move, opts, drew, era, context) {
   // A move queued behind one the server refused was reasoned from a state that never
   // happened. Sending it anyway would be asking for a second, more confusing refusal.
@@ -1734,6 +1737,7 @@ async function postMove(move, opts, drew, era, context) {
         if (res.game.phase !== 'over' && res.game.turn.num !== prevNum && res.game.turn.num >= 1) {
           (data.turnLog ||= {})[`t${res.game.turn.num}`] = { at: rtdbServerTimestamp(), p: R.currentPid(res.game) };
         }
+        if (ACTING_MOVES.has(move.type)) ((data.turnLog ||= {})[`t${res.game.turn.num}`] ||= {}).a = true;
         // Proof somebody is actually at the table — see IDLE_KILL_MS. A stalled turn
         // timing out or a trade offer expiring is the game moving on its own, not that.
         if (move.type !== 'timeout' && move.type !== 'expireTrade') {
@@ -1772,6 +1776,7 @@ async function postMove(move, opts, drew, era, context) {
         if (res.game.phase !== 'over' && res.game.turn.num !== prevNum && res.game.turn.num >= 1) {
           patch[`turnLog.t${res.game.turn.num}`] = { at: serverTimestamp(), p: R.currentPid(res.game) };
         }
+        if (ACTING_MOVES.has(move.type)) patch[`turnLog.t${res.game.turn.num}.a`] = true;
         // Proof somebody is actually at the table — see IDLE_KILL_MS. A stalled turn
         // timing out or a trade offer expiring is the game moving on its own, not that.
         if (move.type !== 'timeout' && move.type !== 'expireTrade') {
@@ -6269,13 +6274,13 @@ function pointSources(g, pid) {
 }
 
 /**
- * The longest and the shortest single turn of the game, and whose they were. A turn runs
+ * The longest single turn, and the shortest one in which something was built or bought. A turn runs
  * from its start stamp to the next one's, the last to the moment the game ended. Turns
  * under a second are ignored: a bot or an auto-skip says nothing about how anyone plays.
  */
 function turnPace(log, endMs) {
   const turns = Object.entries(log || {})
-    .map(([k, v]) => ({ n: Number(k.slice(1)), p: v?.p, at: stampMs(v?.at) }))
+    .map(([k, v]) => ({ n: Number(k.slice(1)), p: v?.p, at: stampMs(v?.at), acted: !!v?.a }))
     .filter((t) => Number.isFinite(t.n) && t.p && t.at !== null)
     .sort((a, b) => a.n - b.n);
   let slow = null;
@@ -6286,7 +6291,8 @@ function turnPace(log, endMs) {
     const ms = end - t.at;
     if (!(ms >= 1000)) return;
     if (!slow || ms > slow.ms) slow = { pid: t.p, ms };
-    if (!fast || ms < fast.ms) fast = { pid: t.p, ms };
+    // Passing without building or buying proves nothing about how fast someone plays.
+    if (t.acted && (!fast || ms < fast.ms)) fast = { pid: t.p, ms };
   });
   if (!slow || !fast || slow.pid === fast.pid) return null;
   return { slow, fast };

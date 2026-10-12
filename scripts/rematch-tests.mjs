@@ -117,9 +117,12 @@ ok('longest road and largest army are counted on top of the engine', bill.wonRoa
 ok('the table is sorted by wins', stats[0].name.toLowerCase() === 'bill');
 
 // ---- pace and dice
-const log = { t1: { at: 0, p: 'a' }, t2: { at: 20000, p: 'b' }, t3: { at: 25000, p: 'a' }, t4: { at: 70000, p: 'b' } };
+const log = { t1: { at: 0, p: 'a' }, t2: { at: 20000, p: 'b', a: true }, t3: { at: 25000, p: 'a' }, t4: { at: 70000, p: 'b', a: true }, t0: { at: 0, p: 'c' } };
 ctx.__l = log;
 let pace = run('turnPace(__l, 76000)');
+ctx.__l2 = { t1: { at: 0, p: 'a', a: true }, t2: { at: 3000, p: 'b' }, t3: { at: 9000, p: 'a' } };
+const pace2 = run('turnPace(__l2, 20000)');
+ok('a turn with no action is never the fastest', pace2 === null || pace2.fast.pid === 'a');
 ok('slowest is the longest single turn', pace.slow.pid === 'a' && pace.slow.ms === 45000);
 ok('fastest is the shortest single turn', pace.fast.pid === 'b' && pace.fast.ms === 5000);
 ok('no pace without a log', run('turnPace(null, 5)') === null);

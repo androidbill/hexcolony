@@ -56,7 +56,7 @@ function harness(backend = 'firestore') {
     subscribeChat: () => {}, writePulse: () => Promise.resolve(), healthCheck: () => {},
     drawGuess: () => false, dropGuess: () => {}, armUndo: () => {},
     keepAwake: () => {}, closeSheet: () => {}, renderChatButton: () => {}, setConnBadge: () => {},
-    resubscribe: () => {}, pulseUnavailable: () => {}, pauseElapsedMs: () => 0, pauseBlocksGame: () => false,
+    resubscribe: () => {}, pulseUnavailable: () => {}, pauseElapsedMs: () => 0, pauseBlocksGame: () => false, ACTING_MOVES: new Set(['build', 'buyDev']),
     usableName: () => 'Bill', roomIsStale: data => data.expiresAt < wall,
     serverTimestamp: () => wall, rtdbServerTimestamp: () => wall, deleteField: () => null,
     deleteDoc: ref => { writes.push({ delete: ref }); return Promise.resolve(); },
