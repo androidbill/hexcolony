@@ -49,6 +49,7 @@ const ART = [
   // finished is worse than one that was never shown.
   'art/longest-road.png',
   'art/largest-army.png',
+  ...['knight', 'road', 'plenty', 'mono', 'vp'].map((k) => `art/dev-${k}.webp`),
   // The banner on the landing page, which is the first thing drawn on every launch.
   'art/logo.webp',
 ];

@@ -2736,7 +2736,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .dev-wrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
 .dev-stage.out .dev-wrap { animation: award-out .3s ease-in both; }
 .dev-card {
-  position: relative; width: min(46vw, 180px); aspect-ratio: 5 / 7;
+  position: relative; width: min(52vw, 210px); aspect-ratio: 13 / 20;
   transform-style: preserve-3d;
   animation: dev-flip 1.1s cubic-bezier(.3, 1.1, .4, 1) both;
 }
@@ -2790,4 +2790,12 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   font-size: 10.5px; font-weight: 800; letter-spacing: .02em;
   background: rgba(227, 186, 87, .2); color: var(--gold);
   white-space: nowrap;
+}
+
+/* The card faces are the illustrations themselves, which carry their own title and text. */
+img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; width: 100%; height: 100%; }
+.dev-take {
+  display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 14px; color: var(--parch);
+  background: rgba(8, 24, 40, .94); border: 2px solid var(--c, var(--gold)); border-radius: 999px; padding: 4px 14px;
+  animation: award-take-in .3s .9s both;
 }

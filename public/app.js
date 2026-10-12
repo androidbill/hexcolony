@@ -3833,11 +3833,17 @@ function celebrateWin(winner) {
 
 // Sound and flourish are driven off the shared log, not off local move results, so
 // every player hears the same dice and the same robber.
+let lastDevHand = null;
+
 function reactToLog(g) {
   const entries = (g.log || []).filter((e) => (e.i || 0) > lastSeq);
   if (!entries.length) return;
   const first = lastSeq === 0 && !freshGameStart;
   freshGameStart = false;
+  // What the buyer's hand looked like before this snapshot, to tell which card they drew.
+  const handNow = devHandOf(g, playerId);
+  const handBefore = lastDevHand;
+  lastDevHand = handNow;
   lastSeq = Math.max(lastSeq, ...(g.log || []).map((e) => e.i || 0));
   if (first) return; // don't replay the whole game's audio when you open the room
 
@@ -3930,11 +3936,13 @@ function reactToLog(g) {
       // rather than the small inline icon a steal gets.
       case 'mono':
         sfx.card();
-        shoutout([
-          `${e.p === playerId ? 'You' : nameFor(e.p)} played`,
-          'Monopoly',
-          { bigResource: e.res },
-        ], colorFor(e.p));
+        if (!playDevReveal({ card: 'mono', p: e.p, res: e.res, count: e.count })) {
+          shoutout([
+            `${e.p === playerId ? 'You' : nameFor(e.p)} played`,
+            'Monopoly',
+            { bigResource: e.res },
+          ], colorFor(e.p));
+        }
         break;
       case 'offer':
         // The chime is what makes you look down at the strip, so it has to agree with it:
@@ -3956,6 +3964,11 @@ function reactToLog(g) {
         if (e.p === playerId) sfx.card();
         // Which card, not just that one was bought, stays private — the shoutout says
         // no more than the log line already did, same as a steal's onlooker text.
+        // The buyer is shown what they drew; everyone else just hears one was bought.
+        if (e.p === playerId) {
+          const drew = DEV_CARDS.find((k) => (handNow[k] || 0) > (handBefore?.[k] || 0));
+          if (drew && playDevReveal({ card: drew, p: e.p, drawn: true })) break;
+        }
         shoutout(`${e.p === playerId ? 'You' : nameFor(e.p)} bought a Dev Card`, colorFor(e.p));
         break;
       // Both awards are two points changing hands, which is the biggest single swing in
@@ -4438,50 +4451,67 @@ function paintDie(el, n) {
   el.innerHTML = Array.from({ length: 9 }, (_, i) => `<i${PIPS[n]?.includes(i) ? ' class="on"' : ''}></i>`).join('');
 }
 
-// A development card being played: it comes up face down, turns over to show what it is,
+// A development card being shown: it comes up face down, turns over to its own picture,
 // and the card does its thing — a Knight fires a cannon, Road Building lays a road, Year of
-// Plenty throws sparkles. Two seconds in all, like the other announcements.
-const DEV_ART = { knight: '⚔️', road: '🛣️', plenty: '🌾' };
+// Plenty and Monopoly throw sparkles, Monopoly also names what it took. Two seconds in all,
+// like the other announcements. The same stage shows the card you have just bought to you.
+const DEV_CARDS = ['knight', 'road', 'plenty', 'mono', 'vp'];
 const DEV_HOLD_MS = 1700;
 let devTimers = [];
 
+// Fetched up front so the face is there when the card turns over.
+const devArt = {};
+for (const k of DEV_CARDS) {
+  const img = new Image();
+  img.src = `art/dev-${k}.webp`;
+  devArt[k] = img;
+}
+
+/** What is in a player's hand now, by kind, cards bought this turn included. */
+function devHandOf(g, pid) {
+  const p = g.players?.[pid];
+  const out = {};
+  for (const k of DEV_CARDS) out[k] = (p?.dev?.[k] || 0) + (p?.devNew?.[k] || 0);
+  return out;
+}
+
 function playDevReveal(e) {
   const stage = $('dev-stage');
-  if (!stage) return false;
+  if (!stage || !DEV_CARDS.includes(e.card)) return false;
   for (const t of devTimers) clearTimeout(t);
   devTimers = [];
-  const info = R.DEV_INFO[e.card] || { name: e.card, blurb: '' };
+  const name = e.card === 'vp' ? 'a Victory Point' : (R.DEV_INFO[e.card]?.name || e.card);
   const who = e.p === playerId ? 'You' : nameFor(e.p);
-  const dir = (n) => Array.from({ length: n }, (_, i) => {
-    const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+  const caption = e.drawn ? `${who} drew ${name}` : `${who} played ${name}`;
+  const spread = (n) => Array.from({ length: n }, () => {
+    const a = Math.random() * Math.PI * 2;
     const d = 60 + Math.random() * 60;
     return `--dx:${Math.round(Math.cos(a) * d)}px;--dy:${Math.round(Math.sin(a) * d - 20)}px`;
   });
   let extra = '';
-  if (e.card === 'knight') {
-    extra = '<i class="boom-flash"></i>' + dir(6).map((v) => `<i class="boom-puff" style="${v}"></i>`).join('');
-  } else if (e.card === 'road') {
-    extra = '<div class="dev-road"></div>';
-  } else if (e.card === 'plenty') {
-    extra = dir(7).map((v) => `<span class="dev-spark" style="${v}">✨</span>`).join('');
+  if (!e.drawn) {
+    if (e.card === 'knight') extra = '<i class="boom-flash"></i>' + spread(6).map((v) => `<i class="boom-puff" style="${v}"></i>`).join('');
+    else if (e.card === 'road') extra = '<div class="dev-road"></div>';
+    else if (e.card === 'plenty' || e.card === 'mono') extra = spread(7).map((v) => `<span class="dev-spark" style="${v}">✨</span>`).join('');
   }
+  const take = e.card === 'mono' && e.res
+    ? `<div class="dev-take">took ${e.count ?? ''} ${resCard(e.res, { size: 'xs' })}</div>` : '';
   stage.style.setProperty('--c', colorFor(e.p));
   stage.innerHTML = `<div class="dev-wrap">
       <div class="dev-card">
         <div class="dev-face dev-back">🎴</div>
-        <div class="dev-face dev-front">
-          <div class="dev-ico">${DEV_ART[e.card] || '🎴'}</div>
-          <div class="dev-name">${esc(info.name)}</div>
-          <div class="dev-blurb">${esc(info.blurb)}</div>
-        </div>
+        <img class="dev-face dev-front" src="art/dev-${e.card}.webp" alt="${esc(name)}" decoding="async">
       </div>
-      <div class="dev-caption">${esc(who)} played ${esc(info.name)}</div>
+      <div class="dev-caption">${esc(caption)}</div>
+      ${take}
       ${extra}
     </div>`;
   stage.classList.remove('out');
   stage.hidden = false;
   devTimers.push(setTimeout(() => sfx.flip(), 450));
-  if (e.card === 'knight') devTimers.push(setTimeout(() => { sfx.cannon(); view.cannonFired(); buzz([60, 30, 60]); }, 780));
+  if (!e.drawn && e.card === 'knight') {
+    devTimers.push(setTimeout(() => { sfx.cannon(); view.cannonFired(); buzz([60, 30, 60]); }, 780));
+  }
   devTimers.push(setTimeout(() => stage.classList.add('out'), DEV_HOLD_MS));
   devTimers.push(setTimeout(() => { stage.hidden = true; stage.classList.remove('out'); stage.innerHTML = ''; }, DEV_HOLD_MS + 300));
   return true;
