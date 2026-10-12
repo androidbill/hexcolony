@@ -319,6 +319,7 @@ export function newGame(seats, settings, rng = Math.random) {
     trades: [],
     tradeIds: 0,
     winner: null,
+    rolls: {},
     seq: 0,
     log: [],
   };
@@ -947,6 +948,9 @@ export function applyMove(state, pid, move, rng = Math.random) {
       g.turn.dice = [d1, d2];
       g.turn.rolled = true;
       note(g, events, { t: 'roll', p: pid, dice: [d1, d2], roll });
+      // A running tally, kept apart from the log because the log sheds old entries.
+      const tally = (g.rolls ||= {});
+      tally[roll] = (tally[roll] || 0) + 1;
 
       if (roll === 7) {
         // No robber means no discard either: switching it off takes the whole penalty

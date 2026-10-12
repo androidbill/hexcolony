@@ -35,6 +35,10 @@ vm.runInContext(`
   ${shipped('historyNameKey')}
   ${shippedConst('STAT_SOURCES')}
   ${shipped('buildPlayerStats')}
+  const stampMs = (v) => (typeof v === 'number' ? v : null);
+  ${shipped('turnPace')}
+  ${shipped('diceFacts')}
+  const HEXES = [{ corners: [0, 1] }, { corners: [2, 3] }];
 `, ctx);
 const run = (code) => vm.runInContext(code, ctx);
 
@@ -111,6 +115,21 @@ ok('a win is credited to its biggest engine', bill.engine.cities === 1 && bill.e
 ok('a tie between engines takes the first listed', bill.engine.houses === 1);
 ok('longest road and largest army are counted on top of the engine', bill.wonRoad === 2 && bill.wonArmy === 1);
 ok('the table is sorted by wins', stats[0].name.toLowerCase() === 'bill');
+
+// ---- pace and dice
+const log = { t1: { at: 0, p: 'a' }, t2: { at: 20000, p: 'b' }, t3: { at: 25000, p: 'a' }, t4: { at: 70000, p: 'b' } };
+ctx.__l = log;
+let pace = run('turnPace(__l, 76000)');
+ok('slowest is the longest single turn', pace.slow.pid === 'a' && pace.slow.ms === 45000);
+ok('fastest is the shortest single turn', pace.fast.pid === 'b' && pace.fast.ms === 5000);
+ok('no pace without a log', run('turnPace(null, 5)') === null);
+const board = { byNumber: { 6: [0], 8: [1] } };
+ctx.__g = { seats: ['a', 'b'], bldg: { 0: { p: 'a', t: 's' }, 2: { p: 'b', t: 'c' } }, rolls: { 6: 5, 7: 2, 8: 1 } };
+ctx.__b = board;
+const dice = run('diceFacts(__g, __b)');
+ok('most rolled number and who is on it', dice.most.n === 6 && dice.most.who.join() === 'a');
+ok('least rolled counts never-rolled numbers', dice.least.count === 0);
+ok('too few rolls says nothing', run('diceFacts({ seats: [], bldg: {}, rolls: { 6: 1 } }, __b)') === null);
 
 console.log(failed ? `\n${failed} FAILED` : '\nplay again + stats checks passed');
 process.exit(failed ? 1 : 0);

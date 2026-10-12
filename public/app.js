@@ -1727,9 +1727,13 @@ async function postMove(move, opts, drew, era, context) {
         if (move.type === 'timeout' && !turnDeadlinePassed(data)) { rejected = 'Not yet.'; return; }
         if (move.type === 'expireTrade' && !tradeDeadlinePassed(data, move.id)) { rejected = 'Not yet.'; return; }
         const had = new Set((data.game.trades || []).map((t) => t.id));
+        const prevNum = data.game.turn.num;
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
         data.game = res.game;
+        if (res.game.phase !== 'over' && res.game.turn.num !== prevNum && res.game.turn.num >= 1) {
+          (data.turnLog ||= {})[`t${res.game.turn.num}`] = { at: rtdbServerTimestamp(), p: R.currentPid(res.game) };
+        }
         // Proof somebody is actually at the table — see IDLE_KILL_MS. A stalled turn
         // timing out or a trade offer expiring is the game moving on its own, not that.
         if (move.type !== 'timeout' && move.type !== 'expireTrade') {
@@ -1759,9 +1763,15 @@ async function postMove(move, opts, drew, era, context) {
         if (!canApply(data)) { rejected = 'The game has moved on.'; return; }
         if (move.type === 'timeout' && !turnDeadlinePassed(data)) { rejected = 'Not yet.'; return; }
         if (move.type === 'expireTrade' && !tradeDeadlinePassed(data, move.id)) { rejected = 'Not yet.'; return; }
+        const prevNum = data.game.turn.num;
         const res = R.applyMove(data.game, playerId, move);
         if (!res.ok) { rejected = res.error; return; }
         const patch = { game: res.game };
+        // When each turn began, stamped by the server, so the win screen can say who took
+        // longest and shortest. Keyed "t<n>" because RTDB turns dense numeric keys into arrays.
+        if (res.game.phase !== 'over' && res.game.turn.num !== prevNum && res.game.turn.num >= 1) {
+          patch[`turnLog.t${res.game.turn.num}`] = { at: serverTimestamp(), p: R.currentPid(res.game) };
+        }
         // Proof somebody is actually at the table — see IDLE_KILL_MS. A stalled turn
         // timing out or a trade offer expiring is the game moving on its own, not that.
         if (move.type !== 'timeout' && move.type !== 'expireTrade') {
@@ -1944,6 +1954,7 @@ async function startGameWithSeed(seed) {
       // Offer ids restart at 1 with the new game, so last game's stamps would be read as
       // this game's deadlines.
       tradeDeadlines: {},
+      turnLog: {},
       // Read back by the NEXT game's shuffle, whenever that comes — a rematch resets
       // everything else about the room, but this is exactly the one fact that has to
       // survive that reset for the exclusion to mean anything.
@@ -3463,6 +3474,12 @@ async function finishPause() {
     const made = stampMs(madeValue);
     if (made !== null && shiftMs) patch[`tradeDeadlines.${id}`] = made + shiftMs;
   }
+  // The turn in progress did not run while paused, so its recorded start moves forward too.
+  const live = Object.entries(room.turnLog || {})
+    .map(([k, v]) => [Number(k.slice(1)), k, stampMs(v?.at)])
+    .filter(([n, , t]) => Number.isFinite(n) && t !== null)
+    .sort((a, b) => b[0] - a[0])[0];
+  if (live && shiftMs) patch[`turnLog.${live[1]}.at`] = live[2] + shiftMs;
   try { await withTimeout(updateRoom(patch), 8000); }
   catch { /* another player will finish it */ }
 }
@@ -6251,6 +6268,83 @@ function pointSources(g, pid) {
   ];
 }
 
+/**
+ * The longest and the shortest single turn of the game, and whose they were. A turn runs
+ * from its start stamp to the next one's, the last to the moment the game ended. Turns
+ * under a second are ignored: a bot or an auto-skip says nothing about how anyone plays.
+ */
+function turnPace(log, endMs) {
+  const turns = Object.entries(log || {})
+    .map(([k, v]) => ({ n: Number(k.slice(1)), p: v?.p, at: stampMs(v?.at) }))
+    .filter((t) => Number.isFinite(t.n) && t.p && t.at !== null)
+    .sort((a, b) => a.n - b.n);
+  let slow = null;
+  let fast = null;
+  turns.forEach((t, i) => {
+    const end = i + 1 < turns.length ? turns[i + 1].at : endMs;
+    if (end === null || end === undefined) return;
+    const ms = end - t.at;
+    if (!(ms >= 1000)) return;
+    if (!slow || ms > slow.ms) slow = { pid: t.p, ms };
+    if (!fast || ms < fast.ms) fast = { pid: t.p, ms };
+  });
+  if (!slow || !fast || slow.pid === fast.pid) return null;
+  return { slow, fast };
+}
+
+/** The most and least rolled totals, and who had a settlement or city on those numbers. */
+function diceFacts(g, board) {
+  const tally = g.rolls || {};
+  let total = 0;
+  for (let n = 2; n <= 12; n++) total += tally[n] || 0;
+  if (total < 5 || !board) return null;
+  // Ties go to the likelier total for "most" and the less likely for "least".
+  let most = 7;
+  let least = 2;
+  for (let n = 2; n <= 12; n++) {
+    const c = tally[n] || 0;
+    const m = tally[most] || 0;
+    if (c > m || (c === m && Math.abs(n - 7) < Math.abs(most - 7))) most = n;
+  }
+  for (let n = 2; n <= 12; n++) {
+    const c = tally[n] || 0;
+    const l = tally[least] || 0;
+    if (c < l || (c === l && Math.abs(n - 7) > Math.abs(least - 7))) least = n;
+  }
+  const on = (n) => {
+    const ids = new Set();
+    for (const hi of board.byNumber[n] || []) {
+      for (const v of HEXES[hi].corners) {
+        const b = g.bldg[v];
+        if (b && g.seats.includes(b.p)) ids.add(b.p);
+      }
+    }
+    return g.seats.filter((id) => ids.has(id));
+  };
+  return {
+    most: { n: most, count: tally[most] || 0, who: on(most) },
+    least: { n: least, count: tally[least] || 0, who: on(least) },
+  };
+}
+
+function renderOverFacts(g) {
+  const el = $('over-facts');
+  const rows = [];
+  const pace = solo ? null : turnPace(room?.turnLog, stampMs(room?.endedAt));
+  if (pace) {
+    rows.push(['🐢', `${nameFor(pace.slow.pid)} · longest turn ${spell(pace.slow.ms)}`]);
+    rows.push(['⚡', `${nameFor(pace.fast.pid)} · shortest turn ${spell(pace.fast.ms)}`]);
+  }
+  const dice = diceFacts(g, ensureBoard());
+  const who = (d) => (d.n === 7 ? 'the robber' : d.who.length ? d.who.map(nameFor).join(', ') : 'nobody');
+  if (dice) {
+    rows.push(['🎲', `${dice.most.n} rolled most (${dice.most.count}×) · ${who(dice.most)}`]);
+    rows.push(['🎲', `${dice.least.n} rolled least (${dice.least.count ? `${dice.least.count}×` : 'never'}) · ${who(dice.least)}`]);
+  }
+  el.hidden = !rows.length;
+  el.innerHTML = rows.map(([i, t]) => `<div class="fact"><span>${i}</span><span>${esc(t)}</span></div>`).join('');
+}
+
 function renderOver(g) {
   recordHistory(g);
   const win = g.winner;
@@ -6287,6 +6381,8 @@ function renderOver(g) {
       <div class="final-sources">${lines || '<span class="src-none">no points</span>'}</div>
     </div>`;
   }).join('');
+
+  renderOverFacts(g);
 
   // Play again: who is in, how many are still needed, and what the button says. Counted
   // against whoever is still seated, so someone leaving moves 2/3 to 2/2 by itself.
