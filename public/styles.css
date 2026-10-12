@@ -2731,8 +2731,10 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 @keyframes seven-flash { 0% { opacity: 0; } 14% { opacity: 1; } 100% { opacity: 0; } }
 
 /* ------------------------------------------------------------ a development card played */
+/* Above the sheets (z 50), like the trade swap: buying a card leaves the card shop open, and
+   the reveal must not play behind it. */
 .dev-stage {
-  position: absolute; inset: 0; z-index: 8; pointer-events: none;
+  position: fixed; inset: 0; z-index: 91; pointer-events: none;
   display: grid; place-items: center; perspective: 900px;
 }
 .dev-wrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
