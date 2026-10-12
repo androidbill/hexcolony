@@ -38,6 +38,8 @@ vm.runInContext(`
   const stampMs = (v) => (typeof v === 'number' ? v : null);
   ${shipped('turnPace')}
   ${shipped('diceFacts')}
+  ${shippedConst('TITLES')}
+  ${shipped('winTitles')}
   const HEXES = [{ corners: [0, 1] }, { corners: [2, 3] }];
 `, ctx);
 const run = (code) => vm.runInContext(code, ctx);
@@ -133,6 +135,16 @@ const dice = run('diceFacts(__g, __b)');
 ok('most rolled number and who is on it', dice.most.n === 6 && dice.most.who.join() === 'a');
 ok('least rolled counts never-rolled numbers', dice.least.count === 0);
 ok('too few rolls says nothing', run('diceFacts({ seats: [], bldg: {}, rolls: { 6: 1 } }, __b)') === null);
+
+// ---- titles
+ctx.__t = { seats: ['a', 'b', 'c'], roads: { 1: 'a', 2: 'a', 3: 'a', 4: 'a', 5: 'a', 6: 'a', 7: 'b' },
+  players: { a: { knights: 0 }, b: { knights: 3 }, c: { knights: 3 } },
+  tally: { a: { steals: 3 }, b: { steals: 3, trades: 5 }, c: { devs: 4 } } };
+const ti = run('winTitles(__t)');
+ok('the road leader is the Road Hog', ti.a === 'Road Hog');
+ok('a tie earns nothing (steals 3-3, knights 3-3)', !Object.values(ti).includes('Robber Baron') && !Object.values(ti).includes('Sir Knight'));
+ok('trades and dev cards go to their leaders', ti.b === 'Merchant Prince' && ti.c === 'Card Shark');
+ok('nobody is titled below the minimum', Object.keys(run('winTitles({ seats: ["a","b"], roads: {}, players: {}, tally: {} })')).length === 0);
 
 console.log(failed ? `\n${failed} FAILED` : '\nplay again + stats checks passed');
 process.exit(failed ? 1 : 0);

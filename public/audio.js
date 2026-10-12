@@ -328,6 +328,39 @@ const synth = {
     note(98, { delay: 0.32, dur: 0.18, vol: 0.16, type: 'square', cutoff: 600 });
   },
 
+  // A 7: a low thud with a rumble after it.
+  boom: () => {
+    note(90, { to: 38, dur: 0.5, vol: 0.28, type: 'sine', room: 0.3 });
+    burst({ dur: 0.45, vol: 0.2, freq: 220, q: 0.7, type: 'lowpass', room: 0.25 });
+    note(55, { delay: 0.05, dur: 0.6, vol: 0.18, type: 'triangle', cutoff: 300 });
+  },
+
+  // A Knight's cannon: a flat crack, then the boom rolling away.
+  cannon: () => {
+    burst({ dur: 0.08, vol: 0.3, freq: 1800, q: 0.6, type: 'highpass', room: 0.2 });
+    note(140, { to: 40, dur: 0.55, vol: 0.32, type: 'sine', room: 0.35 });
+    burst({ delay: 0.04, dur: 0.5, vol: 0.18, freq: 260, q: 0.7, type: 'lowpass', room: 0.3 });
+  },
+
+  // A card turning over.
+  flip: () => {
+    burst({ dur: 0.07, vol: 0.12, freq: 3800, q: 0.9, type: 'highpass', room: 0.08 });
+    note(G5, { to: C6, dur: 0.12, vol: 0.09, type: 'sine', delay: 0.05 });
+  },
+
+  // A ship horn, a fifth apart, for a harbour taken.
+  horn: () => {
+    note(196, { dur: 0.5, vol: 0.18, type: 'sawtooth', cutoff: 700, attack: 0.05, room: 0.3 });
+    note(294, { dur: 0.5, vol: 0.12, type: 'sawtooth', cutoff: 800, attack: 0.05, room: 0.3 });
+  },
+
+  // A firework: a thump up, then the pop and the glitter.
+  firework: () => {
+    note(220, { to: 700, dur: 0.22, vol: 0.06, type: 'sine' });
+    burst({ delay: 0.22, dur: 0.12, vol: 0.2, freq: 900, q: 0.7, room: 0.3 });
+    [E6, G6, D6].forEach((f, i) => note(f, { delay: 0.24 + i * 0.05, dur: 0.18, vol: 0.06, type: 'sine', pan: (i - 1) * 0.5 }));
+  },
+
   // A card whipped out of a hand.
   steal: () => {
     burst({ dur: 0.14, vol: 0.16, freq: 2600, q: 1.2, attack: 0.05, room: 0.15 });

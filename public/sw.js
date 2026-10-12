@@ -24,6 +24,7 @@ const CORE = [
   'discord-config.js',
   'render.js',
   'render-fx.js',
+  'fireworks.js',
   'audio.js',
   'wordcodes.js',
   'version.js',

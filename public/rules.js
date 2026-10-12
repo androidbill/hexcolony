@@ -320,6 +320,7 @@ export function newGame(seats, settings, rng = Math.random) {
     tradeIds: 0,
     winner: null,
     rolls: {},
+    tally: {},
     seq: 0,
     log: [],
   };
@@ -361,6 +362,12 @@ function bumpClock(g) {
 
 export const currentPid = (g) => g.seats[g.turn.seat];
 export const isTurn = (g, pid) => currentPid(g) === pid;
+
+/** A per-player running count (steals, trades, ...) for the win screen's titles. */
+function tally(g, pid, key, n = 1) {
+  const t = ((g.tally ||= {})[pid] ||= {});
+  t[key] = (t[key] || 0) + n;
+}
 
 function note(g, events, entry) {
   g.seq = (g.seq || 0) + 1;
@@ -631,6 +638,9 @@ function produce(g, board, roll, events) {
       note(g, events, { t: 'shortfall', res, partial: false });
     }
   }
+  for (const [pid, byRes] of Object.entries(gains)) {
+    tally(g, pid, 'gained', Object.values(byRes).reduce((a, b) => a + b, 0));
+  }
   if (Object.keys(gains).length) note(g, events, { t: 'produce', roll, gains });
   else note(g, events, { t: 'nothing', roll });
   return gains;
@@ -706,6 +716,7 @@ function steal(g, thief, victim, events, rng) {
   const res = pool[Math.floor(rng() * pool.length)];
   vp.res[res] -= 1;
   g.players[thief].res[res] += 1;
+  tally(g, thief, 'steals');
   note(g, events, { t: 'steal', p: thief, from: victim, res });
   return res;
 }
@@ -949,8 +960,9 @@ export function applyMove(state, pid, move, rng = Math.random) {
       g.turn.rolled = true;
       note(g, events, { t: 'roll', p: pid, dice: [d1, d2], roll });
       // A running tally, kept apart from the log because the log sheds old entries.
-      const tally = (g.rolls ||= {});
-      tally[roll] = (tally[roll] || 0) + 1;
+      const rollTally = (g.rolls ||= {});
+      rollTally[roll] = (rollTally[roll] || 0) + 1;
+      if (roll === 7) tally(g, pid, 'sevens');
 
       if (roll === 7) {
         // No robber means no discard either: switching it off takes the whole penalty
@@ -1132,6 +1144,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
       } else {
         me.devNew[card] += 1;
       }
+      tally(g, pid, 'devs');
       note(g, events, { t: 'buyDev', p: pid });
       bumpClock(g);
       checkWin(g, events); // a victory-point card can be the winning card
@@ -1312,6 +1325,8 @@ export function applyMove(state, pid, move, rng = Math.random) {
       for (const [r, n] of Object.entries(deal.want)) if ((them.res[r] || 0) < n) return fail('They no longer have that.');
       for (const [r, n] of Object.entries(deal.give)) { me.res[r] -= n; them.res[r] += n; }
       for (const [r, n] of Object.entries(deal.want)) { them.res[r] -= n; me.res[r] += n; }
+      tally(g, pid, 'trades');
+      tally(g, withPid, 'trades');
       note(g, events, { t: 'trade', p: pid, with: withPid, give: deal.give, want: deal.want });
       bumpClock(g);
       // Only this one closes. The rest stay up; they are separate offers.

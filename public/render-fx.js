@@ -8,7 +8,7 @@
 // Every function takes the BoardView and draws through its context in the same screen
 // space the rest of the board uses (`view.toScreen`, `view.scale` = pixels per hex radius).
 
-import { HEXES, VERTS, EDGES } from './board.js';
+import { HEXES, VERTS, EDGES, edgeOutward } from './board.js';
 
 const TAU = Math.PI * 2;
 const clamp01 = (t) => Math.max(0, Math.min(1, t));
@@ -20,6 +20,9 @@ export const ROAD_DRAW_MS = 300;       // a road drawing itself from one end to 
 const RING_MS = 420;                   // the ripple a landing piece sends across its tile
 const FLASH_MS = 170;                  // the white flash a new city lands with
 const SHAKE_MS = 150;
+const SHIP_SAIL_MS = 1700;             // a ship coming in from the open sea to its harbour
+const STOMP_MS = 650;                  // the dust ring where the robber lands
+const VICTORY_MS = 7000;               // the winner's buildings glowing
 const POP_MS = 1150;                   // a resource icon leaving a paid building for its owner
 const POP_STAGGER_MS = 110;
 const SWEEP_MS = 800;                  // the one-off end-to-end light when Longest Road changes hands
@@ -91,6 +94,9 @@ export class Effects {
     this.landings = [];            // { v, t0 } — when a dropped piece touches its corner
     this.shake = null;             // { t0, amp }
     this.sweep = null;             // { kind, pid, t0 } — an award changing hands
+    this.sailing = new Map();      // port index -> when its ship set off
+    this.stomps = [];              // { hex, t0 } — the robber landing
+    this.victory = null;           // { pid, t0 } — the winner's buildings lit up
     this._trail = null;            // the cached longest trail, and what it was worked out for
   }
 
@@ -99,6 +105,9 @@ export class Effects {
     this.landings.length = 0;
     this.shake = null;
     this.sweep = null;
+    this.sailing.clear();
+    this.stomps.length = 0;
+    this.victory = null;
     this._trail = null;
   }
 
@@ -114,12 +123,25 @@ export class Effects {
   shakeOffset(now) {
     const s = this.shake;
     if (!s) return [0, 0];
-    const u = (now - s.t0) / SHAKE_MS;
+    const u = (now - s.t0) / (s.ms || SHAKE_MS);
     if (u < 0) return [0, 0];
     if (u > 1) { this.shake = null; return [0, 0]; }
     const decay = (1 - u) * s.amp;
-    return [Math.sin(u * 38) * decay, Math.cos(u * 31) * decay * 0.7];
+    return [Math.sin(u * (s.ms ? 70 : 38)) * decay, Math.cos(u * (s.ms ? 58 : 31)) * decay * 0.7];
   }
+
+  /** The whole board jolts: a 7 landing, a cannon firing. */
+  quake(now, amp, ms) { this.shake = { t0: now, amp, ms }; }
+
+  /** The robber has come down on this hex. */
+  stomp(hex, now) { this.stomps.push({ hex, t0: now }); }
+
+  /** A new settlement or city at `v`: if it is on a harbour, that harbour's ship sails in. */
+  shipArrives(v, now, ports) {
+    ports.forEach((p, i) => { if (p.a === v || p.b === v) this.sailing.set(i, now); });
+  }
+
+  celebrate(pid, now) { this.victory = { pid, t0: now }; }
 
   // ------------------------------------------------------------ roads
   /**
@@ -565,6 +587,189 @@ export class Effects {
       c.stroke();
       c.restore();
     }
+  }
+
+  // ------------------------------------------------------------ harbour ships
+  /**
+   * A small ship moored beside each harbour its owner has a building on, in the owner's
+   * colour. A new one sails in from open water the moment the building lands. Always
+   * drawn level — the hull never turns, only the direction it faces — which keeps it
+   * readable at the size it is and avoids a boat spinning round on a rolling sea.
+   */
+  drawShips(view) {
+    const g = view.game;
+    if (!g?.bldg || !view.board?.ports) return;
+    const c = view.ctx;
+    const R = view.scale;
+    const now = view.now;
+    view.board.ports.forEach((p, i) => {
+      const owner = g.bldg[p.a]?.p ?? g.bldg[p.b]?.p;
+      if (!owner) return;
+      const out = edgeOutward(p.edge);
+      const e = EDGES[p.edge];
+      const dock = 1.42;
+      let away = 0;
+      const set = this.sailing.get(i);
+      if (set !== undefined) {
+        const u = (now - set) / SHIP_SAIL_MS;
+        if (u >= 1 || view.calm) this.sailing.delete(i);
+        else if (u > 0) away = (1 - easeOut(u)) * 3.2;
+        else return;                                   // not set off yet
+      }
+      const [x, y] = view.toScreen(e.x + out.x * (dock + away), e.y + out.y * (dock + away));
+      const sailing = away > 0.02;
+      const bob = Math.sin(now / 650 + i * 1.7) * R * 0.025;
+      const dir = out.x > 0 ? -1 : 1;                 // facing in towards the island
+      const s = R * 0.3;
+      c.save();
+      c.translate(x, y + bob);
+      c.scale(dir, 1);
+      if (sailing) {                                   // the wake behind a moving ship
+        c.strokeStyle = 'rgba(255,255,255,0.55)'; c.lineWidth = Math.max(1, R * 0.03); c.lineCap = 'round';
+        for (let k = 1; k <= 3; k++) {
+          c.globalAlpha = 0.5 / k;
+          c.beginPath(); c.moveTo(-s * (1.1 + k * 0.55), s * 0.55); c.lineTo(-s * (0.7 + k * 0.45), s * 0.55); c.stroke();
+        }
+        c.globalAlpha = 1;
+      }
+      c.shadowColor = 'rgba(0,0,0,0.35)'; c.shadowBlur = 4; c.shadowOffsetY = 2;
+      c.beginPath();                                   // hull
+      c.moveTo(-s * 1.0, 0); c.lineTo(s * 1.15, 0); c.lineTo(s * 0.8, s * 0.55); c.lineTo(-s * 0.7, s * 0.55); c.closePath();
+      c.fillStyle = '#5b3a22'; c.fill();
+      c.shadowColor = 'transparent';
+      c.lineWidth = Math.max(1, R * 0.025); c.strokeStyle = '#2a1a0e'; c.stroke();
+      c.strokeStyle = '#2a1a0e'; c.lineWidth = Math.max(1, R * 0.03);   // mast
+      c.beginPath(); c.moveTo(s * 0.1, 0); c.lineTo(s * 0.1, -s * 1.25); c.stroke();
+      const col = view.colorOf(owner);
+      c.beginPath(); c.moveTo(s * 0.18, -s * 1.2); c.lineTo(s * 0.95, -s * 0.15); c.lineTo(s * 0.18, -s * 0.15); c.closePath();
+      c.fillStyle = col; c.fill();
+      c.strokeStyle = '#fff'; c.lineWidth = Math.max(1, R * 0.02); c.stroke();
+      c.beginPath(); c.moveTo(s * 0.02, -s * 1.0); c.lineTo(-s * 0.6, -s * 0.15); c.lineTo(s * 0.02, -s * 0.15); c.closePath();
+      c.fillStyle = shade(col, 0.28); c.fill();
+      c.restore();
+    });
+  }
+
+  // ------------------------------------------------------------ the land comes alive
+  /**
+   * Wheat bending in the wind and leaves coming off the forests, laid over the tile art
+   * inside each tile's own outline. A soft band of light crosses the fields on a loop and
+   * a few leaves drift across the trees. Nothing here is information: it is skipped for
+   * anyone who asked for less motion.
+   */
+  drawTerrainLife(view) {
+    if (view.calm) return;
+    const c = view.ctx;
+    const R = view.scale;
+    const t = view.now / 1000;
+    for (const tile of view.board.tiles) {
+      if (tile.terrain !== 'fields' && tile.terrain !== 'forest') continue;
+      if (view.isFogged(tile)) continue;
+      const [cx, cy] = view.toScreen(tile.x, tile.y);
+      c.save();
+      c.clip(view.hexPath(tile, 0.97));
+      if (tile.terrain === 'fields') {
+        // A gust crossing the field every few seconds: a bright band with a shadow behind.
+        const phase = (t / 3.4 + tile.i * 0.37) % 1;
+        const x = cx + (phase * 3.4 - 1.7) * R;
+        const grad = c.createLinearGradient(x - R * 0.7, cy - R * 0.4, x + R * 0.7, cy + R * 0.4);
+        grad.addColorStop(0, 'rgba(60,40,0,0)');
+        grad.addColorStop(0.35, 'rgba(60,40,0,0.10)');
+        grad.addColorStop(0.62, 'rgba(255,240,160,0.20)');
+        grad.addColorStop(1, 'rgba(255,240,160,0)');
+        c.fillStyle = grad;
+        c.fillRect(cx - R, cy - R, R * 2, R * 2);
+      } else {
+        // Light moving through the canopy.
+        const sway = Math.sin(t * 1.3 + tile.i) * R * 0.12;
+        const grad = c.createRadialGradient(cx + sway, cy - R * 0.1, 0, cx + sway, cy - R * 0.1, R * 0.85);
+        grad.addColorStop(0, 'rgba(255,255,200,0.10)');
+        grad.addColorStop(1, 'rgba(255,255,200,0)');
+        c.fillStyle = grad;
+        c.fillRect(cx - R, cy - R, R * 2, R * 2);
+        // Three leaves, each on its own loop, drifting down and across and turning over.
+        for (let k = 0; k < 3; k++) {
+          const u = (t / 4.2 + k / 3 + tile.i * 0.173) % 1;
+          const lx = cx + (u * 1.7 - 0.85) * R + Math.sin(u * 9 + k) * R * 0.1;
+          const ly = cy - R * 0.5 + u * R * 1.0 + Math.sin(u * 6 + k * 2) * R * 0.08;
+          c.globalAlpha = Math.sin(u * Math.PI) * 0.85;
+          c.fillStyle = k === 1 ? '#d9b44a' : '#7fc15a';
+          c.beginPath();
+          c.ellipse(lx, ly, R * 0.05, R * 0.027, u * 14 + k, 0, TAU);
+          c.fill();
+        }
+      }
+      c.restore();
+    }
+  }
+
+  // ------------------------------------------------------------ the robber lands
+  drawStomps(view) {
+    if (!this.stomps.length) return;
+    if (view.calm) { this.stomps.length = 0; return; }
+    const c = view.ctx;
+    const R = view.scale;
+    const now = view.now;
+    this.stomps = this.stomps.filter((s) => now - s.t0 < STOMP_MS);
+    for (const s of this.stomps) {
+      const u = (now - s.t0) / STOMP_MS;
+      if (u < 0) continue;
+      const tile = view.board.tiles[s.hex];
+      if (!tile) continue;
+      const [cx, cy] = view.toScreen(tile.x, tile.y + 0.05);
+      c.save();
+      for (let k = 0; k < 2; k++) {
+        const uu = clamp01(u - k * 0.12);
+        c.globalAlpha = (1 - uu) * 0.6;
+        c.strokeStyle = k ? 'rgba(255,230,190,0.9)' : 'rgba(120,90,60,0.95)';
+        c.lineWidth = Math.max(2, R * (0.14 - uu * 0.1));
+        c.beginPath(); c.ellipse(cx, cy, R * (0.2 + easeOut(uu) * 0.85), R * (0.12 + easeOut(uu) * 0.5), 0, 0, TAU); c.stroke();
+      }
+      c.restore();
+    }
+  }
+
+  // ------------------------------------------------------------ the winner's colony
+  /** Every building the winner owns glows gold and throws off sparks for a few seconds. */
+  drawVictory(view) {
+    const v = this.victory;
+    const g = view.game;
+    if (!v || !g?.bldg) return;
+    const age = view.now - v.t0;
+    if (age > VICTORY_MS) { this.victory = null; return; }
+    if (age < 0) return;
+    const fade = 1 - smooth(VICTORY_MS - 1200, VICTORY_MS, age);
+    const c = view.ctx;
+    const R = view.scale;
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    let n = 0;
+    for (const [vid, b] of Object.entries(g.bldg)) {
+      if (b.p !== v.pid) continue;
+      const [x, y] = view.toScreen(VERTS[vid].x, VERTS[vid].y);
+      const pulse = 0.5 + 0.5 * Math.sin(age / 240 + n * 0.9);
+      const r = R * (b.t === 'c' ? 0.95 : 0.7) * (0.8 + pulse * 0.35);
+      const grad = c.createRadialGradient(x, y, 0, x, y, r);
+      grad.addColorStop(0, `rgba(255,226,120,${0.7 * fade})`);
+      grad.addColorStop(0.45, `rgba(255,190,60,${0.28 * fade})`);
+      grad.addColorStop(1, 'rgba(255,190,60,0)');
+      c.fillStyle = grad;
+      c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+      // Sparks lifting off, each on its own loop.
+      if (!view.calm) {
+        for (let k = 0; k < 3; k++) {
+          const u = ((age / 1100) + k / 3 + n * 0.21) % 1;
+          const sx = x + Math.sin(u * 7 + k + n) * R * 0.22;
+          const sy = y - u * R * 0.9;
+          c.globalAlpha = (1 - u) * fade;
+          c.fillStyle = '#fff4c0';
+          c.fillRect(sx - R * 0.018, sy - R * 0.018, R * 0.036, R * 0.036);
+        }
+        c.globalAlpha = 1;
+      }
+      n++;
+    }
+    c.restore();
   }
 
   // ------------------------------------------------------------ the robber and the light

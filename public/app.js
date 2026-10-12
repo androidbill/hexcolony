@@ -19,6 +19,7 @@ import {
   rtdb, RTDB_READY, rtdbRef, rtdbGet, rtdbSet, rtdbUpdate, rtdbRemove, rtdbPush,
   rtdbOnValue, rtdbRunTransaction, rtdbServerTimestamp, rtdbGoOffline, rtdbGoOnline,
 } from './fb.js';
+import { launchFireworks } from './fireworks.js';
 import { IN_DISCORD, initDiscord, discordRoomCode } from './discord.js';
 import { findBadWord, maskText } from './clean.js';
 import { WORD_CODES } from './wordcodes.js';
@@ -3796,6 +3797,14 @@ function maybeHalfway(g, pid, delta) {
   }
 }
 
+const FIREWORKS_MS = 3600;
+function fireworks(winnerColour) {
+  const cv = $('fireworks');
+  if (!cv || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+  launchFireworks(cv, [winnerColour, winnerColour, '#ffd75a', '#ffffff', ...R.PLAYER_COLORS.map((c) => c.hex)],
+    FIREWORKS_MS, () => sfx.firework());
+}
+
 /**
  * The win moment: sound, shoutout, confetti, then the results once the shoutout has had
  * its say. Shared by an actual scored win and a resignation that ends the game outright
@@ -3807,6 +3816,8 @@ function celebrateWin(winner) {
   (winner === playerId ? sfx.win : sfx.lose)();
   shoutout(`${winner === playerId ? 'You win' : `${nameFor(winner)} wins`}!`, colorFor(winner));
   confetti(colorFor(winner));
+  fireworks(colorFor(winner));
+  view.celebrate(winner);
   // The results are worth reading, but not over the top of the moment they are about.
   // They follow once the shoutout has had its say.
   celebrating = true;
@@ -3849,6 +3860,8 @@ function reactToLog(g) {
     switch (e.t) {
       case 'roll':
         sfx.dice(); playRoll(e.dice); view.setRolled(e.roll);
+        // A 7 lands with the dice: the board jolts and the edges go red.
+        if (e.roll === 7) setTimeout(sevenImpact, ROLL_TUMBLE_MS);
         // The one number that changes the rules of the turn, the first time it shows
         // up. Every 7 after the first is just the game working as designed.
         if (e.roll === 7 && !g.log.some((x) => x.t === 'roll' && x.roll === 7 && x.i < e.i)) {
@@ -3880,7 +3893,7 @@ function reactToLog(g) {
         if (e.what === 'settlement' || e.what === 'city') maybeHalfway(g, e.p, 1);
         break;
       }
-      case 'robber': sfx.robber(); break;
+      case 'robber': sfx.robber(); view.robberMoved(e.hex); break;
       case 'steal':
         sfx.steal();
         if (e.p === playerId || e.from === playerId) {
@@ -3908,7 +3921,7 @@ function reactToLog(g) {
         sfx.card();
         // Monopoly gets its own bigger shoutout below (see 'mono', logged as a second
         // entry in this same move) — this would just repeat it a beat earlier.
-        if (e.card !== 'mono') {
+        if (e.card !== 'mono' && !playDevReveal(e)) {
           shoutout(`${e.p === playerId ? 'You' : nameFor(e.p)} played ${R.DEV_INFO[e.card]?.name || e.card}`, colorFor(e.p));
         }
         break;
@@ -4415,9 +4428,76 @@ function renderTrayRing(g) {
  * the spin ends. Spinning through random digits and landing on it is a lie the eye
  * catches, and it makes the moment about the animation instead of about the roll.
  */
-const ROLL_TUMBLE_MS = 620;
+const ROLL_TUMBLE_MS = 800;
 const ROLL_SETTLE_MS = 400;
 let rollTimers = [];
+
+// Which of the nine pip cells are lit for each face.
+const PIPS = { 1: [4], 2: [0, 8], 3: [0, 4, 8], 4: [0, 2, 6, 8], 5: [0, 2, 4, 6, 8], 6: [0, 2, 3, 5, 6, 8] };
+function paintDie(el, n) {
+  el.innerHTML = Array.from({ length: 9 }, (_, i) => `<i${PIPS[n]?.includes(i) ? ' class="on"' : ''}></i>`).join('');
+}
+
+// A development card being played: it comes up face down, turns over to show what it is,
+// and the card does its thing — a Knight fires a cannon, Road Building lays a road, Year of
+// Plenty throws sparkles. Two seconds in all, like the other announcements.
+const DEV_ART = { knight: '⚔️', road: '🛣️', plenty: '🌾' };
+const DEV_HOLD_MS = 1700;
+let devTimers = [];
+
+function playDevReveal(e) {
+  const stage = $('dev-stage');
+  if (!stage) return false;
+  for (const t of devTimers) clearTimeout(t);
+  devTimers = [];
+  const info = R.DEV_INFO[e.card] || { name: e.card, blurb: '' };
+  const who = e.p === playerId ? 'You' : nameFor(e.p);
+  const dir = (n) => Array.from({ length: n }, (_, i) => {
+    const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+    const d = 60 + Math.random() * 60;
+    return `--dx:${Math.round(Math.cos(a) * d)}px;--dy:${Math.round(Math.sin(a) * d - 20)}px`;
+  });
+  let extra = '';
+  if (e.card === 'knight') {
+    extra = '<i class="boom-flash"></i>' + dir(6).map((v) => `<i class="boom-puff" style="${v}"></i>`).join('');
+  } else if (e.card === 'road') {
+    extra = '<div class="dev-road"></div>';
+  } else if (e.card === 'plenty') {
+    extra = dir(7).map((v) => `<span class="dev-spark" style="${v}">✨</span>`).join('');
+  }
+  stage.style.setProperty('--c', colorFor(e.p));
+  stage.innerHTML = `<div class="dev-wrap">
+      <div class="dev-card">
+        <div class="dev-face dev-back">🎴</div>
+        <div class="dev-face dev-front">
+          <div class="dev-ico">${DEV_ART[e.card] || '🎴'}</div>
+          <div class="dev-name">${esc(info.name)}</div>
+          <div class="dev-blurb">${esc(info.blurb)}</div>
+        </div>
+      </div>
+      <div class="dev-caption">${esc(who)} played ${esc(info.name)}</div>
+      ${extra}
+    </div>`;
+  stage.classList.remove('out');
+  stage.hidden = false;
+  devTimers.push(setTimeout(() => sfx.flip(), 450));
+  if (e.card === 'knight') devTimers.push(setTimeout(() => { sfx.cannon(); view.cannonFired(); buzz([60, 30, 60]); }, 780));
+  devTimers.push(setTimeout(() => stage.classList.add('out'), DEV_HOLD_MS));
+  devTimers.push(setTimeout(() => { stage.hidden = true; stage.classList.remove('out'); stage.innerHTML = ''; }, DEV_HOLD_MS + 300));
+  return true;
+}
+
+function sevenImpact() {
+  sfx.boom();
+  buzz([70, 40, 90]);
+  view.sevenRolled();
+  const flash = $('seven-flash');
+  if (!flash || window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches) return;
+  flash.hidden = false;
+  flash.style.animation = 'none'; void flash.offsetWidth; flash.style.animation = '';
+  clearTimeout(flash._t);
+  flash._t = setTimeout(() => { flash.hidden = true; }, 1000);
+}
 
 function playRoll(dice) {
   const stage = $('dice-stage');
@@ -4428,6 +4508,8 @@ function playRoll(dice) {
   rollTimers = [];
 
   die.textContent = String(dice[0] + dice[1]);
+  paintDie($('tdie-a'), dice[0]);
+  paintDie($('tdie-b'), dice[1]);
 
   stage.hidden = false;
   stage.classList.remove('rolling', 'settling');
@@ -4436,8 +4518,10 @@ function playRoll(dice) {
   stage.classList.add('rolling');
 
   rollTimers.push(setTimeout(() => {
+    // The two dice have landed; they give way to the total, which flies to the readout.
     // Measured now, not earlier: the status row only takes its final position once the
     // turn badge has the text for this turn.
+    stage.classList.remove('rolling');
     const from = die.getBoundingClientRect();
     const to = $('die-sum')?.getBoundingClientRect();
     if (to && to.width) {
@@ -4445,7 +4529,6 @@ function playRoll(dice) {
       die.style.setProperty('--dy', `${Math.round(to.top + to.height / 2 - (from.top + from.height / 2))}px`);
       die.style.setProperty('--ds', (to.width / from.width).toFixed(3));
     }
-    stage.classList.remove('rolling');
     stage.classList.add('settling');
   }, ROLL_TUMBLE_MS));
 
@@ -6366,6 +6449,36 @@ function diceFacts(g, board) {
   };
 }
 
+/**
+ * Light-hearted titles for the results. Each is held by whoever leads its count outright
+ * (a tie earns nothing) and has reached a minimum, and nobody gets more than one: the
+ * list is worked through in order, so a player already titled is passed over.
+ */
+const TITLES = [
+  { title: 'Road Hog', min: 6, count: (g, pid) => Object.values(g.roads || {}).filter((p) => p === pid).length },
+  { title: 'Robber Baron', min: 2, count: (g, pid) => g.tally?.[pid]?.steals || 0 },
+  { title: 'Sir Knight', min: 2, count: (g, pid) => g.players?.[pid]?.knights || 0 },
+  { title: 'Merchant Prince', min: 3, count: (g, pid) => g.tally?.[pid]?.trades || 0 },
+  { title: 'Card Shark', min: 3, count: (g, pid) => g.tally?.[pid]?.devs || 0 },
+  { title: 'Seven Slinger', min: 2, count: (g, pid) => g.tally?.[pid]?.sevens || 0 },
+  { title: 'Resource Tycoon', min: 15, count: (g, pid) => g.tally?.[pid]?.gained || 0 },
+];
+
+function winTitles(g) {
+  const out = {};
+  for (const t of TITLES) {
+    const ranked = (g.seats || []).filter((pid) => !out[pid])
+      .map((pid) => ({ pid, n: t.count(g, pid) })).sort((a, b) => b.n - a.n);
+    if (!ranked.length || ranked[0].n < t.min) continue;
+    // The leader must lead everyone, including players who already have a title.
+    const everyone = (g.seats || []).map((pid) => t.count(g, pid)).sort((a, b) => b - a);
+    if (everyone[1] !== undefined && everyone[0] === everyone[1]) continue;
+    if (t.count(g, ranked[0].pid) !== everyone[0]) continue;
+    out[ranked[0].pid] = t.title;
+  }
+  return out;
+}
+
 function renderOverFacts(g) {
   const el = $('over-facts');
   const rows = [];
@@ -6404,6 +6517,7 @@ function renderOver(g) {
     <div class="over-meta">${esc(bits.join(' · '))}</div>`;
 
   const rows = g.seats.slice().sort((a, b) => R.totalVP(g, b) - R.totalVP(g, a));
+  const titles = winTitles(g);
   $('final-table').innerHTML = rows.map((pid, i) => {
     const src = pointSources(g, pid).filter((s) => s.n > 0);
     const lines = src.map((s) => `<span class="src">
@@ -6414,7 +6528,7 @@ function renderOver(g) {
     return `<div class="final-row${pid === win ? ' win' : ''}" style="--c:${esc(colorFor(pid))}">
       <div class="final-top">
         <span class="final-pos">${i + 1}</span>
-        <span class="final-name">${esc(nameFor(pid))}</span>
+        <span class="final-name">${esc(nameFor(pid))}${titles[pid] ? `<span class="final-title">${esc(titles[pid])}</span>` : ''}</span>
         <span class="final-vp">${R.totalVP(g, pid)}</span>
       </div>
       <div class="final-sources">${lines || '<span class="src-none">no points</span>'}</div>

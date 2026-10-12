@@ -359,6 +359,7 @@ export class BoardView {
     const now = performance.now();
     this.built.set(v, now);
     this.fx.landing(v, now + BUILD_DROP_MS);
+    if (this.board?.ports) this.fx.shipArrives(v, now + BUILD_DROP_MS * 0.6, this.board.ports);
   }
 
   /** A road was just laid on this edge: it draws itself from one end. */
@@ -368,6 +369,23 @@ export class BoardView {
   }
 
   /** Longest Road or Largest Army just changed hands. */
+  /** A 7: the whole board jolts. */
+  sevenRolled() { if (!this.calm) this.fx.quake(performance.now(), 6, 520); }
+
+  /** The robber came down on `hex`. */
+  robberMoved(hex) {
+    if (this.calm || !Number.isInteger(hex)) return;
+    const now = performance.now();
+    this.fx.stomp(hex, now);
+    this.fx.quake(now, 3, 280);
+  }
+
+  /** A cannon fired from a Knight card. */
+  cannonFired() { if (!this.calm) this.fx.quake(performance.now(), 5, 380); }
+
+  /** The game is won: the winner's buildings light up. */
+  celebrate(pid) { this.fx.celebrate(pid, performance.now()); }
+
   awardChanged(kind, pid) { this.fx.awardChanged(kind, pid, performance.now()); }
 
   /**
@@ -638,8 +656,10 @@ export class BoardView {
     }
     this.drawCoast();
     for (const tile of this.board.tiles) this.drawHex(tile);
+    if (fx) fx.drawTerrainLife(this);
     if (paying) this.drawPayingHexes(paying);
     this.drawPorts();
+    if (fx) fx.drawShips(this);
     // Dusk and night go over the sea and the tiles only, so nothing a player has to read
     // or tap — pieces, roads, highlights — is ever dimmed by the time of day.
     if (fx && this.night) fx.drawSky(this, this.night);
@@ -648,8 +668,9 @@ export class BoardView {
     this.drawEdgeHighlights();
     if (fx) fx.drawRoadLight(this);
     this.drawBuildings();
-    if (fx) { fx.drawLandings(this); fx.drawArmyBadges(this); }
+    if (fx) { fx.drawLandings(this); fx.drawArmyBadges(this); fx.drawVictory(this); }
     this.drawRobber();
+    if (fx) fx.drawStomps(this);
     this.drawVertexHighlights();
     this.drawCityHighlights();
     if (this.zoom) this.drawRolledTokens(this.zoom.k);

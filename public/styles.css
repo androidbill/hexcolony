@@ -2383,6 +2383,10 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
      know when to take each stage down. */
   @keyframes die-spin { from { opacity: 0; } to { opacity: 1; transform: none; } }
   @keyframes die-settle { to { opacity: 0; transform: none; } }
+  @keyframes tdie-a { from { opacity: 0; transform: translate(-66px, 0); } }
+  @keyframes tdie-b { from { opacity: 0; transform: translate(66px, 0); } }
+  @keyframes dev-flip { from { opacity: 0; transform: rotateY(180deg); } }
+  @keyframes seven-flash { from { opacity: 0; } to { opacity: 0; } }
   @keyframes gain-in { from { opacity: 0; } to { opacity: 1; transform: none; } }
   @keyframes gain-away { to { opacity: 0; transform: none; } }
   @keyframes gain-stolen { to { opacity: 0; transform: none; } }
@@ -2676,3 +2680,114 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .over-facts { display: grid; gap: 2px; margin: 6px 0 2px; font-size: 12px; color: var(--muted, #9bb); }
 .over-facts .fact { display: flex; gap: 6px; align-items: baseline; line-height: 1.3; }
 .over-facts[hidden] { display: none; }
+
+
+/* ------------------------------------------------------------ the dice, thrown for real
+   Two dice with pips are thrown in from opposite corners, bounce twice and settle; then
+   they give way to the single total die that flies down to the readout, as before. */
+.tdice { position: absolute; inset: 0; display: none; place-items: center; }
+.dice-stage.rolling .tdice { display: grid; }
+.dice-stage.rolling .bigdie { animation: none; visibility: hidden; }
+.tdie {
+  grid-area: 1 / 1;
+  width: 76px; height: 76px; border-radius: 16px;
+  background: linear-gradient(160deg, #fdf6e4, var(--parch));
+  box-shadow: 0 14px 30px rgba(0, 0, 0, .5), inset 0 -4px 0 rgba(0, 0, 0, .18);
+  display: grid; grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+  padding: 12px; gap: 2px;
+  will-change: transform, opacity;
+}
+.tdie i { border-radius: 50%; }
+.tdie i.on { background: var(--ink); box-shadow: inset 0 -2px 0 rgba(255, 255, 255, .25); }
+#tdie-a { animation: tdie-a .78s linear both; }
+#tdie-b { animation: tdie-b .78s linear both; }
+@keyframes tdie-a {
+  0%   { opacity: 0; transform: translate(-46vw, -60vh) rotate(-700deg) scale(1.5); animation-timing-function: cubic-bezier(.5, 0, .9, .6); }
+  10%  { opacity: 1; }
+  40%  { transform: translate(-66px, 0) rotate(-200deg) scale(1); animation-timing-function: cubic-bezier(.1, .5, .5, 1); }
+  54%  { transform: translate(-60px, -54px) rotate(-100deg); animation-timing-function: cubic-bezier(.5, 0, .9, .6); }
+  68%  { transform: translate(-66px, 0) rotate(-30deg); animation-timing-function: cubic-bezier(.1, .5, .5, 1); }
+  78%  { transform: translate(-64px, -16px) rotate(-10deg); animation-timing-function: cubic-bezier(.5, 0, .9, .6); }
+  88%, 100% { opacity: 1; transform: translate(-66px, 0) rotate(-6deg); }
+}
+@keyframes tdie-b {
+  0%   { opacity: 0; transform: translate(46vw, -50vh) rotate(640deg) scale(1.5); animation-timing-function: cubic-bezier(.5, 0, .9, .6); }
+  12%  { opacity: 1; }
+  36%  { transform: translate(66px, 0) rotate(190deg) scale(1); animation-timing-function: cubic-bezier(.1, .5, .5, 1); }
+  51%  { transform: translate(60px, -46px) rotate(110deg); animation-timing-function: cubic-bezier(.5, 0, .9, .6); }
+  65%  { transform: translate(66px, 0) rotate(34deg); animation-timing-function: cubic-bezier(.1, .5, .5, 1); }
+  76%  { transform: translate(64px, -14px) rotate(14deg); animation-timing-function: cubic-bezier(.5, 0, .9, .6); }
+  86%, 100% { opacity: 1; transform: translate(66px, 0) rotate(7deg); }
+}
+
+/* ------------------------------------------------------------ a 7 */
+.seven-flash {
+  position: absolute; inset: 0; z-index: 7; pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(190, 20, 20, 0) 38%, rgba(190, 20, 20, .6) 100%);
+  animation: seven-flash .95s ease-out both;
+}
+@keyframes seven-flash { 0% { opacity: 0; } 14% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ------------------------------------------------------------ a development card played */
+.dev-stage {
+  position: absolute; inset: 0; z-index: 8; pointer-events: none;
+  display: grid; place-items: center; perspective: 900px;
+}
+.dev-wrap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+.dev-stage.out .dev-wrap { animation: award-out .3s ease-in both; }
+.dev-card {
+  position: relative; width: min(46vw, 180px); aspect-ratio: 5 / 7;
+  transform-style: preserve-3d;
+  animation: dev-flip 1.1s cubic-bezier(.3, 1.1, .4, 1) both;
+}
+.dev-face {
+  position: absolute; inset: 0; border-radius: 16px;
+  backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 8px; padding: 12px; text-align: center;
+  border: 3px solid var(--c, var(--gold));
+  box-shadow: 0 18px 44px rgba(0, 0, 0, .6);
+}
+.dev-back { background: repeating-linear-gradient(45deg, #10304b 0 10px, #0c2740 10px 20px); font-size: 44px; }
+.dev-front { transform: rotateY(180deg); background: linear-gradient(160deg, #fdf6e4, var(--parch)); color: var(--ink); }
+.dev-ico { font-size: 56px; line-height: 1; }
+.dev-name { font-weight: 800; font-size: 18px; }
+.dev-blurb { font-size: 11.5px; opacity: .75; line-height: 1.3; }
+.dev-caption {
+  background: rgba(8, 24, 40, .94); border: 2px solid var(--c, var(--gold)); border-radius: 999px;
+  padding: 8px 18px; font-weight: 800; font-size: 15px; color: var(--parch); white-space: nowrap;
+  animation: award-take-in .3s .1s both;
+}
+@keyframes dev-flip {
+  0%   { opacity: 0; transform: translateY(70px) scale(.5) rotateY(0deg); }
+  24%  { opacity: 1; transform: translateY(0) scale(1.05) rotateY(0deg); }
+  42%  { transform: translateY(0) scale(1) rotateY(0deg); }
+  72%, 100% { opacity: 1; transform: translateY(0) scale(1) rotateY(180deg); }
+}
+/* A Knight's cannon, going off as the card lands */
+.boom-flash, .boom-puff { position: absolute; left: 50%; top: 42%; border-radius: 50%; pointer-events: none; }
+.boom-flash {
+  width: 120px; height: 120px; margin: -60px 0 0 -60px;
+  background: radial-gradient(circle, #fff8d0 0%, #ffb23a 40%, rgba(255, 120, 20, 0) 70%);
+  opacity: 0; animation: boom-flash .5s .78s ease-out both;
+}
+.boom-puff {
+  width: 46px; height: 46px; margin: -23px 0 0 -23px;
+  background: radial-gradient(circle, rgba(220, 220, 220, .85), rgba(120, 120, 120, 0) 70%);
+  opacity: 0; animation: boom-puff 1s .82s ease-out both;
+}
+@keyframes boom-flash { 0% { opacity: 1; transform: scale(.3); } 100% { opacity: 0; transform: scale(2.6); } }
+@keyframes boom-puff { 0% { opacity: .9; transform: translate(0, 0) scale(.4); } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.8); } }
+.dev-road { height: 10px; width: 150px; border-radius: 6px; background: var(--c, var(--gold)); transform-origin: left; transform: scaleX(0); animation: dev-road .5s .8s ease-out forwards; border: 2px solid #fff; }
+@keyframes dev-road { to { transform: scaleX(1); } }
+.dev-spark { position: absolute; left: 50%; top: 40%; font-size: 24px; opacity: 0; animation: dev-spark 1s .8s ease-out both; }
+@keyframes dev-spark { 0% { opacity: 0; transform: translate(0, 10px) scale(.5); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.2); } }
+
+/* ------------------------------------------------------------ fireworks and titles */
+.fireworks { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 95; }
+.final-title {
+  margin-left: 6px; padding: 1px 8px; border-radius: 999px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .02em;
+  background: rgba(227, 186, 87, .2); color: var(--gold);
+  white-space: nowrap;
+}
