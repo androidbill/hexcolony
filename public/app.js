@@ -643,6 +643,10 @@ function roomBackendOf(code) {
 function makeRoomCode(backend) {
   return backend === 'rtdb' ? `R${makeCode()}` : makeCode();
 }
+/** What people see and say: the word alone. The R that picks the database stays internal. */
+function shownCode(code) {
+  return roomBackendOf(code) === 'rtdb' ? code.slice(1) : code;
+}
 
 /**
  * RTDB drops any object or array that serializes empty — `bldg: {}`, `log: []`, an empty
@@ -812,8 +816,8 @@ async function joinCode(code, btn = null) {
     let data = null;
     try {
       data = await getRoomData(code, 6000);
-      if (!data) return toast(`Room ${code} not found.`);
-      if (roomIsStale(data)) return toast(`Room ${code} has expired — ask for a new code.`);
+      if (!data) return toast(`Room ${shownCode(code)} not found.`);
+      if (roomIsStale(data)) return toast(`Room ${shownCode(code)} has expired — ask for a new code.`);
     } catch {
       // Lookup hung; join optimistically and let the listener bounce us if it's wrong.
     }
@@ -934,10 +938,17 @@ $('btn-join-code').addEventListener('click', () => {
   sheet('sheet-join');
   $('join-code-input').focus();
 });
-function submitJoinCode() {
-  const code = $('join-code-input').value.trim().toUpperCase();
+async function submitJoinCode() {
+  let code = $('join-code-input').value.trim().toUpperCase();
   if (!code) return;
   closeSheet();
+  // People type just the word. New rooms are all Realtime Database ones, whose real code has
+  // an R in front, so that is tried first; a word with no such room is an older Firestore room.
+  if (/^[A-Z]{4}$/.test(code)) {
+    let found = false;
+    try { found = !!(await getRoomData(`R${code}`, 6000)); } catch { /* fall through to the plain word */ }
+    if (found) code = `R${code}`;
+  }
   joinCode(code);
 }
 $('join-code-go').addEventListener('click', () => { sfx.tap(); submitJoinCode(); });
@@ -2565,9 +2576,9 @@ $('lobby-code').addEventListener('click', copyCode);
 
 async function copyCode() {
   try {
-    await navigator.clipboard.writeText(roomCode);
-    toast(`Copied ${roomCode}`);
-  } catch { toast(`Room code: ${roomCode}`); }
+    await navigator.clipboard.writeText(shownCode(roomCode));
+    toast(`Copied ${shownCode(roomCode)}`);
+  } catch { toast(`Room code: ${shownCode(roomCode)}`); }
 }
 
 for (const b of document.querySelectorAll('[data-set]')) {
@@ -2649,7 +2660,7 @@ for (const b of document.querySelectorAll('[data-dynsize]')) {
 $('btn-start').addEventListener('click', beginMapChoice);
 
 function renderLobby() {
-  $('lobby-code').textContent = roomCode || '----';
+  $('lobby-code').textContent = roomCode ? shownCode(roomCode) : '----';
   const ids = Object.keys(room.players || {})
     .sort((a, b) => (room.players[a].joinedAt || 0) - (room.players[b].joinedAt || 0));
   $('lobby-count').textContent = `${ids.length}/${R.MAX_PLAYERS}`;
@@ -6786,7 +6797,7 @@ async function shareApp() {
   const url = location.origin + location.pathname;
   const inRoom = !!roomCode && !solo;
   const text = inRoom
-    ? `Join my HexColony game — room code ${roomCode}`
+    ? `Join my HexColony game — room code ${shownCode(roomCode)}`
     : 'Play HexColony with me — settle the island.';
   try {
     if (navigator.share) { await navigator.share({ title: 'HexColony', text, url }); return; }
