@@ -145,6 +145,43 @@ function showScreen(id) {
 }
 
 let toastTimer = null;
+// A rolling record of what this phone was asked to do and what became of it, for the debug
+// report (Menu -> Send debug report). Taps, moves sent, and any move the server refused or
+// the app dropped silently: exactly what is missing when somebody says "it just would not let
+// me", and the room is gone by the time anyone looks.
+const diagLog = [];
+function diag(ev, data = {}) {
+  diagLog.push({ t: new Date().toISOString().slice(11, 23), ev, ...data });
+  if (diagLog.length > 80) diagLog.shift();
+}
+
+function debugReport() {
+  const g = game();
+  const me = g?.players?.[playerId];
+  const myBuild = !!g && R.isTurn(g, playerId) && g.phase === 'build';
+  return JSON.stringify({
+    version: APP_VERSION, at: new Date().toISOString(), ua: navigator.userAgent,
+    room: roomCode, me: playerId, name: nameFor(playerId),
+    layout: g?.layout, seed: g?.seed, phase: g?.phase, turn: g?.turn,
+    hand: me?.res, left: me?.left, dev: me?.dev, devNew: me?.devNew,
+    canBuild: g ? R.whatCanIBuild(g, playerId) : null,
+    highlights: g ? R.highlightsFor(g, playerId) : null,
+    legalSettlements: myBuild ? R.legalSettlements(g, playerId) : null,
+    legalRoads: myBuild ? R.legalRoads(g, playerId) : null,
+    roads: g?.roads, bldg: g?.bldg, trades: g?.trades, pending: g?.pending, award: g?.award,
+    pause: room?.pause || null, log: (g?.log || []).slice(-30), diag: diagLog,
+  });
+}
+
+async function sendDebugReport() {
+  const text = debugReport();
+  try {
+    if (navigator.share) { await navigator.share({ title: 'HexColony debug report', text }); return; }
+  } catch (e) { if (e?.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(text); toast('Debug report copied — paste it into a message.'); }
+  catch { toast('Could not copy the report.'); }
+}
+
 function toast(msg) {
   const t = $('toast');
   t.textContent = msg;
@@ -1594,6 +1631,7 @@ function send(move, opts = {}) {
     // be current when a sleeping phone's queued transaction eventually runs.
     if (move.type === 'timeout') context.turn = turnIdentity(room);
   }
+  diag('send', { type: move.type, what: move.what, v: move.v, e: move.e, phase: g?.phase });
   const undoable = move.type === 'build' && g && g.phase === 'build';
   const drew = drawGuess(move);
   const era = sendEra;
@@ -1720,8 +1758,8 @@ const ACTING_MOVES = new Set(['build', 'buyDev']);
 async function postMove(move, opts, drew, era, context) {
   // A move queued behind one the server refused was reasoned from a state that never
   // happened. Sending it anyway would be asking for a second, more confusing refusal.
-  if (era !== sendEra) return false;
-  if (!currentSession(context.session, context.ref) || room?.game?.seed !== context.seed) return false;
+  if (era !== sendEra) { diag('dropped', { why: 'queued behind a refused move', type: move.type, what: move.what }); return false; }
+  if (!currentSession(context.session, context.ref) || room?.game?.seed !== context.seed) { diag('dropped', { why: 'session or game changed', type: move.type }); return false; }
   const ref = context.ref;
   const canApply = (data) => currentSession(context.session, ref)
     && data.game?.seed === context.seed
@@ -1832,6 +1870,7 @@ async function postMove(move, opts, drew, era, context) {
   }
   if (!currentSession(context.session, ref) || room?.game?.seed !== context.seed) return false;
   if (rejected) {
+    diag('rejected', { reason: rejected, type: move.type, what: move.what, v: move.v, e: move.e });
     // Whatever was drawn for this move did not happen. Put the server's state back
     // before saying so, so the message and the board agree.
     if (drew) { sendEra += 1; dropGuess(); }
@@ -2919,18 +2958,25 @@ function whyNotSettle(g, wx, wy) {
     return 'You need wood, brick, sheep and wheat to build a settlement.';
   }
   if (me.left.settlement <= 0) return 'You have no settlements left — upgrade one to a city to get a piece back.';
-  return null;
+  // Every reason checked and none applies: the corner is legal, and it was not highlighted.
+  return R.legalSettlements(g, playerId).includes(best.i) ? 'unexplained' : null;
 }
 
 view.onPick = (hit) => {
   const g = game();
   if (!g) return;
   unlock();
+  diag('tap', { kind: hit.kind, id: hit.id, phase: g.phase, myTurn: R.isTurn(g, playerId) });
 
   if (hit.kind === 'info') {
     // A tap that landed on a corner which is NOT a legal place to build is worth explaining:
     // the board only highlights legal spots, so otherwise it just does nothing.
     const why = whyNotSettle(g, hit.wx, hit.wy);
+    if (why === 'unexplained') {
+      diag('unexplained corner tap');
+      toast('The game says that corner is fine but is not offering it. Menu → Send debug report.');
+      return;
+    }
     if (why) { toast(why); return; }
     const t = board.tiles[hit.id];
     const tip = $('tile-tip');
@@ -6654,6 +6700,7 @@ $('game-log-btn').addEventListener('click', () => { const g = game(); if (g) ope
 $('menu-players').addEventListener('click', openPlayers);
 $('menu-history').addEventListener('click', openHistory);
 $('menu-pause').addEventListener('click', openPause);
+$('menu-debug').addEventListener('click', () => { closeSheet(); sendDebugReport(); });
 $('menu-how').addEventListener('click', openHow);
 $('menu-settings').addEventListener('click', openSettings);
 $('menu-leave').addEventListener('click', () => { sheet('sheet-leave-confirm'); });
