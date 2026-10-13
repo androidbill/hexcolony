@@ -34,6 +34,8 @@ import * as R from './rules.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
+// How long a finished game stays in the database after everyone has left it.
+const ARCHIVE_MS = 24 * 60 * 60 * 1000;
 const LOBBY_IDLE_TTL_MS = 30 * 60 * 1000;
 // How long "Create a Room" will still treat a remembered room as its OWN previous
 // attempt retrying (a cellular handoff can make a create look failed even after it
@@ -792,7 +794,9 @@ async function createRoom() {
       const candidate = makeRoomCode(backend);
       try {
         const data = await getRoomData(candidate, 4000);
-        if (!data || roomIsStale(data)) { code = candidate; break; }
+        // A finished game that is being kept for inspection holds its code for a day.
+        const held = data?.state === 'over' && Date.now() - (stampMs(data.endedAt) ?? 0) < ARCHIVE_MS;
+        if (!data || (roomIsStale(data) && !held)) { code = candidate; break; }
       } catch {
         // The lookup hung on a flaky connection. Take the code rather than stall.
         code = candidate;
@@ -1500,7 +1504,12 @@ async function leaveRoom(removeSelf = true) {
   if (removeSelf && ref && oldRoom) {
     try {
       if (ref.backend === 'rtdb') {
-        if (!others.length || isHost) {
+        const finished = oldRoom.state === 'over';
+        if (finished && !others.length) {
+          // A finished game is kept for a day instead of deleted, so that when somebody says
+          // "it would not let me build there" the game can still be read afterwards.
+          await rtdbUpdate(ref.ref, { archivedAt: rtdbServerTimestamp() });
+        } else if ((!others.length || isHost) && !finished) {
           await rtdbRemove(ref.ref);
         } else if (wasPlaying) {
           await rtdbRunTransaction(ref.ref, (data) => {
