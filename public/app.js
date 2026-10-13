@@ -2896,12 +2896,42 @@ function ensureBoard() {
   return board;
 }
 
+/**
+ * Why a corner the player just tapped cannot be built on, or null if it is not a case worth
+ * a message (not their build step, or the tap was nowhere near a corner).
+ */
+function whyNotSettle(g, wx, wy) {
+  if (!Number.isFinite(wx) || !g || g.phase !== 'build' || !R.isTurn(g, playerId)) return null;
+  let best = null, bestD = 0.3;
+  for (const v of VERTS) {
+    const d = Math.hypot(v.x - wx, v.y - wy);
+    if (d < bestD) { bestD = d; best = v; }
+  }
+  if (!best) return null;
+  const me = g.players[playerId];
+  const at = g.bldg[best.i];
+  if (at) return at.p === playerId && at.t === 's' ? null : 'There is already a building there.';
+  if (g.turn.freeRoads > 0) return `Place your ${g.turn.freeRoads > 1 ? 'free roads' : 'free road'} first.`;
+  const near = best.adj.map((n) => g.bldg[n]).find(Boolean);
+  if (near) return `Too close to ${near.p === playerId ? 'your own' : 'another'} ${near.t === 'c' ? 'city' : 'settlement'} — corners next to a building are off limits. Build one more road beyond it.`;
+  if (!best.edges.some((e) => g.roads[e] === playerId)) return 'None of your roads reach this corner yet.';
+  if (!R.COSTS || !Object.entries(R.COSTS.settlement).every(([r, n]) => (me.res[r] || 0) >= n)) {
+    return 'You need wood, brick, sheep and wheat to build a settlement.';
+  }
+  if (me.left.settlement <= 0) return 'You have no settlements left — upgrade one to a city to get a piece back.';
+  return null;
+}
+
 view.onPick = (hit) => {
   const g = game();
   if (!g) return;
   unlock();
 
   if (hit.kind === 'info') {
+    // A tap that landed on a corner which is NOT a legal place to build is worth explaining:
+    // the board only highlights legal spots, so otherwise it just does nothing.
+    const why = whyNotSettle(g, hit.wx, hit.wy);
+    if (why) { toast(why); return; }
     const t = board.tiles[hit.id];
     const tip = $('tile-tip');
     const robbed = g.robber === hit.id ? ' · robber here' : '';

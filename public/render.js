@@ -628,7 +628,8 @@ export class BoardView {
       const d = Math.hypot(hex.x - wx, hex.y - wy);
       if (d < bestD) { bestD = d; best = hex.i; }
     }
-    return best === null ? null : { kind: 'info', id: best };
+    // The tap's own position rides along, so a tap that near-missed a corner can be explained.
+    return best === null ? null : { kind: 'info', id: best, wx, wy };
   }
 
   // ------------------------------------------------------------ drawing
