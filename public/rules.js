@@ -47,7 +47,7 @@ export const SETUP_SECONDS = 90;
 // several people at the same time, and the only one whose expiry does not end a turn.
 export const DISCARD_OPTIONS = [30, 45, 60];
 export const DISCARD_SECONDS = 30;
-export const ACTION_BONUS_MS = 10000;              // earned by actually doing something
+export const ACTION_BONUS_MS = 5000;               // earned by actually doing something
 export const BANK_PER_RESOURCE = 19;   // classic; see LAYOUT_INFO for the expansion
 
 // How many offers one player may have on the table at once. There is no rule of the game
@@ -352,7 +352,7 @@ function resumeTurn(g) {
 /**
  * Doing something buys you more time. The whole turn is capped at twice the chosen
  * limit: without a cap a player could hold a turn open forever by making a cheap bank
- * trade every ten seconds, and the bonus exists to stop the clock punishing you for
+ * trade every few seconds, and the bonus exists to stop the clock punishing you for
  * playing, not to become a way of never ending your turn.
  */
 function bumpClock(g) {

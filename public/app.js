@@ -4040,6 +4040,12 @@ function reactToLog(g) {
           // not because this is private the way a steal's card is, but because the
           // shoutout's job is to make you look down at the strip, not to replace it.
           shoutout(`${nameFor(e.p)} is offering a trade`, colorFor(e.p));
+        } else if (e.p !== playerId && g.players?.[playerId] && !tradeRejectFrom.has(e.p) && !canPay(g, e.want)) {
+          // Said out loud rather than dropped: the offer is declined for you without ever
+          // appearing, which used to look like nobody had offered anything.
+          const fmt = (o) => Object.entries(o || {}).filter(([, n]) => n > 0)
+            .map(([r, n]) => `${n} ${(RES_NAME[r] || r).toLowerCase()}`).join(' + ');
+          shoutout([`${nameFor(e.p)} offered ${fmt(e.give)} for ${fmt(e.want)},`, 'but you do not have it'], colorFor(e.p), 2000);
         }
         break;
       case 'trade': sfx.trade(); playTradeSwap(e); break;
