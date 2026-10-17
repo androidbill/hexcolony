@@ -4430,7 +4430,9 @@ function renderScoreStrip(g) {
     if (el.style.getPropertyValue('--ink') !== ink) el.style.setProperty('--ink', ink);
 
     const name = nameFor(pid);
-    const vp = String(R.publicVP(g, pid));
+    // Once the game is over the hidden victory-point cards count: a player who wins on them
+    // would otherwise be shown below the target they just won on.
+    const vp = String(g.phase === 'over' ? R.totalVP(g, pid) : R.publicVP(g, pid));
     const cards = R.handSize(p);
     const [vpEl, bodyEl] = el.children;
     const [nameEl, statsEl] = bodyEl.children;
@@ -4603,7 +4605,7 @@ function playDevReveal(e) {
     ? `<div class="dev-take">took ${e.count ?? ''} ${resCard(e.res, { size: 'xs' })}</div>` : '';
   stage.style.setProperty('--c', colorFor(e.p));
   stage.innerHTML = `<div class="dev-wrap">
-      <div class="reveal-card">
+      <div class="reveal-card${e.drawn ? '' : ' no-flip'}">
         <div class="dev-face dev-back">🎴</div>
         <img class="dev-face dev-front" src="art/dev-${e.card}.webp" alt="${esc(name)}" decoding="async">
       </div>
@@ -4615,7 +4617,7 @@ function playDevReveal(e) {
   stage.hidden = false;
   devTimers.push(setTimeout(() => sfx.flip(), 450));
   if (!e.drawn && e.card === 'knight') {
-    devTimers.push(setTimeout(() => { sfx.cannon(); view.cannonFired(); buzz([60, 30, 60]); }, 780));
+    devTimers.push(setTimeout(() => { sfx.cannon(); view.cannonFired(); buzz([60, 30, 60]); }, 250));
   }
   devTimers.push(setTimeout(() => stage.classList.add('out'), DEV_HOLD_MS));
   devTimers.push(setTimeout(() => { stage.hidden = true; stage.classList.remove('out'); stage.innerHTML = ''; }, DEV_HOLD_MS + 300));
@@ -5946,7 +5948,7 @@ function openPlayers() {
     return `<div class="pcard" style="--c:${esc(colorFor(pid))}">
       <div class="pcard-top">
         <span class="pcard-name">${esc(nameFor(pid))}${pid === playerId ? ' (you)' : ''}</span>
-        <span class="pcard-vp">${R.publicVP(g, pid)}</span>
+        <span class="pcard-vp">${g.phase === 'over' ? R.totalVP(g, pid) : R.publicVP(g, pid)}</span>
       </div>
       <div class="pcard-stats">${stats.join('')}</div>
     </div>`;

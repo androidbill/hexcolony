@@ -2824,3 +2824,9 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
   background: rgba(8, 24, 40, .94); border: 2px solid var(--c, var(--gold)); border-radius: 999px; padding: 4px 14px;
   animation: award-take-in .3s .9s both;
 }
+
+/* A card that is being played, not drawn, is simply shown face up: no back, no turn-over. */
+.reveal-card.no-flip .dev-back { display: none; }
+.reveal-card.no-flip .dev-front { animation: none; opacity: 1; transform: none; }
+.reveal-card.no-flip ~ .boom-flash, .reveal-card.no-flip ~ .boom-puff,
+.reveal-card.no-flip ~ .dev-road, .reveal-card.no-flip ~ .dev-spark { animation-delay: .25s; }
