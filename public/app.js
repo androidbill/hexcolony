@@ -3907,7 +3907,8 @@ function fireworks(winnerColour) {
  */
 function celebrateWin(winner) {
   (winner === playerId ? sfx.win : sfx.lose)();
-  shoutout(`${winner === playerId ? 'You win' : `${nameFor(winner)} wins`}!`, colorFor(winner));
+  // The winner's name in their colour, up for exactly as long as the confetti is falling.
+  shoutout(`${nameFor(winner)} Wins!`, colorFor(winner), CONFETTI_MS);
   confetti(colorFor(winner));
   fireworks(colorFor(winner));
   view.celebrate(winner);
