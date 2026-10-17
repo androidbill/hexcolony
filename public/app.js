@@ -236,12 +236,20 @@ function confetti(winnerColour) {
 // table watching six phones needed one place that said whose go it was without anyone
 // having to read the score strip and work it out.
 let shoutTimer = null;
-function shoutout(msg, accent, duration = 2000) {
+function shoutout(msg, accent, duration = 2000, kind = '') {
   const box = $('shoutout');
   const card = $('shoutout-card');
   const lines = Array.isArray(msg) ? msg : [msg];
   card.replaceChildren();
+  card.dataset.kind = kind;
   for (const content of lines) {
+    if (content?.html) {
+      const block = document.createElement('div');
+      block.className = 'shoutout-block';
+      block.innerHTML = content.html;
+      card.append(block);
+      continue;
+    }
     if (content?.bigResource) {
       const big = document.createElement('span');
       big.className = 'shoutout-bigcard';
@@ -4043,9 +4051,17 @@ function reactToLog(g) {
         } else if (e.p !== playerId && g.players?.[playerId] && !tradeRejectFrom.has(e.p) && !canPay(g, e.want)) {
           // Said out loud rather than dropped: the offer is declined for you without ever
           // appearing, which used to look like nobody had offered anything.
-          const fmt = (o) => Object.entries(o || {}).filter(([, n]) => n > 0)
-            .map(([r, n]) => `${n} ${(RES_NAME[r] || r).toLowerCase()}`).join(' + ');
-          shoutout([`${nameFor(e.p)} offered ${fmt(e.give)} for ${fmt(e.want)},`, 'but you do not have it'], colorFor(e.p), 2000);
+          const have = g.players[playerId].res;
+          const short = Object.entries(e.want || {}).filter(([r, n]) => n > (have[r] || 0))
+            .map(([r, n]) => `${n - (have[r] || 0)} ${(RES_NAME[r] || r).toLowerCase()}`).join(', ');
+          shoutout([{ html: `
+            <div class="so-title">${esc(nameFor(e.p))} offered a trade</div>
+            <div class="so-trade">
+              <div class="so-side"><small>Gives</small><div class="so-cards">${cardRow(e.give, { size: 'xs' })}</div></div>
+              <span class="so-arrow" aria-hidden="true">⇄</span>
+              <div class="so-side"><small>Wants</small><div class="so-cards">${cardRow(e.want, { size: 'xs' })}</div></div>
+            </div>
+            <div class="so-note">You can't cover it — you're short ${esc(short)}</div>` }], colorFor(e.p), 3000, 'offer');
         }
         break;
       case 'trade': sfx.trade(); playTradeSwap(e); break;

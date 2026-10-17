@@ -2357,6 +2357,25 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
 .shoutout-resource { display: inline-flex; align-items: center; height: 40px; }
 .shoutout-resource .rcard-wrap { transform: scale(0.82); transform-origin: center; }
 .shoutout-bigcard { display: block; margin: 6px 0 2px; }
+
+/* An offer you cannot cover: a small panel rather than a pill, because it carries cards.
+   A pill's end caps clipped the wide line and the nowrap forced it past the screen edge. */
+.shoutout-card[data-kind="offer"] {
+  border-radius: 20px; padding: 14px 16px 12px;
+  width: min(calc(100vw - 32px), 340px);
+  font-size: 15px; letter-spacing: 0; gap: 0;
+}
+.shoutout-block { display: flex; flex-direction: column; align-items: stretch; gap: 10px; width: 100%; }
+.so-title { font-size: 16px; font-weight: 800; color: var(--parch); }
+.so-trade { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.so-side { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+.so-side small { font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--dim); }
+.so-cards { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+.so-arrow { font-size: 22px; font-weight: 800; color: var(--gold); }
+.so-note {
+  font-size: 13px; font-weight: 700; color: #ffb4a8;
+  background: rgba(217, 74, 74, .16); border-radius: 10px; padding: 6px 10px;
+}
 .shoutout-card.show { animation: shoutout 3s ease forwards; }
 
 @keyframes shoutout {
