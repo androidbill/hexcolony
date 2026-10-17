@@ -47,13 +47,14 @@ const overrides = JSON.parse(process.argv[2] || '{}');
 const N = Number(process.argv[3] || 400);
 const layout = process.argv[4] || 'classic';
 const nSeats = Number(process.argv[5] || 2);
-LEVELS.harder = { ...LEVELS.hard, ...overrides };
+const BASE = process.env.BASE || 'harder', OPP = process.env.OPP || 'hard';
+LEVELS.cand = { ...LEVELS[BASE], ...overrides };
 
 let wins = 0, played = 0;
 for (let i = 0; i < N; i++) {
   // harder sits in a different seat each game; the rest are hard
   const pos = i % nSeats;
-  const levels = Array.from({ length: nSeats }, (_, k) => (k === pos ? 'harder' : 'hard'));
+  const levels = Array.from({ length: nSeats }, (_, k) => (k === pos ? 'cand' : OPP));
   const r = playGame(levels, i * 104729 + 17, layout);
   if (r.winner < 0) continue;
   played++;
@@ -62,4 +63,4 @@ for (let i = 0; i < N; i++) {
 const share = wins / played;
 const fair = 1 / nSeats;
 const se = Math.sqrt(share * (1 - share) / played);
-console.log(`${JSON.stringify(overrides)} ${layout} ${nSeats}p: harder wins ${(share * 100).toFixed(1)}% (fair ${(fair * 100).toFixed(0)}%) ±${(1.96 * se * 100).toFixed(1)}  n=${played}`);
+console.log(`${JSON.stringify(overrides)} ${layout} ${nSeats}p: cand wins ${(share * 100).toFixed(1)}% (fair ${(fair * 100).toFixed(0)}%) ±${(1.96 * se * 100).toFixed(1)}  n=${played}`);

@@ -86,6 +86,29 @@ LEVELS.harder = {
   knightRate: 1,
 };
 
+// Harder, plus the things a good human does that Harder does not. Each was measured against
+// Harder over a thousand games (scripts/harder-lab.mjs, BASE=harder OPP=harder), alone and
+// stacked, and kept only where it moved the result:
+//   oneForOne + asksPerTurn 2: ask the table for a card with a fair one-for-one swap, and ask
+//     twice a turn (for different cards). Cheap offers get taken, so it trades far more than
+//     Harder, which was the largest single gain (about +12 points).
+//   roadRace: build the road the moment it takes Longest Road.
+//   armyChase: once it holds or has played a knight, buy cards toward Largest Army.
+//   lookahead: choose its first settlement by what the second can be afterwards.
+//   denyMargin 6: stop helping the leader six points out.
+// Still no peeking: it uses only what is on the table, like every other level.
+LEVELS.hardest = {
+  ...LEVELS.harder,
+  label: 'Hardest',
+  blurb: 'Plays the whole board like a person: trades constantly, races for Longest Road and Largest Army, plans its opening two settlements together, and cuts the leader off early.',
+  oneForOne: true,
+  asksPerTurn: 2,
+  roadRace: true,
+  armyChase: true,
+  lookahead: 0.5,
+  denyMargin: 6,
+};
+
 const BOT_NAMES = [
   'Astrid', 'Bjorn', 'Cora', 'Dag', 'Eira', 'Finn', 'Greta', 'Hakon',
   'Iris', 'Johan', 'Kira', 'Lars', 'Mira', 'Nils', 'Orla', 'Pavel',
@@ -179,15 +202,30 @@ function vertexScore(g, board, v, pid, have, cfg = null) {
   }
   score += kinds.size * 1.5;                       // spread beats a double-up
   const port = board.portAt[v];
-  if (port) score += port === 'any' ? 1.5 : (kinds.has(port) || have.has(port)) ? 3 : 1;
+  if (port) score += (port === 'any' ? 1.5 : (kinds.has(port) || have.has(port)) ? 3 : 1) * (cfg?.portMult ?? 1);
   return score;
 }
 
 /** Rank the legal corners, best first, with difficulty noise folded in. */
 function rankSettlements(g, board, pid, cfg, rng, setup = false) {
   const have = myResources(g, board, pid);
+  // The first settlement is also choosing what the second can be: weigh the best corner that
+  // would still be on offer afterwards, given the resources this one adds.
+  const first = setup && cfg.lookahead && !Object.values(g.bldg).some((b) => b.p === pid);
   return R.legalSettlements(g, pid, setup)
-    .map((v) => ({ v, s: vertexScore(g, board, v, pid, have, cfg) + rng() * cfg.noise }))
+    .map((v) => {
+      let s = vertexScore(g, board, v, pid, have, cfg);
+      if (first) {
+        const scratch = clone(g);
+        scratch.bldg[v] = { t: 's', p: pid };
+        const have2 = new Set(have);
+        for (const h of VERTS[v].hexes) { const r = board.tiles[h].res; if (r && hexKnown(g, h, board)) have2.add(r); }
+        let next = 0;
+        for (const w of R.legalSettlements(scratch, pid, true)) next = Math.max(next, vertexScore(scratch, board, w, pid, have2, cfg));
+        s += cfg.lookahead * next;
+      }
+      return { v, s: s + rng() * cfg.noise };
+    })
     .sort((a, b) => b.s - a.s);
 }
 
@@ -207,6 +245,7 @@ function bestRoad(g, board, pid, cfg, rng) {
   const before = new Set(R.legalSettlements(g, pid));
   const scratch = clone(g);
   let best = null;
+  let bestTake = null;
 
   for (const e of legal) {
     scratch.roads[e] = pid;
@@ -222,11 +261,14 @@ function bestRoad(g, board, pid, cfg, rng) {
     const rb = cfg.roadBonus ?? 1;
     if (len > target) gain += 6 * rb;
     else if (len >= target - 1) gain += 2 * rb;
+    const takes = len >= 5 && len > (holder && holder !== pid ? g.players[holder].roadLen : 4);
 
     delete scratch.roads[e];
     const s = gain + rng() * cfg.noise;
     if (!best || s > best.s) best = { e, s };
+    if (takes && (!bestTake || s > bestTake.s)) bestTake = { e, s };
   }
+  if (best && bestTake) best.take = bestTake.e;
   return best;
 }
 
@@ -253,7 +295,7 @@ function robberTarget(g, board, pid, cfg, rng) {
       const worth = pips(tile.num) * (b.t === 'c' ? 2 : 1);
       score += worth;
       if (R.handSize(g.players[b.p]) > 0) score += 2;
-      if (cfg.denyLeader && b.p === leader) score += worth;
+      if (cfg.denyLeader && b.p === leader) score += worth * (cfg.leadMult ?? 1);
     }
     if (touchesMe) score -= 100;                   // never rob yourself
     if (score <= 0) continue;
@@ -422,7 +464,7 @@ export function botMove(game, board, pid, level, rng = Math.random, humans) {
 
   // ---- build the best thing we can afford
   const can = R.whatCanIBuild(g, pid);
-  if (can.city) {
+  if (can.city && !(cfg.settleFirst && can.settlement)) {
     const cities = R.legalCities(g, pid);
     const best = cities
       .map((v) => ({ v, s: VERTS[v].hexes.reduce((a, h) => a + pips(board.tiles[h].num), 0) + rng() * cfg.noise }))
@@ -432,6 +474,20 @@ export function botMove(game, board, pid, level, rng = Math.random, humans) {
   if (can.settlement) {
     const ranked = rankSettlements(g, board, pid, cfg, rng);
     if (ranked.length) return { type: 'build', what: 'settlement', v: ranked[0].v };
+  }
+
+  // Taking Longest Road is two points for what a road costs: do it the moment it is on.
+  if (cfg.roadRace && can.road) {
+    const race = bestRoad(g, board, pid, cfg, rng);
+    if (race && race.take !== undefined) return { type: 'build', what: 'road', e: race.take };
+  }
+  // Chasing Largest Army: once there is a knight in hand or on the table, more cards are
+  // more knights, and the army is two points the table has to take back off us.
+  if (cfg.armyChase && can.dev && g.deck.length) {
+    const mine = p.knights + (p.dev.knight || 0) + (p.devNew.knight || 0);
+    const holder = g.award.army;
+    const theirs = holder && holder !== pid ? g.players[holder].knights : 2;
+    if (mine >= 1 && (holder === pid ? false : mine <= theirs)) return { type: 'buyDev' };
   }
 
   const want = goal(g, board, pid, cfg);
@@ -452,7 +508,7 @@ export function botMove(game, board, pid, level, rng = Math.random, humans) {
   // there asking the same table the same question all turn.
   if (rng() < (cfg.offerTrade || 0) && g.seats.length > 1
       && asksThisTurn(g, pid) < (cfg.asksPerTurn || 1)) {
-    const offer = findTableOffer(g, board, pid, NEEDS[want] || NEEDS.road);
+    const offer = findTableOffer(g, board, pid, NEEDS[want] || NEEDS.road, cfg);
     if (offer) return offer;
   }
 
@@ -464,6 +520,12 @@ export function botMove(game, board, pid, level, rng = Math.random, humans) {
 
   // Holding more than seven cards into someone else's 7 is how you lose half of them.
   if (R.handSize(p) > 7 && can.dev) return { type: 'buyDev' };
+  if (cfg.dumpTrade && R.handSize(p) > 7) {
+    for (const cost of [NEEDS.road, NEEDS.dev, NEEDS.settlement]) {
+      const t = findBankTrade(g, board, pid, cost);
+      if (t) return t;
+    }
+  }
   if (cfg.spendRoad && R.handSize(p) > (cfg.spendHand ?? 7) && can.road) {
     const road = bestRoad(g, board, pid, cfg, rng);
     if (road) return { type: 'build', what: 'road', e: road.e };
@@ -486,7 +548,7 @@ function asksThisTurn(g, pid) {
  * two-for-one port it does not ask at all: the bank is already that cheap and the bank
  * never says no.
  */
-function findTableOffer(g, board, pid, cost) {
+function findTableOffer(g, board, pid, cost, cfg = null) {
   const p = g.players[pid];
   const need = Object.keys(shortfall(p, cost));
   if (!need.length) return null;
@@ -498,6 +560,13 @@ function findTableOffer(g, board, pid, cost) {
   const open = need.filter((r) => !asked.has(r));
   if (!open.length) return null;
   const spare = surplusFor(p, cost);
+  if (cfg?.oneForOne) {
+    for (const give of Object.keys(spare).sort((a, b) => spare[b] - spare[a])) {
+      if (spare[give] < 2) continue;
+      const want = open.find((w) => w !== give);
+      if (want) return { type: 'offerTrade', give: { [give]: 1 }, want: { [want]: 1 } };
+    }
+  }
   for (const give of Object.keys(spare).sort((a, b) => spare[b] - spare[a])) {
     if (spare[give] < 2) continue;
     if (R.tradeRate(g, board, pid, give) <= 2) continue;
