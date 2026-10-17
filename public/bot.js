@@ -65,6 +65,27 @@ export const LEVELS = {
   },
 };
 
+// Hard with five changes, each measured against hard over a thousand games a side (see
+// scripts/harder-lab.mjs) and kept only where it moved the result outside the noise:
+//   spendRoad / spendHand: with more than five cards in hand and nothing better to buy, put
+//     them into a road instead of sitting on them. This one is most of the gain (about +14
+//     points of win rate): it stops 7s costing half the hand, and the roads pile up into
+//     Longest Road.
+//   pipMult: weigh a corner's number dots 1.8x when choosing where to settle.
+//   denyMargin: stop helping the leader five points out instead of three.
+//   knightRate: always play a knight rather than half the time.
+// Nothing here sees more than hard does; it only spends and chooses better.
+LEVELS.harder = {
+  ...LEVELS.hard,
+  label: 'Harder',
+  blurb: 'Hard, sharpened: opens on stronger corners, never sits on a full hand, races for Longest Road and Largest Army, and gives the leader nothing.',
+  pipMult: 1.8,
+  spendRoad: true,
+  spendHand: 5,
+  denyMargin: 5,
+  knightRate: 1,
+};
+
 const BOT_NAMES = [
   'Astrid', 'Bjorn', 'Cora', 'Dag', 'Eira', 'Finn', 'Greta', 'Hakon',
   'Iris', 'Johan', 'Kira', 'Lars', 'Mira', 'Nils', 'Orla', 'Pavel',
@@ -141,18 +162,20 @@ const FOG_CURIOSITY = 3;
  * would — so it is credited FOG_CURIOSITY instead, standing in for "probably something,
  * possibly nothing" rather than the certain zero an unturned tile is not.
  */
-function vertexScore(g, board, v, pid, have) {
+function vertexScore(g, board, v, pid, have, cfg = null) {
   let score = 0;
+  const pipMult = cfg?.pipMult ?? 1;
+  const newMult = cfg?.newResMult ?? 1;
   const kinds = new Set();
   for (const h of VERTS[v].hexes) {
     if (!hexKnown(g, h, board)) { score += FOG_CURIOSITY; continue; }
     const t = board.tiles[h];
-    score += pips(t.num);
+    score += pips(t.num) * pipMult;
     if (t.res) kinds.add(t.res);
   }
   for (const res of kinds) {
     if (have.has(res)) continue;
-    score += (res === 'brick' || res === 'ore') ? 8 : 5;
+    score += ((res === 'brick' || res === 'ore') ? 8 : 5) * newMult;
   }
   score += kinds.size * 1.5;                       // spread beats a double-up
   const port = board.portAt[v];
@@ -164,7 +187,7 @@ function vertexScore(g, board, v, pid, have) {
 function rankSettlements(g, board, pid, cfg, rng, setup = false) {
   const have = myResources(g, board, pid);
   return R.legalSettlements(g, pid, setup)
-    .map((v) => ({ v, s: vertexScore(g, board, v, pid, have) + rng() * cfg.noise }))
+    .map((v) => ({ v, s: vertexScore(g, board, v, pid, have, cfg) + rng() * cfg.noise }))
     .sort((a, b) => b.s - a.s);
 }
 
@@ -190,14 +213,15 @@ function bestRoad(g, board, pid, cfg, rng) {
     let gain = 0;
     for (const v of R.legalSettlements(scratch, pid)) {
       if (before.has(v)) continue;
-      gain = Math.max(gain, vertexScore(scratch, board, v, pid, have));
+      gain = Math.max(gain, vertexScore(scratch, board, v, pid, have, cfg));
     }
     // A road is also worth something on its own once Longest Road is in reach.
     const len = R.longestRoadFor(scratch, pid);
     const holder = g.award.road;
     const target = holder && holder !== pid ? g.players[holder].roadLen : 4;
-    if (len > target) gain += 6;
-    else if (len >= target - 1) gain += 2;
+    const rb = cfg.roadBonus ?? 1;
+    if (len > target) gain += 6 * rb;
+    else if (len >= target - 1) gain += 2 * rb;
 
     delete scratch.roads[e];
     const s = gain + rng() * cfg.noise;
@@ -346,7 +370,7 @@ export function botMove(game, board, pid, level, rng = Math.random, humans) {
       scratch.roads[e] = pid;
       let v = 0;
       for (const cand of R.legalSettlements(scratch, pid)) {
-        v = Math.max(v, vertexScore(scratch, board, cand, pid, have));
+        v = Math.max(v, vertexScore(scratch, board, cand, pid, have, cfg));
       }
       if (v > bv) { bv = v; best = e; }
     }
@@ -417,7 +441,7 @@ export function botMove(game, board, pid, level, rng = Math.random, humans) {
     // Only spend on a road that actually reaches something, unless cards are piling up.
     if (road && (road.s > 4 || R.handSize(p) > 6)) return { type: 'build', what: 'road', e: road.e };
   }
-  if (can.dev && (want === 'dev' || R.handSize(p) > 8)) return { type: 'buyDev' };
+  if (can.dev && (want === 'dev' || R.handSize(p) > (cfg.devHand ?? 8))) return { type: 'buyDev' };
 
   // ---- ask the table before paying the bank's rate
   //
@@ -440,6 +464,10 @@ export function botMove(game, board, pid, level, rng = Math.random, humans) {
 
   // Holding more than seven cards into someone else's 7 is how you lose half of them.
   if (R.handSize(p) > 7 && can.dev) return { type: 'buyDev' };
+  if (cfg.spendRoad && R.handSize(p) > (cfg.spendHand ?? 7) && can.road) {
+    const road = bestRoad(g, board, pid, cfg, rng);
+    if (road) return { type: 'build', what: 'road', e: road.e };
+  }
 
   return { type: 'endTurn' };
 }
@@ -505,7 +533,7 @@ function playableDev(g, board, pid, cfg, rng) {
     // Three knights is Largest Army and two points; before that a knight is a robber.
     const wantsArmy = p.knights + 1 >= 3 && (!g.award.army || g.award.army === pid
       || g.players[g.award.army].knights < p.knights + 1);
-    if (wantsArmy || rng() < 0.5) return { type: 'playDev', card: 'knight' };
+    if (wantsArmy || rng() < (cfg.knightRate ?? 0.5)) return { type: 'playDev', card: 'knight' };
   }
   if (p.dev.mono > 0) {
     // Worth it only if the table is actually holding some of it.
@@ -585,7 +613,7 @@ function judgeTrade(g, t, board, pid, cfg, rng, humans) {
   // Never hand the leader their winning card.
   if (cfg.denyLeader) {
     const lead = g.seats.filter((s) => s !== pid).sort((a, b) => R.publicVP(g, b) - R.publicVP(g, a))[0];
-    if (t.from === lead && R.publicVP(g, lead) >= g.target - 3) return false;
+    if (t.from === lead && R.publicVP(g, lead) >= g.target - (cfg.denyMargin ?? 3)) return false;
   }
   const want = goal(g, board, pid, cfg);
   const need = shortfall(p, NEEDS[want] || NEEDS.road);

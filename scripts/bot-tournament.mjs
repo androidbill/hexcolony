@@ -77,7 +77,7 @@ function duel(a,b,n){
 
 const N=Number(process.argv[2]||120);
 console.log(`bot-vs-bot, ${N} games per matchup (seats alternate each game)\n`);
-for(const [a,b] of [['hard','easy'],['hard','medium'],['medium','easy']]){
+for(const [a,b] of [['harder','hard'],['hard','easy'],['hard','medium'],['medium','easy']]){
   const t0=Date.now();
   const r=duel(a,b,N);
   const pct=(r.wa/(r.wa+r.wb||1)*100).toFixed(1);
