@@ -4051,9 +4051,6 @@ function reactToLog(g) {
         } else if (e.p !== playerId && g.players?.[playerId] && !tradeRejectFrom.has(e.p) && !canPay(g, e.want)) {
           // Said out loud rather than dropped: the offer is declined for you without ever
           // appearing, which used to look like nobody had offered anything.
-          const have = g.players[playerId].res;
-          const short = Object.entries(e.want || {}).filter(([r, n]) => n > (have[r] || 0))
-            .map(([r, n]) => `${n - (have[r] || 0)} ${(RES_NAME[r] || r).toLowerCase()}`).join(', ');
           shoutout([{ html: `
             <div class="so-title">${esc(nameFor(e.p))} offered a trade</div>
             <div class="so-trade">
@@ -4061,7 +4058,7 @@ function reactToLog(g) {
               <span class="so-arrow" aria-hidden="true">⇄</span>
               <div class="so-side"><small>Wants</small><div class="so-cards">${cardRow(e.want, { size: 'xs' })}</div></div>
             </div>
-            <div class="so-note">You can't cover it — you're short ${esc(short)}</div>` }], colorFor(e.p), 3000, 'offer');
+            <div class="so-note">You can't cover it</div>` }], colorFor(e.p), 3000, 'offer');
         }
         break;
       case 'trade': sfx.trade(); playTradeSwap(e); break;
