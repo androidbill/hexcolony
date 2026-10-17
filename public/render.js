@@ -183,11 +183,11 @@ const ROLL_SHRINK_MS = 380;
 const ROLL_OVERSHOOT = 1.9;
 
 // A settlement or city arriving: it starts very large, as if close to the screen, and comes
-// down spinning until it lands on its corner. Half a second from first frame to touchdown,
+// down, upright, until it lands on its corner. Half a second from first frame to touchdown,
 // with a puff of dust over the last quarter of it.
 const BUILD_DROP_MS = 500;
 const BUILD_DROP_SIZE = 9;          // times its resting size at the start
-const BUILD_DROP_TURNS = 2;         // full spins on the way down
+const BUILD_DROP_TURNS = 0;         // full spins on the way down: none, it drops straight
 const BUILD_DUST_AT = 380;          // when the landing dust starts, and how long it lasts
 const BUILD_DUST_MS = BUILD_DROP_MS - BUILD_DUST_AT;
 
@@ -1248,8 +1248,7 @@ export class BoardView {
       const [x, y] = this.toScreen(VERTS[v].x, VERTS[v].y);
       const color = this.colorOf(b.p);
       // Size comes down slowly at first and then fast, like something falling toward the
-      // board; the spin does the opposite, quick up top and easing to nothing so it touches
-      // down upright. Both reach their resting values exactly at p = 1.
+      // board. It comes straight down without turning (BUILD_DROP_TURNS is 0).
       const grow = 1 + (BUILD_DROP_SIZE - 1) * (1 - p ** 1.7);
       const angle = (1 - p) ** 1.5 * Math.PI * 2 * BUILD_DROP_TURNS;
       // A city is an upgrade: the settlement it replaces stays put until the city lands on
