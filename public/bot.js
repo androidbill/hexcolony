@@ -387,7 +387,7 @@ export function botMove(game, board, pid, level, rng = Math.random, humans) {
     // The same NO_BOT_TRADE_VP line, seen from the other side: this bot put the offer
     // out itself, so it already knows every reply is to its own trade, and past the
     // threshold only a human's "yes" is one it will actually close.
-    const closeableWith = (s) => ours.replies[s] === 'yes'
+    const closeableWith = (s) => ours.replies[s] === 'yes' && !nearWin(g, s)
       && (!(humans?.size && R.publicVP(g, pid) >= NO_BOT_TRADE_VP) || humans.has(s));
     const yes = g.seats.find((s) => s !== pid && closeableWith(s));
     if (yes) return { type: 'acceptTrade', id: ours.id, with: yes };
@@ -672,6 +672,16 @@ function chooseDiscard(g, board, pid, cfg, rng) {
 // "who is about to win," which does.
 const NO_BOT_TRADE_VP = 8;
 
+/**
+ * Whoever is within three points of the target is not traded with by any bot, on any level,
+ * whichever side proposed the deal. A 12-point game: from 9 up, nobody deals with them.
+ * Counted on public points only, which is all a player at the table can see.
+ */
+export const NEAR_WIN_MARGIN = 3;
+function nearWin(g, who) {
+  return R.publicVP(g, who) >= g.target - NEAR_WIN_MARGIN;
+}
+
 /** Is an offered trade worth taking? */
 function judgeTrade(g, t, board, pid, cfg, rng, humans) {
   const p = g.players[pid];
@@ -679,6 +689,7 @@ function judgeTrade(g, t, board, pid, cfg, rng, humans) {
     if ((p.res[res] || 0) < n) return false;         // cannot pay
   }
   if (humans?.size && !humans.has(t.from) && R.publicVP(g, pid) >= NO_BOT_TRADE_VP) return false;
+  if (nearWin(g, t.from)) return false;
   // Never hand the leader their winning card.
   if (cfg.denyLeader) {
     const lead = g.seats.filter((s) => s !== pid).sort((a, b) => R.publicVP(g, b) - R.publicVP(g, a))[0];
