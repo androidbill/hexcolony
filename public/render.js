@@ -537,12 +537,16 @@ export class BoardView {
       // pointer the browser doesn't recognise (synthetic events, some older engines),
       // and losing capture is far better than losing the whole gesture.
       try { cv.setPointerCapture(e.pointerId); } catch { /* drag still works */ }
+      // Only the first finger of a gesture starts a fresh tap. A second finger landing
+      // used to clear this too, so a pinch whose fingers lifted without a final nudge
+      // ended as a "tap" on the last finger and placed the robber (or a piece).
+      if (this._pointers.size === 0) this._moved = false;
       this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
-      if (this._pointers.size === 2) {
+      if (this._pointers.size >= 2) {
         const [a, b] = [...this._pointers.values()];
         this._pinch = Math.hypot(a.x - b.x, a.y - b.y);
+        this._moved = true; // two fingers is never a tap
       }
-      this._moved = false;
     });
 
     cv.addEventListener('pointermove', (e) => {
@@ -576,7 +580,7 @@ export class BoardView {
       if (hit && this.onPick) this.onPick(hit);
     };
     cv.addEventListener('pointerup', end);
-    cv.addEventListener('pointercancel', (e) => { this._pointers.delete(e.pointerId); this._pinch = null; });
+    cv.addEventListener('pointercancel', (e) => { this._pointers.delete(e.pointerId); this._pinch = null; this._moved = true; });
 
     cv.addEventListener('wheel', (e) => {
       e.preventDefault();
