@@ -31,6 +31,7 @@ import { BoardView, RES_ICON, loadTerrainArt, SEA_COLORS, SEA_DEFAULT, seaAt } f
 import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
+import * as PT from './playtime.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
@@ -3784,10 +3785,38 @@ async function fireTimeout() {
   }, 1000);
 }
 
+// ---------------------------------------------------------------- play-time clock
+// Who is taking how long, kept on this device only (see playtime.js). The game state is
+// the single source of truth for whose step it is, so the clock just watches it.
+let clock = PT.loadClock();
+let clockSavedAt = 0;
+let clockSavedKey = '';
+
+function trackClock(g) {
+  if (!g || !room) return;
+  const setup = g.phase === 'setup';
+  const key = setup ? `s${g.setup.at}` : `t${g.turn.num}`;
+  const now = Date.now();
+  clock = PT.tick(clock, {
+    gid: g.seed, key, pid: R.currentPid(g), setup, over: g.phase === 'over',
+    paused: pauseBlocksGame(), solo, now,
+    joinedLate: !(setup && g.setup.at === 0),
+  });
+  // A step change is worth saving at once; otherwise every few seconds is plenty.
+  const stamp = `${clock.gid}:${key}:${clock.done}`;
+  if (stamp !== clockSavedKey || now - clockSavedAt > 5000) {
+    PT.saveClock(clock);
+    clockSavedAt = now;
+    clockSavedKey = stamp;
+  }
+}
+
 function startTimerLoop() {
   if (timerInterval) return;
   timerInterval = setInterval(() => {
     if (!room || room.state !== 'playing') return;
+    const live = game();
+    if (live && live.phase !== 'over') trackClock(live);
     if (room.pause?.status === 'resuming') finishPause();
     if (pauseBlocksGame()) {
       drawTimer();
@@ -3819,6 +3848,7 @@ function render() {
 
   const g = game();
   if (!g) return;
+  trackClock(g);
   ensureBoard();
   if (!$('screen-game').classList.contains('is-active')) {
     showScreen('screen-game');
@@ -6333,17 +6363,28 @@ function recordHistory(g) {
   // screen lists — so the stats can say HOW people win and what they lean on over time,
   // not just who won. Games saved before this was added have no `pts` and are counted
   // for wins only.
-  const players = g.seats.map((pid) => ({
-    id: pid,
-    name: nameFor(pid),
-    vp: R.totalVP(g, pid),
-    pts: Object.fromEntries(pointSources(g, pid).map((s) => [s.key, s.vp])),
-  }));
+  // Time comes from this device's own clock (playtime.js), never from the room. Bots are
+  // left out of it — how long a bot "thinks" says nothing about anyone.
+  const humans = g.seats.filter((pid) => !room.players?.[pid]?.bot);
+  const times = clock?.gid === g.seed && clock.done && clock.turns.length
+    ? PT.gameTimes(clock, humans) : null;
+  const players = g.seats.map((pid) => {
+    const t = times?.per[pid];
+    return {
+      id: pid,
+      name: nameFor(pid),
+      vp: R.totalVP(g, pid),
+      pts: Object.fromEntries(pointSources(g, pid).map((s) => [s.key, s.vp])),
+      ...(t ? { t: { ms: t.ms, n: t.n, sum: t.sum, max: t.max, min: t.min } } : {}),
+    };
+  });
   history.unshift({
     id: key,
     at: stampMs(room.endedAt) || Date.now(),
     winner: g.winner,
     winnerName: nameFor(g.winner),
+    turns: g.turn.num,
+    ...(times ? { time: { ms: times.total, partial: times.partial } } : {}),
     players,
     // Only present when this device was actually seated — a spectating or long-since-left
     // device has nothing of its own to add to a career card.
@@ -6409,12 +6450,13 @@ function buildPlayerStats(history) {
     for (const player of game.players || []) {
       const key = historyNameKey(player.name);
       const row = rows.get(key) || {
-        name: player.name, games: 0, wins: 0, scored: 0,
+        name: player.name, key, games: 0, wins: 0, scored: 0, timed: 0,
         pts: Object.fromEntries(STAT_SOURCES.map((s) => [s.key, 0])),
         wonRoad: 0, wonArmy: 0, engine: { houses: 0, cities: 0, cards: 0 },
       };
       row.name = player.name;
       row.games += 1;
+      if (player.t) row.timed += 1;
       const won = player.id === game.winner;
       if (won) row.wins += 1;
       if (player.pts) {
@@ -6465,8 +6507,8 @@ function renderPlayerStats(history) {
       if (row.wonArmy) bits.push(`${row.wonArmy}× with ${label.army.toLowerCase()}`);
       if (bits.length) how = `<div class="stat-how"><span>Won</span> ${bits.map(esc).join(' · ')}</div>`;
     }
-    return `<div class="stat-card">
-      <div class="stat-top"><b>${esc(row.name)}</b>
+    return `<div class="stat-card${row.timed ? ' tappable' : ''}"${row.timed ? ` data-player="${esc(row.key)}"` : ''}>
+      <div class="stat-top"><b>${esc(row.name)}${row.timed ? ' <i class="stat-more">⏱ ›</i>' : ''}</b>
         <span><em>${row.wins}</em> win${row.wins === 1 ? '' : 's'} · ${row.games} game${row.games === 1 ? '' : 's'} · ${rate}%</span></div>
       ${breakdown}${how}
     </div>`;
@@ -6477,27 +6519,177 @@ function renderPlayerStats(history) {
     : '<p class="hint">How people score is tracked from now on — it fills in as games finish.</p>'}`;
 }
 
+/** A grid of stat tiles — the same look as the career card. */
+function tileGrid(cells) {
+  return `<div class="my-stats-grid">${cells.map(([label, value, sub]) => `
+    <div class="my-stat"><b>${esc(value)}</b><span>${esc(label)}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`).join('')}</div>`;
+}
+
+const shortDate = (at) => new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+const avgOf = (list) => (list.length ? list.reduce((a, b) => a + b, 0) / list.length : 0);
+
+/** Time numbers for one player (matched by name) across every game that timed them. */
+function renderPlayerTime(history, key) {
+  const rows = history.map((game) => ({ game, p: (game.players || []).find((x) => historyNameKey(x.name) === key) }))
+    .filter((r) => r.p?.t && r.game.time);
+  if (!rows.length) return '<p class="hint">No timed games for this player yet.</p>';
+  const name = rows[0].p.name;
+
+  const lens = rows.map((r) => r.game.time.ms);
+  const longestGame = rows.reduce((a, b) => (b.game.time.ms > a.game.time.ms ? b : a));
+  const shortestGame = rows.reduce((a, b) => (b.game.time.ms < a.game.time.ms ? b : a));
+  const turnRows = rows.filter((r) => r.p.t.n > 0);
+  const turns = turnRows.reduce((n, r) => n + r.p.t.n, 0);
+  const turnSum = turnRows.reduce((n, r) => n + r.p.t.sum, 0);
+  const myTotal = rows.reduce((n, r) => n + r.p.t.ms, 0);
+  const slowest = turnRows.length ? turnRows.reduce((a, b) => (b.p.t.max > a.p.t.max ? b : a)) : null;
+  const fastest = turnRows.length ? turnRows.reduce((a, b) => (b.p.t.min < a.p.t.min ? b : a)) : null;
+
+  const cells = [
+    ['Timed games', String(rows.length)],
+    ['Total play time', PT.fmt(myTotal), 'their own turns'],
+    ['Average game', PT.fmt(avgOf(lens))],
+    ['Longest game', PT.fmt(longestGame.game.time.ms), shortDate(longestGame.game.at)],
+    ['Shortest game', PT.fmt(shortestGame.game.time.ms), shortDate(shortestGame.game.at)],
+    ['Play time per game', PT.fmt(myTotal / rows.length)],
+  ];
+  if (turns) {
+    cells.push(['Turns taken', String(turns)]);
+    cells.push(['Average turn', PT.fmt(turnSum / turns)]);
+    cells.push(['Longest turn', PT.fmt(slowest.p.t.max), shortDate(slowest.game.at)]);
+    cells.push(['Shortest turn', PT.fmt(fastest.p.t.min), shortDate(fastest.game.at)]);
+  }
+
+  // Against the people they sat with: their average turn next to everyone else's in the
+  // same games, and the slice of the table's time they took against an even split.
+  const notes = [];
+  const others = rows.map((r) => (r.game.players || []).filter((x) => x !== r.p && x.t && x.t.n));
+  const otherN = others.reduce((n, l) => n + l.reduce((m, x) => m + x.t.n, 0), 0);
+  const otherSum = others.reduce((n, l) => n + l.reduce((m, x) => m + x.t.sum, 0), 0);
+  if (turns && otherN) {
+    const me = turnSum / turns;
+    const them = otherSum / otherN;
+    const pct = Math.round(Math.abs(1 - me / them) * 100);
+    notes.push(pct < 3 ? 'Plays at about the same pace as the table.'
+      : `Plays ${pct}% ${me < them ? 'faster' : 'slower'} than the people they sit with.`);
+  }
+  const shares = rows.filter((r) => r.game.time.ms > 0).map((r) => ({
+    mine: r.p.t.ms / r.game.time.ms,
+    fair: 1 / (r.game.players || []).filter((x) => x.t).length,
+  }));
+  if (shares.length) {
+    notes.push(`Takes ${Math.round(avgOf(shares.map((x) => x.mine)) * 100)}% of the table's time `
+      + `(an even split is ${Math.round(avgOf(shares.map((x) => x.fair)) * 100)}%).`);
+  }
+  const won = rows.filter((r) => r.game.winner === r.p.id).map((r) => r.game.time.ms);
+  const lost = rows.filter((r) => r.game.winner !== r.p.id).map((r) => r.game.time.ms);
+  if (won.length && lost.length) {
+    notes.push(`Games they win last ${PT.fmt(avgOf(won))} on average, games they lose ${PT.fmt(avgOf(lost))}.`);
+  }
+  if (turnRows.length >= 6) {
+    const avgTurn = (list) => list.reduce((n, r) => n + r.p.t.sum, 0) / list.reduce((n, r) => n + r.p.t.n, 0);
+    const a = avgTurn(turnRows.slice(0, 5));
+    const b = avgTurn(turnRows.slice(5));
+    notes.push(`Last 5 games: ${PT.fmt(a)} a turn, ${a < b ? 'quicker' : 'slower'} than before (${PT.fmt(b)}).`);
+  }
+
+  const recent = rows.slice(0, 10).map((r) => `
+    <div class="history-game tappable" data-game="${esc(r.game.id)}">
+      <div class="history-game-top"><b>${shortDate(r.game.at)}${r.game.winner === r.p.id ? ` ${icon('trophy', { size: 13 })}` : ''}</b>
+        <span>game ${PT.fmt(r.game.time.ms)}</span></div>
+      <div class="history-times">played ${PT.fmt(r.p.t.ms)}${r.p.t.n ? ` · avg turn ${PT.fmt(r.p.t.sum / r.p.t.n)}` : ''}</div>
+    </div>`).join('');
+
+  return `<div class="history-heading">${esc(name)} · time</div>
+    ${tileGrid(cells)}
+    ${notes.length ? `<ul class="time-notes">${notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
+    <div class="history-heading detail-gap">Recent games</div>
+    <div class="history-list">${recent}</div>`;
+}
+
+/** Time numbers for one finished game. */
+function renderGameTime(game) {
+  const date = new Date(game.at).toLocaleDateString(undefined, {
+    weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+  });
+  const head = `<div class="history-heading">${esc(game.winnerName || 'Someone')} won · ${date}</div>`;
+  if (!game.time) return `${head}<p class="hint">This game has no turn times — it was played before they were tracked, or this device joined too late to time it.</p>`;
+  const timed = (game.players || []).filter((p) => p.t);
+  const all = timed.reduce((a, p) => ({ n: a.n + p.t.n, sum: a.sum + p.t.sum }), { n: 0, sum: 0 });
+  const withTurns = timed.filter((p) => p.t.n);
+  const slow = withTurns.length ? withTurns.reduce((a, b) => (b.t.max > a.t.max ? b : a)) : null;
+  const fast = withTurns.length ? withTurns.reduce((a, b) => (b.t.min < a.t.min ? b : a)) : null;
+
+  const cells = [['Game length', PT.fmt(game.time.ms), game.time.partial ? 'joined late, so a bit short' : 'paused time not counted']];
+  if (game.turns) cells.push(['Turns', String(game.turns)]);
+  if (all.n) cells.push(['Average turn', PT.fmt(all.sum / all.n)]);
+  if (slow) cells.push(['Longest turn', PT.fmt(slow.t.max), slow.name]);
+  if (fast) cells.push(['Shortest turn', PT.fmt(fast.t.min), fast.name]);
+
+  const rowsHtml = timed.slice().sort((a, b) => b.t.ms - a.t.ms).map((p) => {
+    const share = game.time.ms ? Math.round((p.t.ms / game.time.ms) * 100) : 0;
+    return `<div class="stat-card">
+      <div class="stat-top"><b>${esc(p.name)}${p.id === game.winner ? ` ${icon('trophy', { size: 13 })}` : ''}</b>
+        <span><em>${PT.fmt(p.t.ms)}</em> · ${share}% of the game</span></div>
+      <div class="stat-bar"><i style="flex:${Math.max(share, 1)};background:var(--gold)"></i><i style="flex:${Math.max(100 - share, 0)}"></i></div>
+      <div class="stat-how">${p.t.n
+        ? `${p.t.n} turns · avg <b>${PT.fmt(p.t.sum / p.t.n)}</b> · longest ${PT.fmt(p.t.max)} · shortest ${PT.fmt(p.t.min)}`
+        : 'no full turns timed'}</div>
+    </div>`;
+  }).join('');
+  return `${head}${tileGrid(cells)}<div class="history-heading detail-gap">Player by player</div>
+    <div class="history-list">${rowsHtml}</div>
+    <p class="hint">Setup placement counts toward a player's time, but not toward their turn averages.</p>`;
+}
+
+/** What the sheet is showing: the lists, or one player's / one game's time detail. */
+let historyView = null;
+
 function openHistory() {
+  historyView = null;
+  renderHistory();
+  sheet('sheet-history');
+}
+
+function renderHistory() {
   const history = loadHistory();
+  const detail = $('history-detail');
+  const showing = !!historyView;
+  for (const id of ['my-stats', 'history-summary', 'history-list']) $(id).hidden = showing;
+  detail.hidden = !showing;
+  if (showing) {
+    const body = historyView.player !== undefined
+      ? renderPlayerTime(history, historyView.player)
+      : renderGameTime(history.find((g) => g.id === historyView.game) || {});
+    detail.innerHTML = `<button class="btn btn-ghost detail-back" data-hback>‹ Back</button>${body}`;
+    $('sheet-history').scrollTop = 0;
+    return;
+  }
+
   renderMyStats(history);
   $('history-summary').innerHTML = renderPlayerStats(history);
-
   $('history-list').innerHTML = history.length
     ? `<div class="history-heading">Games</div>${history.map((game) => {
-        const date = new Date(game.at).toLocaleDateString(undefined, {
-          year: 'numeric', month: 'short', day: 'numeric',
-        });
         const players = (game.players || []).map((player) =>
           `<span class="history-player${player.id === game.winner ? ' winner' : ''}">${esc(player.name)}${player.id === game.winner ? ` ${icon('trophy', { size: 13 })}` : ''}</span>`
         ).join('');
-        return `<div class="history-game">
-          <div class="history-game-top"><b>${esc(game.winnerName || 'Someone')} won</b><span>${date}</span></div>
-          <div class="history-players">${players}</div>
+        const times = game.time
+          ? `<div class="history-times">⏱ ${PT.fmt(game.time.ms)}${game.turns ? ` · ${game.turns} turns` : ''} · tap for times</div>` : '';
+        return `<div class="history-game${game.time ? ' tappable' : ''}"${game.time ? ` data-game="${esc(game.id)}"` : ''}>
+          <div class="history-game-top"><b>${esc(game.winnerName || 'Someone')} won</b><span>${shortDate(game.at)}</span></div>
+          <div class="history-players">${players}</div>${times}
         </div>`;
       }).join('')}`
     : '';
-  sheet('sheet-history');
 }
+
+$('sheet-history').addEventListener('click', (e) => {
+  if (e.target.closest('[data-hback]')) { historyView = null; renderHistory(); return; }
+  const gameEl = e.target.closest('[data-game]');
+  if (gameEl) { historyView = { game: gameEl.dataset.game }; renderHistory(); return; }
+  const playerEl = e.target.closest('[data-player]');
+  if (playerEl) { historyView = { player: playerEl.dataset.player }; renderHistory(); }
+});
 
 /**
  * Where a player's points came from.
@@ -6527,28 +6719,13 @@ function pointSources(g, pid) {
 }
 
 /**
- * The longest single turn, and the shortest one in which something was built or bought. A turn runs
- * from its start stamp to the next one's, the last to the moment the game ended. Turns
- * under a second are ignored: a bot or an auto-skip says nothing about how anyone plays.
+ * This device's own timing of the finished game, or null when it did not see it played
+ * (joined after the end, or the app was cleared). Bots are not timed.
  */
-function turnPace(log, endMs) {
-  const turns = Object.entries(log || {})
-    .map(([k, v]) => ({ n: Number(k.slice(1)), p: v?.p, at: stampMs(v?.at), acted: !!v?.a }))
-    .filter((t) => Number.isFinite(t.n) && t.p && t.at !== null)
-    .sort((a, b) => a.n - b.n);
-  let slow = null;
-  let fast = null;
-  turns.forEach((t, i) => {
-    const end = i + 1 < turns.length ? turns[i + 1].at : endMs;
-    if (end === null || end === undefined) return;
-    const ms = end - t.at;
-    if (!(ms >= 1000)) return;
-    if (!slow || ms > slow.ms) slow = { pid: t.p, ms };
-    // Passing without building or buying proves nothing about how fast someone plays.
-    if (t.acted && (!fast || ms < fast.ms)) fast = { pid: t.p, ms };
-  });
-  if (!slow || !fast || slow.pid === fast.pid) return null;
-  return { slow, fast };
+function overTimes(g) {
+  if (!clock || clock.gid !== g.seed || !clock.done || !clock.turns.length) return null;
+  const humans = g.seats.filter((pid) => !room?.players?.[pid]?.bot);
+  return PT.gameTimes(clock, humans);
 }
 
 /** The most and least rolled totals, and who had a settlement or city on those numbers. */
@@ -6619,10 +6796,18 @@ function winTitles(g) {
 function renderOverFacts(g) {
   const el = $('over-facts');
   const rows = [];
-  const pace = solo ? null : turnPace(room?.turnLog, stampMs(room?.endedAt));
-  if (pace) {
-    rows.push(['🐢', `${nameFor(pace.slow.pid)} · longest turn ${spell(pace.slow.ms)}`]);
-    rows.push(['⚡', `${nameFor(pace.fast.pid)} · shortest turn ${spell(pace.fast.ms)}`]);
+  const times = overTimes(g);
+  if (times) {
+    const people = Object.entries(times.per).filter(([, t]) => t.n);
+    const n = people.reduce((a, [, t]) => a + t.n, 0);
+    const sum = people.reduce((a, [, t]) => a + t.sum, 0);
+    if (n) rows.push(['⏱', `Average turn ${PT.fmt(sum / n)} · ${PT.fmt(times.total)} of play`]);
+    if (people.length) {
+      const slow = people.reduce((a, b) => (b[1].max > a[1].max ? b : a));
+      const fast = people.reduce((a, b) => (b[1].min < a[1].min ? b : a));
+      rows.push(['🐢', `${nameFor(slow[0])} · longest turn ${PT.fmt(slow[1].max)}`]);
+      rows.push(['⚡', `${nameFor(fast[0])} · shortest turn ${PT.fmt(fast[1].min)}`]);
+    }
   }
   const dice = diceFacts(g, ensureBoard());
   const who = (d) => (d.n === 7 ? 'the robber' : d.who.length ? d.who.map(nameFor).join(', ') : 'nobody');
@@ -6655,6 +6840,7 @@ function renderOver(g) {
 
   const rows = g.seats.slice().sort((a, b) => R.totalVP(g, b) - R.totalVP(g, a));
   const titles = winTitles(g);
+  const times = overTimes(g);
   $('final-table').innerHTML = rows.map((pid, i) => {
     const src = pointSources(g, pid).filter((s) => s.n > 0);
     const lines = src.map((s) => `<span class="src">
@@ -6669,6 +6855,8 @@ function renderOver(g) {
         <span class="final-vp">${R.totalVP(g, pid)}</span>
       </div>
       <div class="final-sources">${lines || '<span class="src-none">no points</span>'}</div>
+      ${times?.per[pid]?.n ? `<div class="final-times">⏱ avg turn <b>${PT.fmt(times.per[pid].sum / times.per[pid].n)}</b>
+        · longest ${PT.fmt(times.per[pid].max)} · shortest ${PT.fmt(times.per[pid].min)}</div>` : ''}
     </div>`;
   }).join('');
 
