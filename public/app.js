@@ -2525,7 +2525,9 @@ function drawSoloSheet() {
   });
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
+  soloDiscard = clampDiscard(soloDiscard);
   $('solo-discard').textContent = String(soloDiscard);
+  $('solo-discard-slider').value = String(soloDiscard);
   // Nothing to set when a seven takes a card instead of emptying hands: the limit would
   // govern a rule that is switched off. The lobby dims this row rather than hiding it,
   // because there the host is changing settings other people are watching — here nobody
@@ -2611,11 +2613,6 @@ for (const b of document.querySelectorAll('[data-solo]')) {
     if (b.dataset.solo === 'bots') {
       soloBots = Math.max(1, Math.min(R.MAX_PLAYERS - 1, soloBots + step));
       localStorage.setItem('hexcolony_solo_bots', String(soloBots));
-    } else if (b.dataset.solo === 'discard') {
-      // The same five to twelve the lobby allows, so a solo game cannot be set up in a
-      // shape an online one could not be.
-      soloDiscard = Math.max(5, Math.min(12, soloDiscard + step));
-      localStorage.setItem('hexcolony_solo_discard', String(soloDiscard));
     } else if (b.dataset.solo === 'target') {
       soloTarget = Math.max(5, Math.min(15, soloTarget + step));
       localStorage.setItem('hexcolony_solo_target', String(soloTarget));
@@ -2639,14 +2636,42 @@ async function copyCode() {
   } catch { toast(`Room code: ${shownCode(roomCode)}`); }
 }
 
+/** Seven is the usual rule; twenty is "almost never". Anything else is clamped into that. */
+const DISCARD_MIN = 7;
+const DISCARD_MAX = 20;
+const clampDiscard = (n) => Math.max(DISCARD_MIN, Math.min(DISCARD_MAX, Math.round(Number(n)) || DISCARD_MIN));
+
+// Sliders being dragged right now, so a re-render does not fight the finger.
+const sliderHeld = new Set();
+function wireSlider(id, label, onInput, onCommit) {
+  const el = $(id);
+  el.addEventListener('pointerdown', () => sliderHeld.add(id));
+  const release = () => sliderHeld.delete(id);
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('input', () => {
+    $(label).textContent = String(clampDiscard(el.value));
+    if (onInput) onInput(clampDiscard(el.value));
+  });
+  // `change` fires once on release, so the room is written once, not on every notch.
+  el.addEventListener('change', () => { release(); onCommit(clampDiscard(el.value)); });
+}
+// Lobby: the host's slider writes the setting to the room.
+wireSlider('set-discard-slider', 'set-discard', null, (n) => {
+  if (setSetting({ 'settings.discardLimit': n })) sfx.tap();
+});
+// Solo: remembered on this device for next time.
+wireSlider('solo-discard-slider', 'solo-discard', null, (n) => {
+  soloDiscard = n;
+  localStorage.setItem('hexcolony_solo_discard', String(n));
+  sfx.tap();
+});
+
 for (const b of document.querySelectorAll('[data-set]')) {
   b.addEventListener('click', () => {
-    const key = b.dataset.set;
     const step = Number(b.dataset.step);
     const s = room?.settings || {};
-    const patch = key === 'target'
-      ? { 'settings.targetVP': Math.max(5, Math.min(15, (s.targetVP || 10) + step)) }
-      : { 'settings.discardLimit': Math.max(5, Math.min(12, (s.discardLimit || 7) + step)) };
+    const patch = { 'settings.targetVP': Math.max(5, Math.min(15, (s.targetVP || 10) + step)) };
     if (setSetting(patch)) sfx.tap();
   });
 }
@@ -2767,7 +2792,10 @@ function renderLobby() {
 
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 12);
-  $('set-discard').textContent = String(s.discardLimit || 7);
+  $('set-discard').textContent = String(clampDiscard(s.discardLimit));
+  // Leave the thumb alone while the host is dragging it: a room update mid-drag would
+  // otherwise snap it back to the last saved value under their finger.
+  if (!sliderHeld.has('set-discard-slider')) $('set-discard-slider').value = String(clampDiscard(s.discardLimit));
   const turnSeconds = R.TURN_OPTIONS.includes(s.turnSeconds) ? s.turnSeconds : 30;
   for (const b of document.querySelectorAll('[data-timer]')) {
     b.classList.toggle('on', Number(b.dataset.timer) === turnSeconds);
@@ -2784,9 +2812,8 @@ function renderLobby() {
     ? 'Discard down, move the robber, rob whoever it lands on.'
     : 'No discard, no robber — just take a card from any player.';
   // The discard limit has nothing to govern once the robber is off.
-  for (const b of document.querySelectorAll('[data-set="discard"]')) b.disabled = !useRobber;
-  const discardRow = $('set-discard').closest('.opt-row');
-  if (discardRow) discardRow.style.opacity = useRobber ? '' : '0.4';
+  $('set-discard-slider').disabled = !useRobber || !isHost();
+  $('set-discard-cell').style.opacity = useRobber ? '' : '0.4';
 
   const layout = s.layout || 'expansion';
   const dyn = dynamicSize(layout);

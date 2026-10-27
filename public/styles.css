@@ -2844,3 +2844,9 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
 .time-notes { margin: 4px 0 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; color: var(--text); }
 .final-times { margin-top: 6px; font-size: 12px; color: var(--dim); }
 .final-times b { color: var(--sky); }
+
+/* The discard limit slider (7-20). Spans the whole row of its pair; the number rides in the label. */
+.opt-cell.wide { grid-column: 1 / -1; }
+.slide-v { color: var(--gold); font-size: 15px; font-weight: 800; margin: 0 2px; }
+.slide { width: 100%; margin: 4px 0 0; accent-color: var(--sky); height: 28px; }
+.slide:disabled { opacity: .5; }

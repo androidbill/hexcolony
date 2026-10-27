@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.10.27.01">
+<link rel="stylesheet" href="styles.css?v=2026.10.27.02">
 </head>
 <body>
 
@@ -230,13 +230,9 @@
             <button class="step-b" data-set="target" data-step="1">+</button>
           </div>
         </div>
-        <div class="opt-cell">
-          <span class="opt-l">Discard at</span>
-          <div class="stepper">
-            <button class="step-b" data-set="discard" data-step="-1">&minus;</button>
-            <span class="step-v" id="set-discard">7</span>
-            <button class="step-b" data-set="discard" data-step="1">+</button>
-          </div>
+        <div class="opt-cell wide" id="set-discard-cell">
+          <span class="opt-l">Discard at <b class="slide-v" id="set-discard">7</b> cards</span>
+          <input type="range" class="slide" id="set-discard-slider" min="7" max="20" step="1" value="7" aria-label="Discard limit">
         </div>
       </div>
 
@@ -630,13 +626,9 @@
         <button class="step-b" data-solo="target" data-step="1">+</button>
       </div>
     </div>
-    <div class="opt-cell" id="solo-discard-row">
-      <span class="opt-l">Discard at</span>
-      <div class="stepper">
-        <button class="step-b" data-solo="discard" data-step="-1">&minus;</button>
-        <span class="step-v" id="solo-discard">7</span>
-        <button class="step-b" data-solo="discard" data-step="1">+</button>
-      </div>
+    <div class="opt-cell wide" id="solo-discard-row">
+      <span class="opt-l">Discard at <b class="slide-v" id="solo-discard">7</b> cards</span>
+      <input type="range" class="slide" id="solo-discard-slider" min="7" max="20" step="1" value="7" aria-label="Discard limit">
     </div>
   </div>
 
@@ -852,7 +844,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.10.27.01"></script>
-<script type="module" src="app.js?v=2026.10.27.01"></script>
+<script src="iro.min.js?v=2026.10.27.02"></script>
+<script type="module" src="app.js?v=2026.10.27.02"></script>
 </body>
 </html>
