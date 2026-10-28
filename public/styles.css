@@ -1234,27 +1234,28 @@ button {
    can grow out of it. */
 .board-tools-list {
   position: absolute;
-  bottom: calc(100% + 8px); left: 50%;
+  bottom: calc(100% + 8px); left: 0;
   display: flex; flex-direction: column; gap: 2px;
   padding: 4px;
-  border-radius: 999px;
+  border-radius: 26px;
   background: rgba(5, 18, 32, 0.9);
   border: 1px solid var(--line);
   backdrop-filter: blur(8px);
   box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
-  transform-origin: 50% 100%;
-  transform: translateX(-50%);
+  transform-origin: 0 100%;
   transition: opacity .16s ease, transform .16s cubic-bezier(.2, 1.2, .4, 1), visibility .16s;
 }
 /* Shut: invisible AND untappable, so it cannot swallow a tap meant for the island. */
 .board-tools:not(.open) .board-tools-list {
   opacity: 0;
   visibility: hidden;
-  transform: translateX(-50%) translateY(8px) scale(.85);
+  transform: translateY(8px) scale(.85);
 }
 /* Inside the pill the buttons ARE the pill's contents, so they drop their own disc.
    Kept the full 44px tall: a smaller target is the wrong economy on a phone. */
 .board-tools-list .board-fab {
+  width: auto; min-width: 44px; padding: 0 16px 0 11px;
+  display: flex; align-items: center; justify-content: flex-start; gap: 10px;
   background: none;
   border: 0;
   border-radius: 999px;
@@ -2871,3 +2872,8 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
   75%  { transform: translateY(0) rotate(-3deg); }
   100% { opacity: 1; transform: none; }
 }
+
+/* The words beside each tool's icon in the open pill. */
+.fab-label { font-size: 14px; font-weight: 700; white-space: nowrap; color: var(--text); }
+.board-tools-list .board-fab .chat-dot { top: 6px; right: auto; left: 28px; }
+.board-tools-list .board-fab svg { flex-shrink: 0; }
