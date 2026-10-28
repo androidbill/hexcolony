@@ -4019,21 +4019,6 @@ function reactToLog(g) {
         sfx.dice(); playRoll(e.dice); view.setRolled(e.roll);
         // A 7 lands with the dice: the board jolts and the edges go red.
         if (e.roll === 7) setTimeout(sevenImpact, ROLL_TUMBLE_MS);
-        // The one number that changes the rules of the turn, the first time it shows
-        // up. Every 7 after the first is just the game working as designed.
-        if (e.roll === 7 && !g.log.some((x) => x.t === 'roll' && x.roll === 7 && x.i < e.i)) {
-          shoutout('First 7 of the game!', 'var(--danger)');
-        }
-        // Three of the same roll running — called the moment the streak reaches three,
-        // not on every roll after: a fourth in a row is the same streak, not new news.
-        {
-          const prior = g.log.filter((x) => x.t === 'roll' && x.i < e.i).map((x) => x.roll);
-          const n = prior.length;
-          if (n >= 2 && prior[n - 1] === e.roll && prior[n - 2] === e.roll
-            && !(n >= 3 && prior[n - 3] === e.roll)) {
-            shoutout(`Three ${e.roll}s in a row!`, 'var(--gold)');
-          }
-        }
         break;
       case 'build': {
         e.what === 'city' ? sfx.city() : e.what === 'road' ? sfx.road() : sfx.build();
@@ -4042,11 +4027,6 @@ function reactToLog(g) {
         // mistake rather than as a flourish. They draw themselves from one end instead.
         if (e.v !== undefined) view.setBuilt(Number(e.v));
         if (e.what === 'road' && e.e !== undefined) view.setBuiltRoad(Number(e.e));
-        // The first city of the game, same rarity budget as a steal or an award — it
-        // happens exactly once, unlike every other build this switch stays quiet about.
-        if (e.what === 'city' && !g.log.some((x) => x.t === 'build' && x.what === 'city' && x.i < e.i)) {
-          shoutout(`${e.p === playerId ? 'You built' : `${nameFor(e.p)} built`} the first city!`, colorFor(e.p));
-        }
         if (e.what === 'settlement' || e.what === 'city') maybeHalfway(g, e.p, 1);
         break;
       }
