@@ -2877,3 +2877,10 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
 .fab-label { font-size: 14px; font-weight: 700; white-space: nowrap; color: var(--text); }
 .board-tools-list .board-fab .chat-dot { top: 6px; right: auto; left: 28px; }
 .board-tools-list .board-fab svg { flex-shrink: 0; }
+
+/* "Random" beside the sea swatch: lit while every game gets its own colour. */
+.sea-random {
+  padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: rgba(255, 255, 255, .06); border: 1px solid var(--line); color: var(--dim);
+}
+.sea-random.on { background: rgba(227, 186, 87, .18); border-color: rgba(227, 186, 87, .6); color: var(--gold); }

@@ -822,7 +822,7 @@ async function createRoom() {
       expiresAt: new Date(Date.now() + ROOM_TTL_MS),
       hostId: playerId,
       state: 'lobby',
-      settings: { targetVP: 12, discardLimit: 7, boardMode: 'random', layout: 'expansion', useRobber: false, turnSeconds: 30, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
+      settings: { targetVP: 12, discardLimit: 7, boardMode: 'random', layout: 'expansion', useRobber: false, turnSeconds: 30, discardSeconds: R.DISCARD_SECONDS, ...newSea() },
       players: { [playerId]: freshPlayer(name) },
       order: [],
       game: null,
@@ -925,7 +925,7 @@ async function joinDiscordRoom() {
         expiresAt: new Date(Date.now() + ROOM_TTL_MS),
         hostId: playerId,
         state: 'lobby',
-        settings: { targetVP: 12, discardLimit: 7, boardMode: 'random', layout: 'expansion', useRobber: false, turnSeconds: 30, discardSeconds: R.DISCARD_SECONDS, sea: SEA_DEFAULT },
+        settings: { targetVP: 12, discardLimit: 7, boardMode: 'random', layout: 'expansion', useRobber: false, turnSeconds: 30, discardSeconds: R.DISCARD_SECONDS, ...newSea() },
         players: { [playerId]: freshPlayer(name) },
         order: [],
         game: null,
@@ -2427,7 +2427,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   localStorage.setItem(LAST_FIRST_KEY, players[order[0]].name);
   const settings = {
     targetVP, discardLimit, boardMode: 'random', layout, useRobber,
-    turnSeconds: soloTurnSeconds, sea: soloSea, discardSeconds: R.DISCARD_SECONDS,
+    turnSeconds: soloTurnSeconds, ...newSea(), discardSeconds: R.DISCARD_SECONDS,
     fog: soloFog,
   };
 
@@ -2482,7 +2482,17 @@ let soloRobber = localStorage.getItem('hexcolony_solo_robber') === 'on';
 let soloFog = localStorage.getItem('hexcolony_solo_fog') === 'on';
 let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 30);
-let soloSea = localStorage.getItem('hexcolony_solo_sea') || SEA_DEFAULT;
+// The sea is a fresh random colour for every new game, unless somebody picked one by hand.
+// A hand-picked colour is remembered here and wins until "Random" is tapped again.
+const SEA_MANUAL_KEY = 'hexcolony_sea_manual';
+const manualSea = () => localStorage.getItem(SEA_MANUAL_KEY) || null;
+const randomSea = () => SEA_COLORS[Math.floor(Math.random() * SEA_COLORS.length)].key;
+/** The sea settings for a game about to be created. */
+function newSea() {
+  const manual = manualSea();
+  return { sea: manual || randomSea(), seaManual: !!manual };
+}
+let soloSea = manualSea() || randomSea();
 
 function drawSoloSheet() {
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
@@ -2519,10 +2529,15 @@ function drawSoloSheet() {
     : 'No discard, no robber — just take a card from any player.';
   drawSeaRow('solo-sea-row', soloSea, (key) => {
     soloSea = key;
-    localStorage.setItem('hexcolony_solo_sea', key);
+    localStorage.setItem(SEA_MANUAL_KEY, key);
     sfx.tap();
     drawSoloSheet();
-  });
+  }, () => {
+    localStorage.removeItem(SEA_MANUAL_KEY);
+    soloSea = randomSea();
+    sfx.tap();
+    drawSoloSheet();
+  }, !!manualSea());
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
   soloDiscard = clampDiscard(soloDiscard);
@@ -2715,10 +2730,20 @@ function setSetting(patch) {
 }
 
 function pickSea(key) {
-  if (!setSetting({ 'settings.sea': key })) return;
+  if (!setSetting({ 'settings.sea': key, 'settings.seaManual': true })) return;
   sfx.tap();
-  // Remembered for the next solo game too, the way the other solo options are.
-  if (solo) { soloSea = key; localStorage.setItem('hexcolony_solo_sea', key); }
+  // Remembered for every later game too, solo or online, until Random is tapped.
+  localStorage.setItem(SEA_MANUAL_KEY, key);
+  if (solo) soloSea = key;
+  applySea();
+}
+
+function randomiseSea() {
+  const key = randomSea();
+  if (!setSetting({ 'settings.sea': key, 'settings.seaManual': false })) return;
+  sfx.tap();
+  localStorage.removeItem(SEA_MANUAL_KEY);
+  if (solo) soloSea = key;
   applySea();
 }
 
@@ -2836,7 +2861,7 @@ function renderLobby() {
     : 'Every tile shown from the start.';
 
   const sea = s.sea;
-  drawSeaRow('sea-row', sea, pickSea);
+  drawSeaRow('sea-row', sea, pickSea, randomiseSea, s.seaManual === true);
   // (There used to be a line naming the sea under the swatch, written to #sea-blurb. The
   // element went in a lobby tidy-up and this write did not, so it threw on every redraw —
   // and everything below it, the Start button's state and both hints, never ran.)
@@ -2873,7 +2898,7 @@ function applySea() {
  * twenty-seven is going to be reordered again.
  */
 const seaPickers = new Map();
-function drawSeaRow(elId, chosen, onPick) {
+function drawSeaRow(elId, chosen, onPick, onRandom, manual) {
   const row = $(elId);
   if (!row) return;
   const current = seaAt(chosen);
@@ -2901,6 +2926,7 @@ function drawSeaRow(elId, chosen, onPick) {
      */
     row.innerHTML = `<div class="sea-head">
         <span class="opt-l">Sea</span>
+        <button type="button" class="sea-random" title="A new random sea for every game">Random</button>
         <button type="button" class="sea-toggle" aria-expanded="false">
           <span class="sea-wheel-preview" style="--a:${esc(current.a)};--b:${esc(current.b)}"></span>
           <span class="sea-hex"></span>
@@ -2914,6 +2940,7 @@ function drawSeaRow(elId, chosen, onPick) {
         <div class="sea-iro" aria-label="Choose sea color"></div>
       </div>`;
     mount = row.querySelector('.sea-iro');
+    row.querySelector('.sea-random').addEventListener('click', () => { if (row._onRandom) row._onRandom(); });
     const toggle = row.querySelector('.sea-toggle');
     const panel = row.querySelector('.sea-wheel');
     toggle.addEventListener('click', () => {
@@ -2923,6 +2950,9 @@ function drawSeaRow(elId, chosen, onPick) {
       sfx.tap();
     });
   }
+  // The callback and state change between redraws; the button is only built once.
+  row._onRandom = onRandom;
+  row.querySelector('.sea-random').classList.toggle('on', !manual);
   const custom = String(chosen || '').match(/^custom:(#[0-9a-f]{6})$/i);
   const value = (custom ? custom[1] : current.a).toUpperCase();
   let picker = seaPickers.get(elId);
@@ -6191,6 +6221,8 @@ function planRematch(data, pid, on, voters = null) {
         startedAt: null,
         endedAt: null,
         rematch: null,
+        // A new game gets a new sea unless the host picked one by hand.
+        ...(data.settings?.seaManual ? {} : { settings: { ...data.settings, sea: randomSea() } }),
       },
     };
   }
