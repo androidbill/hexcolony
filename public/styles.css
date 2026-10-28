@@ -2409,6 +2409,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   @keyframes dev-front-turn { from, to { opacity: 1; transform: none; } }
   @keyframes seven-flash { from { opacity: 0; } to { opacity: 0; } }
   @keyframes mono-pop { from { opacity: 0; transform: none; } }
+  @keyframes steal-snatch { from { opacity: 0; transform: none; } }
   @keyframes gain-in { from { opacity: 0; } to { opacity: 1; transform: none; } }
   @keyframes gain-away { to { opacity: 0; transform: none; } }
   @keyframes gain-stolen { to { opacity: 0; transform: none; } }
@@ -2859,3 +2860,14 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
 .mono-res > * { display: block; transform: scale(1.6); transform-origin: center; }
 .mono-spark { top: 38%; animation-delay: .25s; }
 @keyframes mono-pop { 0% { opacity: 0; transform: translateY(40px) scale(.4) rotate(-8deg); } 100% { opacity: 1; transform: none; } }
+
+/* A steal: the card is snatched in from above with a little shake, then settles. */
+.steal-res { margin: 34px 0 30px; animation: steal-snatch .6s cubic-bezier(.3, 1.3, .4, 1) both; filter: drop-shadow(0 16px 30px rgba(0, 0, 0, .55)); }
+.steal-res > * { display: block; transform: scale(1.6); transform-origin: center; }
+.steal-puff { top: 40%; animation-delay: .1s; }
+@keyframes steal-snatch {
+  0%   { opacity: 0; transform: translateY(-120px) scale(.5) rotate(-14deg); }
+  55%  { opacity: 1; transform: translateY(8px) scale(1.05) rotate(5deg); }
+  75%  { transform: translateY(0) rotate(-3deg); }
+  100% { opacity: 1; transform: none; }
+}

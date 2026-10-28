@@ -4053,17 +4053,12 @@ function reactToLog(g) {
       case 'robber': sfx.robber(); view.robberMoved(e.hex); break;
       case 'steal':
         sfx.steal();
+        // Everyone is shown the card that was taken (Bill's call: it is a friends game,
+        // so a steal is a public moment). The two people involved then also get their
+        // card flying to or from their own tray once the reveal has cleared.
+        playStealReveal(e);
         if (e.p === playerId || e.from === playerId) {
-          // Only the two of them are told what it was, so only the two of them get the
-          // card itself — the flying-card animation and the shoutout naming it.
-          playSteal(e.res, e.p === playerId);
-          const thief = e.p === playerId ? 'You' : nameFor(e.p);
-          const victim = e.from === playerId ? 'you' : nameFor(e.from);
-          shoutout([{ parts: [`${thief} stole `, { resource: e.res }] }, `from ${victim}`], colorFor(e.p));
-        } else {
-          // Everyone else still sees that a steal happened and who it happened to —
-          // the same thing the log already says — just never what was taken.
-          shoutout(`${nameFor(e.p)} stole from ${nameFor(e.from)}`, colorFor(e.p));
+          stealTimers.push(setTimeout(() => playSteal(e.res, e.p === playerId), STEAL_SHOW_MS + 300));
         }
         break;
       case 'produce':
@@ -4311,6 +4306,33 @@ function playReaction(pid, emoji) {
 const STEAL_HOLD_MS = 560;
 const STEAL_FLY_MS = 520;
 let stealTimers = [];
+
+const STEAL_SHOW_MS = 1800;
+
+/** "X stole Wheat from Y": the card taken, shown large to the whole table. */
+function playStealReveal(e) {
+  const stage = $('dev-stage');
+  if (!stage || !e.res) return;
+  for (const t of devTimers) clearTimeout(t);
+  devTimers = [];
+  const thief = e.p === playerId ? 'You' : nameFor(e.p);
+  const victim = e.from === playerId ? 'you' : nameFor(e.from);
+  const puffs = Array.from({ length: 6 }, () => {
+    const a = Math.random() * Math.PI * 2;
+    const d = 60 + Math.random() * 60;
+    return `<i class="boom-puff steal-puff" style="--dx:${Math.round(Math.cos(a) * d)}px;--dy:${Math.round(Math.sin(a) * d - 20)}px"></i>`;
+  }).join('');
+  stage.style.setProperty('--c', colorFor(e.p));
+  stage.innerHTML = `<div class="dev-wrap">
+      <div class="steal-res">${resCard(e.res, { size: 'xl' })}</div>
+      <div class="dev-caption">${esc(`${thief} stole ${RES_NAME[e.res] || e.res} from ${victim}`)}</div>
+      ${puffs}
+    </div>`;
+  stage.classList.remove('out');
+  stage.hidden = false;
+  devTimers.push(setTimeout(() => stage.classList.add('out'), STEAL_SHOW_MS));
+  devTimers.push(setTimeout(() => { stage.hidden = true; stage.classList.remove('out'); stage.innerHTML = ''; }, STEAL_SHOW_MS + 300));
+}
 
 function playSteal(res, toMe) {
   const stage = $('gain-stage');
