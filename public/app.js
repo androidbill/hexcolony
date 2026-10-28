@@ -6895,7 +6895,7 @@ function renderOver(g) {
         <span class="final-vp">${R.totalVP(g, pid)}</span>
       </div>
       <div class="final-sources">${lines || '<span class="src-none">no points</span>'}</div>
-      ${times?.per[pid]?.n ? `<div class="final-times">⏱ avg turn <b>${PT.fmt(times.per[pid].sum / times.per[pid].n)}</b>
+      ${times?.per[pid]?.n ? `<div class="final-times">⏱ <b>${times.per[pid].n}</b> turn${times.per[pid].n === 1 ? '' : 's'} · avg <b>${PT.fmt(times.per[pid].sum / times.per[pid].n)}</b>
         · longest ${PT.fmt(times.per[pid].max)} · shortest ${PT.fmt(times.per[pid].min)}</div>` : ''}
     </div>`;
   }).join('');
