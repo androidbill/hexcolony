@@ -5170,7 +5170,7 @@ function resPicker(elId, counts, opts = {}) {
     const have = opts.showHave === false ? '' : `<span class="pick-have">have ${p.res[r] || 0}</span>`;
     const n = counts[r] || 0;
     return `<div class="pick-col">
-      ${resCard(r, { size: 'sm', count: n || null, selected: !!n, dim: !n })}
+      ${resCard(r, { size: 'sm', count: n || null, selected: !!n })}
       <div class="pick-pm">
         <button data-pm="-" data-r="${r}" aria-label="One fewer ${RES_NAME[r]}">−</button>
         <button data-pm="+" data-r="${r}" aria-label="One more ${RES_NAME[r]}">+</button>
