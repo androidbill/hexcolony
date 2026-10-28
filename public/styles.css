@@ -2408,6 +2408,7 @@ button.rcard-wrap:active .rcard { transform: scale(.94); }
   @keyframes dev-back-turn { from, to { opacity: 0; transform: none; } }
   @keyframes dev-front-turn { from, to { opacity: 1; transform: none; } }
   @keyframes seven-flash { from { opacity: 0; } to { opacity: 0; } }
+  @keyframes mono-pop { from { opacity: 0; transform: none; } }
   @keyframes gain-in { from { opacity: 0; } to { opacity: 1; transform: none; } }
   @keyframes gain-away { to { opacity: 0; transform: none; } }
   @keyframes gain-stolen { to { opacity: 0; transform: none; } }
@@ -2850,3 +2851,11 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
 .slide-v { color: var(--gold); font-size: 15px; font-weight: 800; margin: 0 2px; }
 .slide { width: 100%; margin: 4px 0 0; accent-color: var(--sky); height: 28px; }
 .slide:disabled { opacity: .5; }
+
+/* Monopoly's second beat: the card gives way to the resource it took, shown large. */
+.dev-wrap.leaving { animation: award-out .25s ease-in both; }
+.mono-res { animation: mono-pop .5s cubic-bezier(.3, 1.4, .4, 1) both; filter: drop-shadow(0 16px 30px rgba(0, 0, 0, .55)); }
+.mono-res { margin: 34px 0 30px; }
+.mono-res > * { display: block; transform: scale(1.6); transform-origin: center; }
+.mono-spark { top: 38%; animation-delay: .25s; }
+@keyframes mono-pop { 0% { opacity: 0; transform: translateY(40px) scale(.4) rotate(-8deg); } 100% { opacity: 1; transform: none; } }

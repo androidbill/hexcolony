@@ -4087,13 +4087,7 @@ function reactToLog(g) {
       // rather than the small inline icon a steal gets.
       case 'mono':
         sfx.card();
-        if (!playDevReveal({ card: 'mono', p: e.p, res: e.res, count: e.count })) {
-          shoutout([
-            `${e.p === playerId ? 'You' : nameFor(e.p)} played`,
-            'Monopoly',
-            { bigResource: e.res },
-          ], colorFor(e.p));
-        }
+        playDevReveal({ card: 'mono', p: e.p, res: e.res, count: e.count });
         break;
       case 'offer':
         // The chime is what makes you look down at the strip, so it has to agree with it:
@@ -4621,6 +4615,8 @@ function paintDie(el, n) {
 // like the other announcements. The same stage shows the card you have just bought to you.
 const DEV_CARDS = ['knight', 'road', 'plenty', 'mono', 'vp'];
 const DEV_HOLD_MS = 1700;
+const MONO_CARD_MS = 1500;   // Monopoly: the card, then...
+const MONO_TAKE_MS = 2000;   // ...the resource it took
 let devTimers = [];
 
 // Fetched up front so the face is there when the card turns over.
@@ -4658,8 +4654,6 @@ function playDevReveal(e) {
     else if (e.card === 'road') extra = '<div class="dev-road"></div>';
     else if (e.card === 'plenty' || e.card === 'mono') extra = spread(7).map((v) => `<span class="dev-spark" style="${v}">✨</span>`).join('');
   }
-  const take = e.card === 'mono' && e.res
-    ? `<div class="dev-take">took ${e.count ?? ''} ${resCard(e.res, { size: 'xs' })}</div>` : '';
   stage.style.setProperty('--c', colorFor(e.p));
   stage.innerHTML = `<div class="dev-wrap">
       <div class="reveal-card${e.drawn ? '' : ' no-flip'}">
@@ -4667,7 +4661,6 @@ function playDevReveal(e) {
         <img class="dev-face dev-front" src="art/dev-${e.card}.webp" alt="${esc(name)}" decoding="async">
       </div>
       <div class="dev-caption">${esc(caption)}</div>
-      ${take}
       ${extra}
     </div>`;
   stage.classList.remove('out');
@@ -4676,8 +4669,26 @@ function playDevReveal(e) {
   if (!e.drawn && e.card === 'knight') {
     devTimers.push(setTimeout(() => { sfx.cannon(); view.cannonFired(); buzz([60, 30, 60]); }, 250));
   }
-  devTimers.push(setTimeout(() => stage.classList.add('out'), DEV_HOLD_MS));
-  devTimers.push(setTimeout(() => { stage.hidden = true; stage.classList.remove('out'); stage.innerHTML = ''; }, DEV_HOLD_MS + 300));
+  let hold = DEV_HOLD_MS;
+  if (!e.drawn && e.card === 'mono' && e.res) {
+    // Two beats: the card, then the resource it took. The card clears out of the way
+    // before the second beat so the two never share the screen.
+    const took = e.count > 0
+      ? `${who} took ${e.count} ${RES_NAME[e.res] || e.res}`
+      : `Nobody had any ${RES_NAME[e.res] || e.res}`;
+    devTimers.push(setTimeout(() => stage.querySelector('.dev-wrap')?.classList.add('leaving'), MONO_CARD_MS));
+    devTimers.push(setTimeout(() => {
+      stage.innerHTML = `<div class="dev-wrap">
+        <div class="mono-res">${resCard(e.res, { size: 'xl' })}</div>
+        <div class="dev-caption">${esc(took)}</div>
+        ${spread(9).map((v) => `<span class="dev-spark mono-spark" style="${v}">✨</span>`).join('')}
+      </div>`;
+      sfx.gain();
+    }, MONO_CARD_MS + 250));
+    hold = MONO_CARD_MS + 250 + MONO_TAKE_MS;
+  }
+  devTimers.push(setTimeout(() => stage.classList.add('out'), hold));
+  devTimers.push(setTimeout(() => { stage.hidden = true; stage.classList.remove('out'); stage.innerHTML = ''; }, hold + 300));
   return true;
 }
 
