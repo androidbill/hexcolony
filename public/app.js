@@ -3913,6 +3913,11 @@ function render() {
   }
 
   view.setGame(g);
+  {
+    const limit = g.useRobber !== false;
+    $('rules-line').innerHTML = `<span>Points - ${esc(g.target || 10)}</span>`
+      + `<span>Discard ${limit ? `On ${esc(g.discardLimit || 7)}` : 'Off'}</span>`;
+  }
   view.spinPieces = localStorage.getItem('hexcolony_spin_pieces') === 'on';
   // Whatever ended the moment you were in — the timer running out, a 7, someone
   // leaving — the pending "tap the board" is over with it. Clearing it here covers

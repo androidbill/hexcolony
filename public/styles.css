@@ -2884,3 +2884,16 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
   background: rgba(255, 255, 255, .06); border: 1px solid var(--line); color: var(--dim);
 }
 .sea-random.on { background: rgba(227, 186, 87, .18); border-color: rgba(227, 186, 87, .6); color: var(--gold); }
+
+/* Points to win and the discard rule, in a line just above the cards. Centred, so it clears
+   the board tools handle in the corner; never takes a tap. */
+.rules-line {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--tray-h, 0px) + var(--float-h, 0px) + 12px);
+  z-index: 4; pointer-events: none;
+  display: flex; gap: 18px; white-space: nowrap;
+  padding: 4px 14px; border-radius: 999px;
+  background: rgba(5, 18, 32, .72);
+  border: 1px solid var(--line);
+  font-size: 12px; font-weight: 700; color: var(--parch);
+}
