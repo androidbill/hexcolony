@@ -102,6 +102,121 @@ function makeSea(key, name, a, b) {
   };
 }
 
+
+// ---------------------------------------------------------------- robber looks
+// Each draws a figure about 2s tall, feet at y = +s, centred on x = 0. `t` is the 0..1 pulse.
+const eye = (c, x, y, r, col = '#ffd23f') => {
+  c.save(); c.fillStyle = col; c.shadowColor = col; c.shadowBlur = r * 3;
+  c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); c.restore();
+};
+const cloak = (c, s, fill, rim) => {
+  c.beginPath();
+  c.moveTo(-s * 0.8, s * 1.0);
+  c.quadraticCurveTo(-s * 0.85, -s * 0.1, -s * 0.3, -s * 0.5);
+  c.lineTo(s * 0.3, -s * 0.5);
+  c.quadraticCurveTo(s * 0.85, -s * 0.1, s * 0.8, s * 1.0);
+  c.quadraticCurveTo(s * 0.4, s * 0.88, 0, s * 1.0);
+  c.quadraticCurveTo(-s * 0.4, s * 0.88, -s * 0.8, s * 1.0);
+  c.closePath();
+  c.fillStyle = fill; c.fill();
+  c.strokeStyle = rim; c.lineWidth = Math.max(1, s * 0.1); c.stroke();
+};
+const ROBBER_DRAW = {
+  // A hooded thief with glowing eyes.
+  classic(c, s, t) {
+    cloak(c, s, '#171a24', 'rgba(235,238,250,0.6)');
+    c.beginPath(); c.arc(0, -s * 0.78, s * 0.5, 0, Math.PI * 2);
+    c.fillStyle = '#171a24'; c.fill(); c.strokeStyle = 'rgba(235,238,250,0.6)'; c.lineWidth = Math.max(1, s * 0.1); c.stroke();
+    c.beginPath(); c.ellipse(0, -s * 0.74, s * 0.3, s * 0.26, 0, 0, Math.PI * 2);
+    c.fillStyle = '#05060a'; c.fill();
+    const glow = 0.8 + t * 0.4;
+    eye(c, -s * 0.13, -s * 0.76, s * 0.075 * glow); eye(c, s * 0.13, -s * 0.76, s * 0.075 * glow);
+  },
+  // Wide hat, red scarf over the face.
+  bandit(c, s) {
+    cloak(c, s, '#3a2a22', 'rgba(255,230,200,0.55)');
+    c.beginPath(); c.arc(0, -s * 0.62, s * 0.4, 0, Math.PI * 2);
+    c.fillStyle = '#d9a77a'; c.fill();
+    c.beginPath();
+    c.moveTo(-s * 0.42, -s * 0.55); c.lineTo(s * 0.42, -s * 0.55); c.lineTo(s * 0.34, -s * 0.2); c.lineTo(-s * 0.34, -s * 0.2); c.closePath();
+    c.fillStyle = '#c62f2f'; c.fill();
+    c.fillStyle = '#111'; c.fillRect(-s * 0.22, -s * 0.76, s * 0.14, s * 0.07); c.fillRect(s * 0.08, -s * 0.76, s * 0.14, s * 0.07);
+    c.beginPath(); c.ellipse(0, -s * 0.92, s * 0.78, s * 0.2, 0, 0, Math.PI * 2);
+    c.fillStyle = '#231a16'; c.fill(); c.strokeStyle = 'rgba(255,230,200,0.5)'; c.lineWidth = Math.max(1, s * 0.08); c.stroke();
+    c.beginPath(); c.moveTo(-s * 0.36, -s * 0.95); c.quadraticCurveTo(0, -s * 1.55, s * 0.36, -s * 0.95); c.closePath();
+    c.fillStyle = '#231a16'; c.fill(); c.stroke();
+  },
+  // Skull and crossbones.
+  skull(c, s) {
+    c.lineCap = 'round'; c.strokeStyle = '#e9e4d4'; c.lineWidth = s * 0.2;
+    c.beginPath(); c.moveTo(-s * 0.7, s * 0.9); c.lineTo(s * 0.7, s * 0.05); c.moveTo(s * 0.7, s * 0.9); c.lineTo(-s * 0.7, s * 0.05); c.stroke();
+    c.strokeStyle = '#1a1a1a'; c.lineWidth = s * 0.06;
+    c.beginPath(); c.moveTo(-s * 0.7, s * 0.9); c.lineTo(s * 0.7, s * 0.05); c.moveTo(s * 0.7, s * 0.9); c.lineTo(-s * 0.7, s * 0.05); c.stroke();
+    c.fillStyle = '#f1ecdc'; c.strokeStyle = '#1a1a1a'; c.lineWidth = Math.max(1, s * 0.08);
+    c.beginPath(); c.arc(0, -s * 0.45, s * 0.62, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.beginPath(); c.roundRect(-s * 0.32, -s * 0.1, s * 0.64, s * 0.4, s * 0.1); c.fill(); c.stroke();
+    c.fillStyle = '#15151a';
+    c.beginPath(); c.ellipse(-s * 0.25, -s * 0.45, s * 0.17, s * 0.2, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.ellipse(s * 0.25, -s * 0.45, s * 0.17, s * 0.2, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.moveTo(0, -s * 0.25); c.lineTo(-s * 0.07, -s * 0.12); c.lineTo(s * 0.07, -s * 0.12); c.closePath(); c.fill();
+    c.lineWidth = Math.max(1, s * 0.05); c.strokeStyle = '#15151a';
+    for (const k of [-0.16, 0, 0.16]) { c.beginPath(); c.moveTo(s * k, -s * 0.08); c.lineTo(s * k, s * 0.28); c.stroke(); }
+  },
+  // A floating ghost that bobs.
+  ghost(c, s, t) {
+    c.translate(0, -s * 0.12 * Math.sin(t * Math.PI));
+    c.shadowColor = 'rgba(190,230,255,0.9)'; c.shadowBlur = s * 0.9;
+    c.beginPath();
+    c.moveTo(-s * 0.6, s * 0.9);
+    c.lineTo(-s * 0.6, -s * 0.35);
+    c.arc(0, -s * 0.35, s * 0.6, Math.PI, 0);
+    c.lineTo(s * 0.6, s * 0.9);
+    c.quadraticCurveTo(s * 0.4, s * 1.15, s * 0.2, s * 0.9);
+    c.quadraticCurveTo(0, s * 1.15, -s * 0.2, s * 0.9);
+    c.quadraticCurveTo(-s * 0.4, s * 1.15, -s * 0.6, s * 0.9);
+    c.closePath();
+    c.fillStyle = 'rgba(244,250,255,0.95)'; c.fill();
+    c.shadowColor = 'transparent';
+    c.strokeStyle = 'rgba(120,160,200,0.7)'; c.lineWidth = Math.max(1, s * 0.07); c.stroke();
+    c.fillStyle = '#1a2230';
+    c.beginPath(); c.ellipse(-s * 0.22, -s * 0.4, s * 0.1, s * 0.16, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.ellipse(s * 0.22, -s * 0.4, s * 0.1, s * 0.16, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.ellipse(0, -s * 0.05, s * 0.1, s * 0.15, 0, 0, Math.PI * 2); c.fill();
+  },
+  // A wolf head and shoulders, eyes lit.
+  wolf(c, s, t) {
+    c.beginPath();
+    c.moveTo(-s * 0.85, s * 1.0); c.quadraticCurveTo(-s * 0.8, s * 0.1, -s * 0.4, -s * 0.1);
+    c.lineTo(s * 0.4, -s * 0.1); c.quadraticCurveTo(s * 0.8, s * 0.1, s * 0.85, s * 1.0); c.closePath();
+    c.fillStyle = '#3a3f4b'; c.fill(); c.strokeStyle = 'rgba(230,235,245,0.55)'; c.lineWidth = Math.max(1, s * 0.09); c.stroke();
+    c.beginPath();
+    c.moveTo(-s * 0.55, -s * 0.55); c.lineTo(-s * 0.5, -s * 1.3); c.lineTo(-s * 0.1, -s * 0.9);
+    c.lineTo(s * 0.1, -s * 0.9); c.lineTo(s * 0.5, -s * 1.3); c.lineTo(s * 0.55, -s * 0.55);
+    c.quadraticCurveTo(s * 0.5, -s * 0.15, s * 0.16, -s * 0.05); c.lineTo(-s * 0.16, -s * 0.05);
+    c.quadraticCurveTo(-s * 0.5, -s * 0.15, -s * 0.55, -s * 0.55); c.closePath();
+    c.fillStyle = '#4d5361'; c.fill(); c.stroke();
+    c.fillStyle = '#15171d'; c.beginPath(); c.ellipse(0, -s * 0.12, s * 0.12, s * 0.08, 0, 0, Math.PI * 2); c.fill();
+    const glow = 0.8 + t * 0.4;
+    eye(c, -s * 0.24, -s * 0.5, s * 0.08 * glow, '#ffb02e'); eye(c, s * 0.24, -s * 0.5, s * 0.08 * glow, '#ffb02e');
+  },
+  // A black crow perched.
+  crow(c, s) {
+    c.strokeStyle = '#d98a2b'; c.lineWidth = s * 0.1; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(-s * 0.12, s * 0.55); c.lineTo(-s * 0.12, s * 1.0); c.moveTo(s * 0.12, s * 0.55); c.lineTo(s * 0.12, s * 1.0); c.stroke();
+    c.fillStyle = '#12131a'; c.strokeStyle = 'rgba(220,225,245,0.5)'; c.lineWidth = Math.max(1, s * 0.07);
+    c.beginPath(); c.moveTo(-s * 0.95, s * 0.2); c.lineTo(-s * 0.4, s * 0.1); c.lineTo(-s * 0.4, s * 0.45); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.ellipse(0, s * 0.1, s * 0.6, s * 0.55, -0.2, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.beginPath(); c.ellipse(-s * 0.05, s * 0.15, s * 0.32, s * 0.2, 0.6, 0, Math.PI * 2);
+    c.fillStyle = '#23263a'; c.fill();
+    c.fillStyle = '#12131a';
+    c.beginPath(); c.arc(s * 0.38, -s * 0.5, s * 0.34, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.fillStyle = '#e8a53a';
+    c.beginPath(); c.moveTo(s * 0.62, -s * 0.58); c.lineTo(s * 1.05, -s * 0.42); c.lineTo(s * 0.62, -s * 0.34); c.closePath(); c.fill();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(s * 0.46, -s * 0.56, s * 0.07, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#000'; c.beginPath(); c.arc(s * 0.48, -s * 0.56, s * 0.035, 0, Math.PI * 2); c.fill();
+  },
+};
+
 export const SEA_COLORS = [
   makeSea('midnight', 'Midnight',  '#123a5c', '#05121f'),
   makeSea('ink',      'Ink',       '#23304a', '#0b1220'),
@@ -299,6 +414,7 @@ export class BoardView {
     this.fx = new Effects();
     this.effects = true;
     this.dayNight = true;
+    this.robberSkin = 'classic';       // classic | bandit | skull | ghost | wolf | crow
     this.pieceSkin = 'classic';        // classic | stone | gold | neon (a Settings choice)
     this.swing = true;                 // glide to the robber when it lands (a Settings toggle)
     this.cam = null;                   // a swing in progress: { from, to, at }
@@ -1460,27 +1576,17 @@ export class BoardView {
     if (this.game.useRobber === false) return;
     const tile = this.board.tiles[this.game.robber];
     if (!tile) return;
-    const [x, y] = this.toScreen(tile.x, tile.y - 0.42);
+    const [x, y] = this.toScreen(tile.x, tile.y - 0.4);
     const c = this.ctx;
-    const s = this.scale * 0.26;
+    const s = this.scale * 0.3;
+    const skin = this.robberSkin || 'classic';
     c.save();
     c.translate(x, y);
-    c.fillStyle = '#15181f';
-    c.strokeStyle = 'rgba(240,240,245,0.55)';
-    c.lineWidth = Math.max(1, s * 0.13);
-    c.beginPath();               // hooded body
-    c.moveTo(-s * 0.72, s * 1.0);
-    c.quadraticCurveTo(-s * 0.72, -s * 0.25, 0, -s * 0.55);
-    c.quadraticCurveTo(s * 0.72, -s * 0.25, s * 0.72, s * 1.0);
-    c.closePath();
-    c.shadowColor = 'rgba(0,0,0,0.6)';
-    c.shadowBlur = s * 0.9;
-    c.fill();
-    c.shadowColor = 'transparent';
-    c.stroke();
-    c.beginPath();               // head
-    c.arc(0, -s * 0.72, s * 0.42, 0, Math.PI * 2);
-    c.fill(); c.stroke();
+    // A soft shadow on the tile under every skin.
+    c.fillStyle = 'rgba(0,0,0,0.35)';
+    c.beginPath(); c.ellipse(0, s * 1.02, s * 0.85, s * 0.22, 0, 0, Math.PI * 2); c.fill();
+    const draw = ROBBER_DRAW[skin] || ROBBER_DRAW.classic;
+    draw(c, s, this.pulse || 0);
     c.restore();
   }
 

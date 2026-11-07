@@ -7356,6 +7356,11 @@ const SKINS = {
     { key: 'ice', name: 'Ice', level: 3 }, { key: 'obsidian', name: 'Obsidian', level: 4 },
     { key: 'gold', name: 'Gold', level: 5 }, { key: 'neon', name: 'Neon', level: 6 },
   ],
+  robber: [
+    { key: 'classic', name: 'Hooded', level: 1 }, { key: 'bandit', name: 'Bandit', level: 1 },
+    { key: 'skull', name: 'Skull', level: 2 }, { key: 'ghost', name: 'Ghost', level: 3 },
+    { key: 'wolf', name: 'Wolf', level: 4 }, { key: 'crow', name: 'Crow', level: 5 },
+  ],
   piece: [
     { key: 'classic', name: 'Classic', level: 1 }, { key: 'stone', name: 'Stone', level: 2 },
     { key: 'gold', name: 'Gold trim', level: 3 }, { key: 'neon', name: 'Neon', level: 5 },
@@ -7370,10 +7375,11 @@ const skinChoice = (kind) => {
 function applySkins() {
   document.documentElement.dataset.dice = skinChoice('dice');
   view.pieceSkin = skinChoice('piece');
+  view.robberSkin = skinChoice('robber');
 }
 function drawSkinRows() {
   const level = profileLevel();
-  for (const kind of ['dice', 'piece']) {
+  for (const kind of ['dice', 'piece', 'robber']) {
     const chosen = skinChoice(kind);
     $(`skin-${kind}`).innerHTML = SKINS[kind].map((s) => {
       const locked = s.level > level;
