@@ -7744,6 +7744,13 @@ $('kebab-refresh').addEventListener('click', () => { closeKebab(); fullRefresh()
 $('kebab-history').addEventListener('click', () => { closeKebab(); openHistory(); });
 $('kebab-profile').addEventListener('click', () => { closeKebab(); openProfile(); });
 $('menu-profile').addEventListener('click', openProfile);
+// The restore code lives at the bottom of the profile sheet: open it and scroll there.
+function openRestoreCode() {
+  openProfile();
+  setTimeout(() => $('bk-code').scrollIntoView({ block: 'center', behavior: 'smooth' }), 120);
+}
+$('kebab-code').addEventListener('click', () => { closeKebab(); openRestoreCode(); });
+$('menu-code').addEventListener('click', openRestoreCode);
 $('btn-profile').addEventListener('click', openProfile);
 
 // ---------------------------------------------------------------- backup and restore
