@@ -172,6 +172,14 @@ const WAVE_LAYERS = [
 const OUTLINE = 'rgba(255, 255, 255, 0.95)';
 const EDGE_INK = 'rgba(8, 16, 26, 0.85)';
 
+/** Two #rrggbb colours blended, `t` of the way from the first to the second. */
+function mixHex(a, b, t) {
+  const p = (h) => [1, 3, 5].map((i) => parseInt(String(h).slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  if (x.some(Number.isNaN) || y.some(Number.isNaN)) return a;
+  return `rgb(${x.map((v, i) => Math.round(v + (y[i] - v) * t)).join(',')})`;
+}
+
 // The roll flash: how long the rolled number stands up at full size, and how long it
 // takes getting there and back. The hold is the part that matters — it has to survive a
 // glance away and back, which is why the whole thing is well over a second.
@@ -291,6 +299,7 @@ export class BoardView {
     this.fx = new Effects();
     this.effects = true;
     this.dayNight = true;
+    this.pieceSkin = 'classic';        // classic | stone | gold | neon (a Settings choice)
     this.swing = true;                 // glide to the robber when it lands (a Settings toggle)
     this.cam = null;                   // a swing in progress: { from, to, at }
     this.night = 0;
@@ -1406,10 +1415,12 @@ export class BoardView {
     c.translate(-(spec.box.x + spec.box.w / 2), -spec.box.y - spec.box.h + spec.box.h * 0.22);
 
     const path = spec.path;
+    const skin = this.pieceSkin || 'classic';
     c.shadowColor = 'rgba(0, 0, 0, 0.5)';
     c.shadowBlur = 7;
     c.shadowOffsetY = 3;
-    c.fillStyle = color;
+    // Stone walls keep a hint of their owner's colour so a piece is still readable at a glance.
+    c.fillStyle = skin === 'stone' ? mixHex(color, '#b9bdc4', 0.6) : color;
     c.fill(path);
 
     c.shadowColor = 'transparent';
@@ -1423,8 +1434,18 @@ export class BoardView {
     c.strokeStyle = EDGE_INK;
     c.stroke(path);
     c.lineWidth = 7;
-    c.strokeStyle = OUTLINE;
+    if (skin === 'gold') {
+      const g = c.createLinearGradient(0, 0, 120, 100);
+      g.addColorStop(0, '#fff2b0'); g.addColorStop(0.5, '#e6b93a'); g.addColorStop(1, '#fbe48a');
+      c.strokeStyle = g;
+    } else if (skin === 'neon') {
+      c.strokeStyle = '#ffffff';
+      c.shadowColor = color; c.shadowBlur = 14;
+    } else {
+      c.strokeStyle = OUTLINE;
+    }
     c.stroke(path);
+    c.shadowColor = 'transparent'; c.shadowBlur = 0;
     // A city's flag and chimney smoke stand outside the silhouette.
     if (fx) fx.pieceTop(this, kind, color, opts?.v ?? 0);
     c.restore();

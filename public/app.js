@@ -557,6 +557,29 @@ view.colorOf = colorFor;
 view.effects = localStorage.getItem('hexcolony_fx') !== 'off';
 view.dayNight = localStorage.getItem('hexcolony_daynight') !== 'off';
 view.swing = localStorage.getItem('hexcolony_swing') !== 'off';
+
+// ---------------------------------------------------------------- profile (level)
+// Everything here is local to this phone. XP comes from finishing games (see awardXp);
+// the level only gates cosmetics.
+const PROFILE_KEY = 'hexcolony_profile';
+function loadProfile() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PROFILE_KEY) || 'null');
+    if (p && typeof p === 'object') return { xp: 0, games: 0, wins: 0, ach: {}, challenges: {}, ...p };
+  } catch { /* fall through */ }
+  return { xp: 0, games: 0, wins: 0, ach: {}, challenges: {} };
+}
+function saveProfile(p) {
+  try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch { /* cosmetic only */ }
+}
+/** XP needed to reach level n: 60, 180, 360, 600, 900... (a little more each level). */
+const xpForLevel = (n) => 30 * (n - 1) * n;
+function levelOf(xp) {
+  let n = 1;
+  while (xp >= xpForLevel(n + 1)) n += 1;
+  return n;
+}
+function profileLevel() { return levelOf(loadProfile().xp); }
 // Where a player's pill is, in the board's own pixels — the resource icons a roll pays
 // out fly there. Pills sit above the canvas, so the y is negative and the icon leaves by
 // the top edge, which is exactly the direction it is meant to go.
@@ -7048,7 +7071,53 @@ function openCosts() {
   sheet('sheet-costs');
 }
 
+// ---------------------------------------------------------------- styles (skins)
+// Cosmetic only, chosen per device. Each unlocks at a profile level (see the profile code).
+const SKINS = {
+  dice: [
+    { key: 'classic', name: 'Classic', level: 1 }, { key: 'ruby', name: 'Ruby', level: 2 },
+    { key: 'ice', name: 'Ice', level: 3 }, { key: 'obsidian', name: 'Obsidian', level: 4 },
+    { key: 'gold', name: 'Gold', level: 5 }, { key: 'neon', name: 'Neon', level: 6 },
+  ],
+  piece: [
+    { key: 'classic', name: 'Classic', level: 1 }, { key: 'stone', name: 'Stone', level: 2 },
+    { key: 'gold', name: 'Gold trim', level: 3 }, { key: 'neon', name: 'Neon', level: 5 },
+  ],
+};
+const SKIN_KEY = (kind) => `hexcolony_skin_${kind}`;
+const skinChoice = (kind) => {
+  const key = localStorage.getItem(SKIN_KEY(kind)) || 'classic';
+  const s = SKINS[kind].find((x) => x.key === key);
+  return s && s.level <= profileLevel() ? key : 'classic';
+};
+function applySkins() {
+  document.documentElement.dataset.dice = skinChoice('dice');
+  view.pieceSkin = skinChoice('piece');
+}
+function drawSkinRows() {
+  const level = profileLevel();
+  for (const kind of ['dice', 'piece']) {
+    const chosen = skinChoice(kind);
+    $(`skin-${kind}`).innerHTML = SKINS[kind].map((s) => {
+      const locked = s.level > level;
+      return `<button class="skin-chip${s.key === chosen ? ' on' : ''}${locked ? ' locked' : ''}" data-kind="${kind}" data-skin="${s.key}" data-level="${s.level}">${esc(s.name)}${locked ? `<small>Level ${s.level}</small>` : ''}</button>`;
+    }).join('');
+  }
+  $('skin-hint').textContent = `You are level ${level}. Play games to level up and unlock more styles.`;
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.skin-chip');
+  if (!b) return;
+  if (Number(b.dataset.level) > profileLevel()) { toast(`Unlocks at level ${b.dataset.level}`); return; }
+  localStorage.setItem(SKIN_KEY(b.dataset.kind), b.dataset.skin);
+  sfx.tap();
+  applySkins();
+  drawSkinRows();
+});
+applySkins();
+
 function openSettings() {
+  drawSkinRows();
   syncToggles();
   sheet('sheet-settings');
 }
