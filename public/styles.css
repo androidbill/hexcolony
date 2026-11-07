@@ -2989,3 +2989,7 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
 .award-box .xp-line { font-weight: 800; color: var(--gold); }
 .award-box .lv-up { font-weight: 900; margin-top: 2px; }
 .award-box .got-line { font-size: 13px; margin-top: 4px; }
+
+.goal-chip { color: var(--gold); font-weight: 700; }
+.goal-chip.done { color: #4cd48a; }
+.so-sub { font-size: 13px; opacity: .85; margin-top: 2px; text-align: center; }

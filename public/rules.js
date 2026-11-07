@@ -249,6 +249,8 @@ export function newGame(seats, settings, rng = Math.random) {
       knights: 0,
       roadLen: 0,
       left: { road: PIECES.road, settlement: PIECES.settlement, city: PIECES.city },
+      goal: null,               // a secret objective, when the table plays with them
+      goalDone: false,          // latched: once met it is worth a point for good
     };
   }
 
@@ -278,7 +280,16 @@ export function newGame(seats, settings, rng = Math.random) {
       .map((t) => t.i)
     : [];
 
+  if (settings.goals) {
+    // Dealt without repeats while there are enough to go round.
+    const deck = shuffle(Object.keys(GOALS), rng);
+    seats.forEach((pid, i) => { players[pid].goal = deck[i % deck.length]; });
+  }
+
   return {
+    events: !!settings.events,
+    goals: !!settings.goals,
+    eventAt: 0,
     seed,
     mode,
     layout,
@@ -537,10 +548,101 @@ export function publicVP(g, pid) {
 /** Public points plus the victory-point cards still face down in hand. */
 export function totalVP(g, pid) {
   const p = g.players[pid];
-  return publicVP(g, pid) + (p.dev.vp || 0) + (p.devNew.vp || 0);
+  return publicVP(g, pid) + (p.dev.vp || 0) + (p.devNew.vp || 0) + (p.goalDone ? 1 : 0);
+}
+
+// ---------------------------------------------------------------- secret objectives
+// One private goal each, worth a point the moment it is met (and kept). They are checked
+// from the position alone, so nothing needs tracking turn to turn. Like a hidden victory
+// card, the point is in totalVP but not publicVP.
+let GOAL_BOARD = null;   // the board of the move being applied, for goals that need tiles
+const roadsOf = (g, pid) => Object.values(g.roads).filter((p) => p === pid).length;
+const buildingsOf = (g, pid, t) => Object.entries(g.bldg).filter(([, b]) => b.p === pid && (!t || b.t === t));
+export const GOALS = {
+  roads8: { name: 'Road builder', blurb: 'Have 8 roads on the board.', test: (g, pid) => roadsOf(g, pid) >= 8 },
+  cities3: { name: 'City planner', blurb: 'Own 3 cities.', test: (g, pid) => buildingsOf(g, pid, 'c').length >= 3 },
+  spread6: { name: 'Settler', blurb: 'Have 6 settlements and cities in play.', test: (g, pid) => buildingsOf(g, pid).length >= 6 },
+  hoard10: { name: 'Hoarder', blurb: 'Hold 10 resource cards at once.', test: (g, pid) => Object.values(g.players[pid].res).reduce((a, b) => a + b, 0) >= 10 },
+  knights2: { name: 'Knight errant', blurb: 'Play 2 knights.', test: (g, pid) => g.players[pid].knights >= 2 },
+  allres: {
+    name: 'Well rounded', blurb: 'Build beside all five kinds of land.',
+    test: (g, pid) => {
+      if (!GOAL_BOARD) return false;
+      const seen = new Set();
+      for (const [v] of buildingsOf(g, pid)) {
+        for (const hi of VERTS[v].hexes) { const r = GOAL_BOARD.tiles[hi]?.res; if (r) seen.add(r); }
+      }
+      return seen.size >= 5;
+    },
+  },
+};
+export const goalInfo = (key) => GOALS[key] || null;
+
+function checkGoals(g, events) {
+  if (!g.goals) return;
+  for (const pid of g.seats) {
+    const p = g.players[pid];
+    if (!p.goal || p.goalDone || !GOALS[p.goal]) continue;
+    if (GOALS[p.goal].test(g, pid)) {
+      p.goalDone = true;
+      note(g, events, { t: 'goal', p: pid, goal: p.goal });
+    }
+  }
+}
+
+// ---------------------------------------------------------------- random events
+// Every few turns, after the dice have paid, something happens to the whole table. Every
+// card moved comes from or goes back to the bank, so the supply of each resource is kept.
+const EVENT_KINDS = ['harvest', 'bandits', 'treasure', 'bumper'];
+export const EVENT_INFO = {
+  harvest: { name: 'Harvest festival', blurb: 'Everyone draws a card.' },
+  bandits: { name: 'Bandit raid', blurb: 'Anyone with 8 or more cards loses one.' },
+  treasure: { name: 'Buried treasure', blurb: 'Whoever is behind finds two cards.' },
+  bumper: { name: 'Bumper crop', blurb: 'This roll pays out a second time.' },
+};
+
+function drawFromBank(g, pid, n, rng, out) {
+  for (let i = 0; i < n; i++) {
+    const open = RESOURCES.filter((r) => g.bank[r] > 0);
+    if (!open.length) return;
+    const r = open[Math.floor(rng() * open.length)];
+    g.bank[r] -= 1; g.players[pid].res[r] += 1;
+    ((out[pid] ||= {})[r] = (out[pid]?.[r] || 0) + 1);
+  }
+}
+
+function rollEvent(g, board, roll, events, rng) {
+  if (!g.events) return;
+  const gap = g.seats.length * 2;
+  if (g.turn.num < gap || g.turn.num - (g.eventAt || 0) < gap) return;
+  if (rng() > 0.3) return;
+  g.eventAt = g.turn.num;
+  let kind = EVENT_KINDS[Math.floor(rng() * EVENT_KINDS.length)];
+  const low = Math.min(...g.seats.map((p) => publicVP(g, p)));
+  const behind = g.seats.filter((p) => publicVP(g, p) === low);
+  if (kind === 'treasure' && behind.length === g.seats.length) kind = 'harvest';
+  const gains = {}, lost = {};
+  if (kind === 'harvest') {
+    for (const pid of g.seats) drawFromBank(g, pid, 1, rng, gains);
+  } else if (kind === 'treasure') {
+    for (const pid of behind) drawFromBank(g, pid, 2, rng, gains);
+  } else if (kind === 'bandits') {
+    for (const pid of g.seats) {
+      const p = g.players[pid];
+      if (handSize(p) < 8) continue;
+      const held = RESOURCES.filter((r) => p.res[r] > 0);
+      const r = held[Math.floor(rng() * held.length)];
+      p.res[r] -= 1; g.bank[r] += 1;
+      lost[pid] = { [r]: 1 };
+    }
+    if (!Object.keys(lost).length) { g.eventAt = g.eventAt - gap + 2; return; } // nothing happened: try again soon
+  }
+  note(g, events, { t: 'event', kind, roll, gains, lost });
+  if (kind === 'bumper') produce(g, board, roll, events, true);
 }
 
 function checkWin(g, events) {
+  checkGoals(g, events);
   const pid = currentPid(g);
   // Only the player whose turn it is can cross the line, exactly as in the real game.
   if (totalVP(g, pid) >= g.target) {
@@ -597,7 +699,7 @@ export function portsOwned(g, board, pid) {
 // Paying out a roll. The official bank rule is the fiddly bit: if the bank cannot
 // cover everyone's claim on a resource, nobody receives that resource at all — unless
 // exactly one player is owed it, who then takes whatever is left.
-function produce(g, board, roll, events) {
+function produce(g, board, roll, events, bonus = false) {
   const claims = {}; // res -> { pid: amount }
   for (const hi of board.byNumber[roll] || []) {
     if (g.useRobber !== false && hi === g.robber) continue;
@@ -638,10 +740,14 @@ function produce(g, board, roll, events) {
       note(g, events, { t: 'shortfall', res, partial: false });
     }
   }
-  for (const [pid, byRes] of Object.entries(gains)) {
-    tally(g, pid, 'gained', Object.values(byRes).reduce((a, b) => a + b, 0));
+  if (!bonus) {
+    for (const [pid, byRes] of Object.entries(gains)) {
+      tally(g, pid, 'gained', Object.values(byRes).reduce((a, b) => a + b, 0));
+    }
   }
-  if (Object.keys(gains).length) note(g, events, { t: 'produce', roll, gains });
+  // `bonus` marks the second payout of a Bumper crop: not what the dice did, so the luck
+  // meter leaves it out.
+  if (Object.keys(gains).length) note(g, events, { t: 'produce', roll, gains, ...(bonus ? { bonus: true } : {}) });
   else note(g, events, { t: 'nothing', roll });
   return gains;
 }
@@ -884,6 +990,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
   // Rebuilding the board here is also what switches the shared topology to this
   // game's layout, so every rules helper below reads the right island.
   const board = makeBoard(g.seed, g.mode, g.layout);
+  GOAL_BOARD = board;
   const me = g.players[pid];
   if (!me) return fail('You are not in this game.');
   if (g.phase === 'over') return fail('The game is over.');
@@ -980,6 +1087,8 @@ export function applyMove(state, pid, move, rng = Math.random) {
         afterSeven(g, events, rng);
       } else {
         produce(g, board, roll, events);
+        rollEvent(g, board, roll, events, rng);
+        checkGoals(g, events);
         g.phase = 'build';
       }
       // Whatever else the roll led to, the acting allowance starts now.

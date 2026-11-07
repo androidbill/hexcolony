@@ -101,7 +101,7 @@ export function ingest(c, g, board) {
         break;
       case 'produce':
         // Roll 0 is the setup payout — a free start, not the dice.
-        if (e.roll > 0) {
+        if (e.roll > 0 && !e.bonus) {
           for (const [pid, byRes] of Object.entries(e.gains || {})) {
             c.act[pid] = (c.act[pid] || 0) + Object.values(byRes).reduce((a, b) => a + b, 0);
           }

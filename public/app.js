@@ -2456,7 +2456,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
   const settings = {
     targetVP, discardLimit, boardMode: 'random', layout, useRobber,
     turnSeconds: soloTurnSeconds, ...newSea(), discardSeconds: R.DISCARD_SECONDS,
-    fog: soloFog,
+    fog: soloFog, events: soloEvents, goals: soloGoals,
     ...(soloChallenge ? { challenge: soloChallenge } : {}),
   };
 
@@ -2511,6 +2511,8 @@ let soloRobber = localStorage.getItem('hexcolony_solo_robber') === 'on';
 let soloFog = localStorage.getItem('hexcolony_solo_fog') === 'on';
 let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 30);
+let soloEvents = localStorage.getItem('hexcolony_solo_events') === 'on';
+let soloGoals = localStorage.getItem('hexcolony_solo_goals') === 'on';
 let soloChallenge = '';   // a key from profile.js, or none; chosen per game
 // The sea is a fresh random colour for every new game, unless somebody picked one by hand.
 // A hand-picked colour is remembered here and wins until "Random" is tapped again.
@@ -2546,6 +2548,10 @@ function drawSoloSheet() {
   for (const b of document.querySelectorAll('[data-solo-fog]')) {
     b.classList.toggle('on', (b.dataset.soloFog === 'on') === soloFog);
   }
+  for (const b of document.querySelectorAll('[data-solo-events]')) b.classList.toggle('on', (b.dataset.soloEvents === 'on') === soloEvents);
+  for (const b of document.querySelectorAll('[data-solo-goals]')) b.classList.toggle('on', (b.dataset.soloGoals === 'on') === soloGoals);
+  $('solo-events-blurb').textContent = soloEvents ? EVENTS_BLURB : 'Just the dice.';
+  $('solo-goals-blurb').textContent = soloGoals ? GOALS_BLURB : 'Everyone plays for points in the open.';
   $('solo-fog-blurb').textContent = soloFog
     ? 'Every tile hidden but the desert, until a settlement touches it.'
     : 'Every tile shown from the start.';
@@ -2629,6 +2635,22 @@ for (const b of document.querySelectorAll('[data-solo-robber]')) {
     localStorage.setItem('hexcolony_solo_robber', soloRobber ? 'on' : 'off');
     sfx.tap();
     drawSoloSheet();
+  });
+}
+const EVENTS_BLURB = 'Every few turns something happens to the whole table: a harvest, a raid, treasure for whoever is behind, or a double payout.';
+const GOALS_BLURB = 'Each player secretly gets a goal worth +1 point once it is met. Keep yours to yourself.';
+for (const b of document.querySelectorAll('[data-solo-events]')) {
+  b.addEventListener('click', () => {
+    soloEvents = b.dataset.soloEvents === 'on';
+    localStorage.setItem('hexcolony_solo_events', soloEvents ? 'on' : 'off');
+    sfx.tap(); drawSoloSheet();
+  });
+}
+for (const b of document.querySelectorAll('[data-solo-goals]')) {
+  b.addEventListener('click', () => {
+    soloGoals = b.dataset.soloGoals === 'on';
+    localStorage.setItem('hexcolony_solo_goals', soloGoals ? 'on' : 'off');
+    sfx.tap(); drawSoloSheet();
   });
 }
 for (const b of document.querySelectorAll('[data-solo-fog]')) {
@@ -2754,6 +2776,12 @@ for (const b of document.querySelectorAll('[data-robber]')) {
   });
 }
 
+for (const b of document.querySelectorAll('[data-events]')) {
+  b.addEventListener('click', () => { if (setSetting({ 'settings.events': b.dataset.events === 'on' })) sfx.tap(); });
+}
+for (const b of document.querySelectorAll('[data-goals]')) {
+  b.addEventListener('click', () => { if (setSetting({ 'settings.goals': b.dataset.goals === 'on' })) sfx.tap(); });
+}
 for (const b of document.querySelectorAll('[data-fog]')) {
   b.addEventListener('click', () => {
     if (setSetting({ 'settings.fog': b.dataset.fog === 'on' })) sfx.tap();
@@ -2911,6 +2939,10 @@ function renderLobby() {
   }
   $('layout-blurb').textContent = LAYOUT_INFO[layout]?.blurb || '';
 
+  for (const b of document.querySelectorAll('[data-events]')) b.classList.toggle('on', (b.dataset.events === 'on') === !!s.events);
+  for (const b of document.querySelectorAll('[data-goals]')) b.classList.toggle('on', (b.dataset.goals === 'on') === !!s.goals);
+  $('events-blurb').textContent = s.events ? EVENTS_BLURB : 'Just the dice.';
+  $('goals-blurb').textContent = s.goals ? GOALS_BLURB : 'Everyone plays for points in the open.';
   const fog = !!s.fog;
   for (const b of document.querySelectorAll('[data-fog]')) {
     b.classList.toggle('on', (b.dataset.fog === 'on') === fog);
@@ -3995,6 +4027,11 @@ function render() {
     const limit = g.useRobber !== false;
     $('rules-line').innerHTML = `<span>Points - ${esc(g.target || 10)}</span>`
       + `<span>Discard ${limit ? `On ${esc(g.discardLimit || 7)}` : 'Off'}</span>`;
+    const goal = g.goals ? R.goalInfo(g.players[playerId]?.goal) : null;
+    if (goal) {
+      $('rules-line').innerHTML += `<span class="goal-chip${g.players[playerId].goalDone ? ' done' : ''}" title="${esc(goal.blurb)}">`
+        + `${g.players[playerId].goalDone ? '✓' : '🎯'} ${esc(goal.name)}: ${esc(goal.blurb)}</span>`;
+    }
   }
   view.spinPieces = localStorage.getItem('hexcolony_spin_pieces') === 'on';
   // Whatever ended the moment you were in — the timer running out, a 7, someone
@@ -4160,6 +4197,20 @@ function reactToLog(g) {
         if (e.gains?.[playerId]) {
           const mine = e.gains[playerId];
           setTimeout(() => { sfx.gain(); playGain(mine); }, ROLL_TUMBLE_MS + ROLL_SETTLE_MS);
+        }
+        break;
+      case 'event': {
+        const info = R.EVENT_INFO[e.kind];
+        sfx.card();
+        shoutout([{ html: `<div class="so-title">${esc(info?.name || 'Something happens')}</div><div class="so-sub">${esc(info?.blurb || '')}</div>` }], '#e3ba57', 2600);
+        const mine = e.gains?.[playerId];
+        if (mine) setTimeout(() => { sfx.gain(); playGain(mine); }, 1400);
+        break;
+      }
+      case 'goal':
+        if (e.p === playerId) {
+          sfx.gain();
+          toast(`Secret objective done: ${R.goalInfo(e.goal)?.name || ''} (+1 point)`);
         }
         break;
       case 'playDev':
@@ -6158,6 +6209,18 @@ function logLine(e) {
     case 'build': text = `<b>${who(e.p)}</b> built a ${esc(e.what)}${e.free ? ' (free)' : ''}`; break;
     case 'buyDev': text = `<b>${who(e.p)}</b> bought a development card`; break;
     case 'playDev': text = `<b>${who(e.p)}</b> played ${esc(R.DEV_INFO[e.card]?.name || e.card)}`; break;
+    case 'event': {
+      const info = R.EVENT_INFO[e.kind];
+      const parts = [];
+      for (const [pid, gain] of Object.entries(e.gains || {})) parts.push(`${who(pid)} +${bits(gain)}`);
+      for (const [pid, gain] of Object.entries(e.lost || {})) parts.push(`${who(pid)} -${bits(gain)}`);
+      text = `<span class="g"><b>${esc(info?.name || 'Event')}</b></span>${parts.length ? ` — ${parts.join(', ')}` : ''}`;
+      break;
+    }
+    case 'goal':
+      if (e.p !== playerId) return '';
+      text = `<span class="g">You completed your secret objective (+1 point)</span>`;
+      break;
     case 'noloot': text = `<span class="r">Nobody had a card for <b>${who(e.p)}</b> to take</span>`; break;
     case 'robber': text = `<b>${who(e.p)}</b> moved the robber`; break;
     // The one card in this whole log that is not public knowledge the moment it
@@ -6918,6 +6981,7 @@ function pointSources(g, pid) {
     { key: 'army', icon: icon('army', { size: 16 }), label: `largest army${g.award.army === pid ? ` (${g.award.armySize})` : ''}`,
       n: g.award.army === pid ? 1 : 0, vp: g.award.army === pid ? 2 : 0 },
     { key: 'cards', icon: icon('dev', { size: 16 }), label: cards === 1 ? 'victory card' : 'victory cards', n: cards, vp: cards },
+    ...(p.goalDone ? [{ key: 'goal', icon: '🎯', label: `secret objective: ${R.goalInfo(p.goal)?.name || ''}`, n: 1, vp: 1 }] : []),
   ];
 }
 
