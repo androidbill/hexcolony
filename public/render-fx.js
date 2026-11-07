@@ -32,6 +32,9 @@ const SWEEP_FADE_MS = 450;
 // like a change of light, short enough that a normal game sees night fall once or twice.
 const DAY_TURNS = 48;
 
+// The terrains that have something moving on them (see drawTerrainLife).
+const LIVELY = new Set(['fields', 'forest', 'pasture', 'mountains']);
+
 // ---------------------------------------------------------------- colour
 /** A #rrggbb lightened (t > 0) or darkened (t < 0) by that fraction, as an rgb() string. */
 export function shade(hex, t) {
@@ -663,12 +666,68 @@ export class Effects {
     const R = view.scale;
     const t = view.now / 1000;
     for (const tile of view.board.tiles) {
-      if (tile.terrain !== 'fields' && tile.terrain !== 'forest') continue;
+      if (!LIVELY.has(tile.terrain)) continue;
       if (view.isFogged(tile)) continue;
       const [cx, cy] = view.toScreen(tile.x, tile.y);
       c.save();
       c.clip(view.hexPath(tile, 0.97));
-      if (tile.terrain === 'fields') {
+      if (tile.terrain === 'pasture') {
+        // Sheep grazing: two or three little ones ambling slowly across the meadow, each on
+        // its own loop, bobbing as they go and stopping now and then to graze.
+        for (let k = 0; k < 3; k++) {
+          const u = (t / 18 + k / 3 + tile.i * 0.211) % 1;
+          const dir = k % 2 ? -1 : 1;
+          const px = cx + dir * (u * 1.5 - 0.75) * R;
+          const py = cy + (k - 1) * R * 0.28 + Math.sin(u * TAU * 2 + k) * R * 0.05;
+          const graze = Math.max(0, Math.sin(t * 0.9 + k * 2 + tile.i)) > 0.7 ? 1 : 0;
+          const bob = Math.abs(Math.sin(t * 5 + k)) * R * 0.012 * (1 - graze);
+          const s = R * 0.075;
+          c.globalAlpha = Math.min(1, Math.min(u, 1 - u) * 8);
+          // Shadow, fluffy body, head (dipping to the grass while grazing), legs.
+          c.fillStyle = 'rgba(0,0,0,.22)';
+          c.beginPath(); c.ellipse(px, py + s * 0.8, s * 1.1, s * 0.3, 0, 0, TAU); c.fill();
+          c.fillStyle = '#f6f2ea';
+          c.beginPath(); c.ellipse(px, py - bob, s, s * 0.72, 0, 0, TAU); c.fill();
+          c.beginPath(); c.arc(px - s * 0.45, py - bob - s * 0.35, s * 0.4, 0, TAU); c.fill();
+          c.beginPath(); c.arc(px + s * 0.2, py - bob - s * 0.45, s * 0.42, 0, TAU); c.fill();
+          c.fillStyle = '#3a3a3a';
+          c.beginPath();
+          c.ellipse(px + dir * s * 1.05, py - bob - s * (graze ? 0.05 : 0.3) + (graze ? s * 0.25 : 0), s * 0.34, s * 0.3, 0, 0, TAU);
+          c.fill();
+          c.fillRect(px - s * 0.5, py - bob + s * 0.55, s * 0.18, s * 0.45);
+          c.fillRect(px + s * 0.3, py - bob + s * 0.55, s * 0.18, s * 0.45);
+        }
+      } else if (tile.terrain === 'mountains') {
+        // Ore catching the light: a cool band slowly sweeping the rock and a few glints that
+        // flare into four-point stars, each on its own beat.
+        const phase = (t / 5.2 + tile.i * 0.29) % 1;
+        const x = cx + (phase * 3.2 - 1.6) * R;
+        const grad = c.createLinearGradient(x - R * 0.5, cy - R * 0.5, x + R * 0.5, cy + R * 0.5);
+        grad.addColorStop(0, 'rgba(200,225,255,0)');
+        grad.addColorStop(0.5, 'rgba(200,225,255,0.16)');
+        grad.addColorStop(1, 'rgba(200,225,255,0)');
+        c.fillStyle = grad;
+        c.fillRect(cx - R, cy - R, R * 2, R * 2);
+        for (let k = 0; k < 4; k++) {
+          const h = hash(tile.i * 13 + k * 7);
+          const gx = cx + (h - 0.5) * 1.1 * R;
+          const gy = cy + (hash(tile.i * 29 + k * 11) - 0.5) * 0.9 * R;
+          const beat = (t / 2.6 + h * 5 + k * 0.7) % 1;
+          const a = Math.max(0, Math.sin(beat * Math.PI)) ** 6;
+          if (a < 0.05) continue;
+          const len = R * (0.05 + 0.09 * a);
+          c.globalAlpha = a;
+          c.strokeStyle = '#ffffff';
+          c.lineWidth = Math.max(1, R * 0.018);
+          c.lineCap = 'round';
+          c.beginPath();
+          c.moveTo(gx - len, gy); c.lineTo(gx + len, gy);
+          c.moveTo(gx, gy - len); c.lineTo(gx, gy + len);
+          c.stroke();
+          c.fillStyle = '#e8f4ff';
+          c.beginPath(); c.arc(gx, gy, Math.max(1, R * 0.02), 0, TAU); c.fill();
+        }
+      } else if (tile.terrain === 'fields') {
         // A gust crossing the field every few seconds: a bright band with a shadow behind.
         const phase = (t / 3.4 + tile.i * 0.37) % 1;
         const x = cx + (phase * 3.4 - 1.7) * R;
