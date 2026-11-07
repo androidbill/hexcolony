@@ -7817,6 +7817,10 @@ $('bk-share').addEventListener('click', async () => {
     else { await navigator.clipboard.writeText(text); toast('Copied'); }
   } catch { /* cancelled */ }
 });
+$('bk-email').addEventListener('click', () => {
+  const body = `Your HexColony restore code:\n\n${BK.pretty(saveCode())}\n\nOn a new phone: open HexColony, go to Profile, type this code under Restore and tap Restore. Keep it private.`;
+  location.href = `mailto:?subject=${encodeURIComponent('Hexcolony Restore Code')}&body=${encodeURIComponent(body)}`;
+});
 $('bk-export').addEventListener('click', () => {
   const blob = new Blob([JSON.stringify(BK.gather(localStorage))], { type: 'application/json' });
   const a = document.createElement('a');
