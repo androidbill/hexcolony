@@ -556,6 +556,7 @@ view.colorOf = colorFor;
 // The two switches in Settings. On unless somebody has turned them off.
 view.effects = localStorage.getItem('hexcolony_fx') !== 'off';
 view.dayNight = localStorage.getItem('hexcolony_daynight') !== 'off';
+view.swing = localStorage.getItem('hexcolony_swing') !== 'off';
 // Where a player's pill is, in the board's own pixels — the resource icons a roll pays
 // out fly there. Pills sit above the canvas, so the y is negative and the icon leaves by
 // the top edge, which is exactly the direction it is meant to go.
@@ -7059,6 +7060,7 @@ function togState(key) {
   // These two are on until somebody turns them off, unlike every other switch here.
   if (key === 'fx') return localStorage.getItem('hexcolony_fx') !== 'off';
   if (key === 'daynight') return localStorage.getItem('hexcolony_daynight') !== 'off';
+  if (key === 'swing') return localStorage.getItem('hexcolony_swing') !== 'off';
   return localStorage.getItem('hexcolony_awake') === 'on';
 }
 function syncToggles() {
@@ -7074,6 +7076,7 @@ for (const t of document.querySelectorAll('[data-tog]')) {
     else if (key === 'haptics') { localStorage.setItem('hexcolony_haptics', now ? 'on' : 'off'); if (now) buzz(40); }
     else if (key === 'spin') { localStorage.setItem('hexcolony_spin_pieces', now ? 'on' : 'off'); view.spinPieces = now; }
     else if (key === 'fx') { localStorage.setItem('hexcolony_fx', now ? 'on' : 'off'); view.effects = now; }
+    else if (key === 'swing') { localStorage.setItem('hexcolony_swing', now ? 'on' : 'off'); view.swing = now; }
     else if (key === 'daynight') { localStorage.setItem('hexcolony_daynight', now ? 'on' : 'off'); view.dayNight = now; }
     else { localStorage.setItem('hexcolony_awake', now ? 'on' : 'off'); keepAwake(now); }
     syncToggles();

@@ -291,6 +291,8 @@ export class BoardView {
     this.fx = new Effects();
     this.effects = true;
     this.dayNight = true;
+    this.swing = true;                 // glide to the robber when it lands (a Settings toggle)
+    this.cam = null;                   // a swing in progress: { from, to, at }
     this.night = 0;
     this.calm = !!window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
     this.pillPos = null;               // pid -> [x, y] of that player's pill, on this canvas
@@ -378,6 +380,7 @@ export class BoardView {
     const now = performance.now();
     this.fx.stomp(hex, now);
     this.fx.quake(now, 3, 280);
+    this.swingTo(hex);
   }
 
   /** A cannon fired from a Knight card. */
@@ -505,7 +508,51 @@ export class BoardView {
     this.clampPan();
   }
 
-  resetView() { this.userScale = 1; this.ox = 0; this.oy = 0; this.fit(); }
+  resetView() { this.cam = null; this.userScale = 1; this.ox = 0; this.oy = 0; this.fit(); }
+
+  /**
+   * Glide the camera to a hex, hold a moment, then glide back to wherever it was.
+   *
+   * Used when the robber lands, so everyone at the table is looking at the same tile when
+   * it happens. The player's own view is restored afterwards, and any touch cancels the
+   * whole thing on the spot — the camera never fights a finger.
+   */
+  swingTo(hex) {
+    const tile = HEXES[hex];
+    if (!this.swing || this.calm || !tile || !this.w) return;
+    const from = { s: this.userScale, ox: this.ox, oy: this.oy };
+    // Work out where the camera has to be for that tile to sit in the middle of the part of
+    // the screen not under the tray, at a closer zoom — then put the real camera back.
+    const toS = Math.max(this.userScale, 1.7);
+    this.userScale = toS;
+    this.scale = this.fitScale * toS;
+    this.ox = this.w / 2 - this.cx - tile.x * this.scale;
+    this.oy = this.visibleH() / 2 - this.cy - tile.y * this.scale;
+    this.clampPan();
+    const to = { s: toS, ox: this.ox, oy: this.oy };
+    this.userScale = from.s; this.ox = from.ox; this.oy = from.oy;
+    this.scale = this.fitScale * from.s;
+    this.cam = { from, to, at: performance.now() };
+  }
+
+  /** One frame of the swing: out to the tile, hold, and back. */
+  stepCamera(t) {
+    const cam = this.cam;
+    if (!cam) return;
+    const IN = 700, HOLD = 1300, OUT = 800;
+    const ms = t - cam.at;
+    const ease = (u) => (u < 0.5 ? 2 * u * u : 1 - ((-2 * u + 2) ** 2) / 2);
+    let k;
+    if (ms < IN) k = ease(ms / IN);
+    else if (ms < IN + HOLD) k = 1;
+    else if (ms < IN + HOLD + OUT) k = 1 - ease((ms - IN - HOLD) / OUT);
+    else { k = 0; this.cam = null; }
+    const { from, to } = cam;
+    this.userScale = from.s * (to.s / from.s) ** k;
+    this.scale = this.fitScale * this.userScale;
+    this.ox = from.ox + (to.ox - from.ox) * k;
+    this.oy = from.oy + (to.oy - from.oy) * k;
+  }
 
   // Don't let the island be dragged off screen entirely.
   clampPan() {
@@ -541,6 +588,7 @@ export class BoardView {
       // used to clear this too, so a pinch whose fingers lifted without a final nudge
       // ended as a "tap" on the last finger and placed the robber (or a piece).
       if (this._pointers.size === 0) this._moved = false;
+      this.cam = null; // a touch ends any camera swing where it stands
       this._pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
       if (this._pointers.size >= 2) {
         const [a, b] = [...this._pointers.values()];
@@ -641,6 +689,7 @@ export class BoardView {
     if (!this.board || !this.w) return;
     this.pulse = (Math.sin(t / 340) + 1) / 2;
     this.now = t;
+    this.stepCamera(t);
     // Read once per frame: drawHex leaves the rolled tokens out so they can be drawn
     // again at the end, over everything, instead of being painted over by the next tile.
     this.zoom = this.rollZoom(t);
