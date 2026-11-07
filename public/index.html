@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.11.07.04">
+<link rel="stylesheet" href="styles.css?v=2026.11.07.05">
 </head>
 <body>
 
@@ -746,6 +746,7 @@
   <div class="sheet-actions">
     <button class="btn btn-key" id="btn-again"><span class="btn-label">Play again</span></button>
     <button class="btn btn-ghost" id="btn-again-now" hidden>Play now</button>
+    <button class="btn btn-ghost" id="btn-replay">Replay and graph</button>
     <button class="btn btn-ghost" id="btn-recap">Share recap</button>
     <button class="btn btn-ghost" id="btn-home">Back to the start</button>
   </div>
@@ -778,6 +779,24 @@
   <div class="history-list" id="history-list"></div>
   <div class="history-detail" id="history-detail" hidden></div>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-replay">
+  <h3 class="sheet-title">Game replay</h3>
+  <p class="sheet-sub" id="replay-sub"></p>
+  <canvas class="replay-cv" id="replay-board"></canvas>
+  <div class="replay-controls">
+    <button class="btn btn-ghost" id="replay-play">Play</button>
+    <input type="range" id="replay-scrub" min="0" max="0" step="1" value="0" aria-label="Replay position">
+    <span id="replay-count"></span>
+  </div>
+  <div class="stat-legend" id="replay-legend"></div>
+  <div class="history-heading detail-gap">Points over time</div>
+  <canvas class="replay-cv" id="replay-graph"></canvas>
+  <div class="history-heading detail-gap">Dice luck</div>
+  <div id="replay-luck"></div>
+  <p class="hint">Luck compares the cards the dice paid a player with what they should have paid on average for what that player had built at the time. The robber is accounted for, so it measures the dice alone.</p>
+  <div class="sheet-actions"><button class="btn btn-ghost" id="replay-close">Close</button></div>
 </div>
 
 <div class="sheet" id="sheet-colour">
@@ -865,7 +884,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.11.07.04"></script>
-<script type="module" src="app.js?v=2026.11.07.04"></script>
+<script src="iro.min.js?v=2026.11.07.05"></script>
+<script type="module" src="app.js?v=2026.11.07.05"></script>
 </body>
 </html>

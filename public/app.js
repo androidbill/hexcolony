@@ -32,6 +32,8 @@ import { sfx, buzz, setSound, soundEnabled, unlock } from './audio.js';
 import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
 import * as PT from './playtime.js';
+import * as CH from './chronicle.js';
+import { drawBoard as drawReplayBoard, drawGraph as drawReplayGraph } from './replay.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
 const ROOM_TTL_MS = 8 * 60 * 60 * 1000;
@@ -403,6 +405,7 @@ let soloTimer = null;
 const SOLO_KEY = 'hexcolony_solo';
 const HISTORY_KEY = 'hexcolony_history';
 const HISTORY_KEEP = 100;
+const REPLAY_KEEP = 20;
 
 const view = new BoardView($('board-cv'));
 // Illustrated terrain tiles load in the background. Until they arrive (or if they are
@@ -3910,6 +3913,24 @@ function trackClock(g) {
   }
 }
 
+// ---------------------------------------------------------------- game chronicle
+// This device's own record of the game for the replay, graph and luck meter (chronicle.js).
+let chron = CH.loadChron();
+let chronSavedAt = -1;
+
+function trackChron(g) {
+  if (!g || !room || !board) return;
+  const setup = g.phase === 'setup';
+  if (!chron || chron.gid !== g.seed) {
+    chron = CH.newChron(g.seed, g.seats, !(setup && (g.setup?.at ?? 0) === 0));
+    chronSavedAt = -1;
+  }
+  CH.ingest(chron, g, board);
+  if (g.phase === 'over') CH.finish(chron, g, R.totalVP);
+  const stamp = chron.last + (chron.done ? 0.5 : 0);
+  if (stamp !== chronSavedAt) { CH.saveChron(chron); chronSavedAt = stamp; }
+}
+
 function startTimerLoop() {
   if (timerInterval) return;
   timerInterval = setInterval(() => {
@@ -3949,6 +3970,7 @@ function render() {
   if (!g) return;
   trackClock(g);
   ensureBoard();
+  trackChron(g);
   if (!$('screen-game').classList.contains('is-active')) {
     showScreen('screen-game');
     view.resetView();
@@ -6497,8 +6519,12 @@ function recordHistory(g) {
       ...(t ? { t: { ms: t.ms, n: t.n, sum: t.sum, max: t.max, min: t.min } } : {}),
     };
   });
+  const people = Object.fromEntries(g.seats.map((pid) => [pid, { name: nameFor(pid), color: colorFor(pid) }]));
+  const replay = chron?.gid === g.seed && chron.done && board
+    ? { ...CH.compact(chron, board, people), target: g.target } : null;
   history.unshift({
     id: key,
+    ...(replay ? { replay } : {}),
     at: stampMs(room.endedAt) || Date.now(),
     winner: g.winner,
     winnerName: nameFor(g.winner),
@@ -6509,7 +6535,13 @@ function recordHistory(g) {
     // device has nothing of its own to add to a career card.
     me: g.players[playerId] ? myGameStats(g) : null,
   });
-  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, HISTORY_KEEP))); }
+  // Replays are the bulky part, so only the newest few are kept; older games keep their stats.
+  const kept = history.slice(0, HISTORY_KEEP).map((h, i) => {
+    if (i < REPLAY_KEEP || !h.replay) return h;
+    const { replay: dropped, ...rest } = h;
+    return rest;
+  });
+  try { localStorage.setItem(HISTORY_KEY, JSON.stringify(kept)); }
   catch { /* history is helpful, never essential to play */ }
 }
 
@@ -6731,7 +6763,8 @@ function renderGameTime(game) {
   const date = new Date(game.at).toLocaleDateString(undefined, {
     weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
   });
-  const head = `<div class="history-heading">${esc(game.winnerName || 'Someone')} won · ${date}</div>`;
+  const head = `<div class="history-heading">${esc(game.winnerName || 'Someone')} won · ${date}</div>`
+    + (game.replay ? `<button class="btn btn-key detail-replay" data-replay="${esc(game.id)}"><span class="btn-label">Watch replay, points graph and luck</span></button>` : '');
   if (!game.time) return `${head}<p class="hint">This game has no turn times — it was played before they were tracked, or this device joined too late to time it.</p>`;
   const timed = (game.players || []).filter((p) => p.t);
   const all = timed.reduce((a, p) => ({ n: a.n + p.t.n, sum: a.sum + p.t.sum }), { n: 0, sum: 0 });
@@ -6793,8 +6826,9 @@ function renderHistory() {
           `<span class="history-player${player.id === game.winner ? ' winner' : ''}">${esc(player.name)}${player.id === game.winner ? ` ${icon('trophy', { size: 13 })}` : ''}</span>`
         ).join('');
         const times = game.time
-          ? `<div class="history-times">⏱ ${PT.fmt(game.time.ms)}${game.turns ? ` · ${game.turns} turns` : ''} · tap for times</div>` : '';
-        return `<div class="history-game${game.time ? ' tappable' : ''}"${game.time ? ` data-game="${esc(game.id)}"` : ''}>
+          ? `<div class="history-times">⏱ ${PT.fmt(game.time.ms)}${game.turns ? ` · ${game.turns} turns` : ''} · tap for times${game.replay ? ' and replay' : ''}</div>` : '';
+        const open = game.time || game.replay;
+        return `<div class="history-game${open ? ' tappable' : ''}"${open ? ` data-game="${esc(game.id)}"` : ''}>
           <div class="history-game-top"><b>${esc(game.winnerName || 'Someone')} won</b><span>${shortDate(game.at)}</span></div>
           <div class="history-players">${players}</div>${times}
         </div>`;
@@ -6804,6 +6838,8 @@ function renderHistory() {
 
 $('sheet-history').addEventListener('click', (e) => {
   if (e.target.closest('[data-hback]')) { historyView = null; renderHistory(); return; }
+  const rp = e.target.closest('[data-replay]');
+  if (rp) { openReplay(rp.dataset.replay, 'history'); return; }
   const gameEl = e.target.closest('[data-game]');
   if (gameEl) { historyView = { game: gameEl.dataset.game }; renderHistory(); return; }
   const playerEl = e.target.closest('[data-player]');
@@ -6912,6 +6948,15 @@ function winTitles(g) {
   return out;
 }
 
+/** One player's dice luck for the results sheet, from this device's chronicle of the game. */
+function luckLine(pid) {
+  const g = game();
+  if (!chron || !g || chron.gid !== g.seed || !chron.done || chron.rolls < 5) return '';
+  const l = CH.luckOf(chron, pid);
+  if (l.exp < 1) return '';
+  return `<div class="final-luck">🎲 Dice luck <b class="${l.pct >= 0 ? 'up' : 'down'}">${l.pct > 0 ? '+' : ''}${l.pct}%</b> · ${l.act} cards paid, ${l.exp.toFixed(1)} expected</div>`;
+}
+
 function renderOverFacts(g) {
   const el = $('over-facts');
   const rows = [];
@@ -6974,6 +7019,7 @@ function renderOver(g) {
         <span class="final-vp">${R.totalVP(g, pid)}</span>
       </div>
       <div class="final-sources">${lines || '<span class="src-none">no points</span>'}</div>
+      ${luckLine(pid)}
       ${times?.per[pid]?.n ? `<div class="final-times">⏱ <b>${times.per[pid].n}</b> turn${times.per[pid].n === 1 ? '' : 's'} · avg <b>${PT.fmt(times.per[pid].sum / times.per[pid].n)}</b>
         · longest ${PT.fmt(times.per[pid].max)} · shortest ${PT.fmt(times.per[pid].min)}</div>` : ''}
     </div>`;
@@ -7024,6 +7070,109 @@ $('btn-again').addEventListener('click', async () => {
   toggleRematch();
 });
 $('btn-again-now').addEventListener('click', () => { unlock(); startRematchWithVoters(); });
+$('btn-replay').addEventListener('click', () => {
+  const g = game();
+  const entry = loadHistory().find((h) => h.replay && g && h.id.includes(String(g.seed ?? '')) ) || loadHistory().find((h) => h.replay);
+  if (!entry) { toast('No replay was recorded for this game.'); return; }
+  sfx.tap();
+  openReplay(entry.id, 'over');
+});
+
+// ---------------------------------------------------------------- replay sheet
+let replayTimer = null;
+let replayData = null;
+let replayBack = 'history';
+let replayAt = 0;
+
+function replaySize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+  for (const id of ['replay-board', 'replay-graph']) {
+    const cv = $(id);
+    const w = Math.max(1, Math.round(cv.getBoundingClientRect().width));
+    const h = Math.max(1, Math.round(cv.getBoundingClientRect().height));
+    if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+    cv.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+    cv._w = w; cv._h = h;
+  }
+}
+
+function drawReplay(now = 0) {
+  const d = replayData;
+  if (!d) return;
+  const cv = $('replay-board');
+  const ctx = cv.getContext('2d');
+  const colors = d.people.map((p) => p.color);
+  const sea = seaAt(room?.settings?.sea || SEA_DEFAULT);
+  drawReplayBoard(ctx, cv._w, cv._h, d, replayAt, colors, [sea.a, sea.b], now);
+  const turns = d.steps.length ? d.steps[Math.max(0, Math.min(replayAt, d.steps.length) - 1)]?.[0] ?? 0 : 0;
+  $('replay-count').textContent = `Turn ${turns} · ${replayAt}/${d.steps.length}`;
+  $('replay-scrub').value = String(replayAt);
+}
+
+function stopReplay() {
+  clearInterval(replayTimer);
+  replayTimer = null;
+  const b = $('replay-play');
+  if (b) b.textContent = replayAt >= (replayData?.steps.length || 0) ? 'Replay' : 'Play';
+}
+
+function openReplay(id, back = 'history') {
+  const entry = loadHistory().find((h) => h.id === id);
+  if (!entry?.replay) { toast('No replay was recorded for this game.'); return; }
+  replayData = entry.replay;
+  replayBack = back;
+  replayAt = replayData.steps.length;
+  const d = replayData;
+  $('replay-sub').textContent = `${entry.winnerName || 'Someone'} won${d.partial ? ' · this device joined late, so the early moves are shown as already built' : ''}`;
+  $('replay-scrub').max = String(d.steps.length);
+  $('replay-legend').innerHTML = d.people.map((p) =>
+    `<span><b style="background:${esc(p.color)}"></b>${esc(p.name)}</span>`).join('');
+  $('replay-luck').innerHTML = d.people.map((p) => {
+    const l = p.luck || { act: 0, exp: 0, pct: 0 };
+    const w = Math.min(50, Math.abs(l.pct) / 2);
+    const bar = l.pct >= 0
+      ? `<i style="left:50%;width:${w}%;background:#4cd48a"></i>`
+      : `<i style="left:${50 - w}%;width:${w}%;background:#ff7a59"></i>`;
+    return `<div class="luck-row"><span class="nm">${esc(p.name)}</span><div class="luck-bar">${bar}</div>
+      <span class="pc" style="color:${l.pct >= 0 ? '#4cd48a' : '#ff7a59'}">${l.pct > 0 ? '+' : ''}${l.pct}%</span>
+      <span class="luck-sub">${l.act} cards paid · ${l.exp.toFixed(1)} expected</span></div>`;
+  }).join('');
+  sheet('sheet-replay');
+  requestAnimationFrame(() => {
+    replaySize();
+    drawReplay();
+    const gc = $('replay-graph');
+    drawReplayGraph(gc.getContext('2d'), gc._w, gc._h, d, d.people.map((p) => p.color), d.target);
+    stopReplay();
+  });
+}
+
+$('replay-play').addEventListener('click', () => {
+  const d = replayData;
+  if (!d) return;
+  sfx.tap();
+  if (replayTimer) { stopReplay(); return; }
+  if (replayAt >= d.steps.length) replayAt = 0;
+  $('replay-play').textContent = 'Pause';
+  replayTimer = setInterval(() => {
+    if (openSheet !== 'sheet-replay') { stopReplay(); return; }
+    replayAt += 1;
+    drawReplay(performance.now());
+    if (replayAt >= d.steps.length) stopReplay();
+  }, 220);
+});
+$('replay-scrub').addEventListener('input', () => {
+  stopReplay();
+  replayAt = Number($('replay-scrub').value);
+  drawReplay(performance.now());
+});
+$('replay-close').addEventListener('click', () => {
+  stopReplay();
+  const g = game();
+  if (replayBack === 'over' && g?.phase === 'over') { renderOver(g); sheet('sheet-over'); }
+  else if (replayBack === 'history') openHistory();
+  else closeSheet();
+});
 $('btn-home').addEventListener('click', () => leaveRoom(true));
 $('btn-recap').addEventListener('click', () => { sfx.tap(); shareRecap(); });
 
