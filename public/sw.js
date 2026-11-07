@@ -29,6 +29,7 @@ const CORE = [
   'playtime.js',
   'chronicle.js',
   'replay.js',
+  'profile.js',
   'wordcodes.js',
   'version.js',
   'sfx/index.json',

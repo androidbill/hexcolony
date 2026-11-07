@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.11.07.05">
+<link rel="stylesheet" href="styles.css?v=2026.11.07.06">
 </head>
 <body>
 
@@ -138,6 +138,9 @@
     <div class="home-row">
       <button class="btn btn-ghost" id="btn-how">How to Play</button>
       <button class="btn btn-ghost" id="btn-settings">Settings</button>
+    </div>
+    <div class="home-row">
+      <button class="btn btn-ghost" id="btn-profile">Profile and achievements</button>
     </div>
 
   </div>
@@ -510,6 +513,7 @@
   <div class="menu-list">
     <button class="menu-item" id="menu-players"><b>Players</b></button>
     <button class="menu-item" id="menu-history"><b>Stats &amp; history</b></button>
+    <button class="menu-item" id="menu-profile"><b>Profile and achievements</b></button>
     <button class="menu-item" id="menu-pause"><b>Pause game</b></button>
     <button class="menu-item" id="menu-how"><b>How to Play</b></button>
     <button class="menu-item" id="menu-settings"><b>Settings</b></button>
@@ -595,6 +599,12 @@
   </div>
 
   <div class="opt-group">The game</div>
+
+  <div class="opt-row col">
+    <span class="opt-l">Challenge <small>(optional, earns bonus XP)</small></span>
+    <div class="seg-row wrap" id="solo-challenges"></div>
+    <em class="opt-note" id="solo-challenge-blurb">Play it your way.</em>
+  </div>
 
   <button class="speed-btn" id="solo-speed-btn" type="button">
     <b>&#9889; Speed mode</b><span>8 points to win &middot; 15 second turns</span>
@@ -741,6 +751,7 @@
   <h3 class="sheet-title" id="over-title">Winner</h3>
   <div class="over-hero" id="over-hero"></div>
   <div class="final-table" id="final-table"></div>
+  <div class="award-box" id="over-award" hidden></div>
   <div class="over-facts" id="over-facts" hidden></div>
   <p class="hint" id="rematch-status" hidden></p>
   <div class="sheet-actions">
@@ -762,6 +773,7 @@
   <div class="kebab-menu" id="kebab-menu" hidden role="menu">
     <button id="kebab-refresh" role="menuitem"><span>&#128260;</span>Refresh</button>
     <button id="kebab-history" role="menuitem"><span>🏆</span>Stats &amp; history</button>
+    <button id="kebab-profile" role="menuitem"><span>⭐</span>Profile</button>
     <button id="kebab-share" role="menuitem"><span>&#128228;</span>Share</button>
     <button id="kebab-about" role="menuitem"><span>&#8505;&#65039;</span>About</button>
     <!-- Only shown on the landing page, and only once Realtime Database is actually
@@ -797,6 +809,25 @@
   <div id="replay-luck"></div>
   <p class="hint">Luck compares the cards the dice paid a player with what they should have paid on average for what that player had built at the time. The robber is accounted for, so it measures the dice alone.</p>
   <div class="sheet-actions"><button class="btn btn-ghost" id="replay-close">Close</button></div>
+</div>
+
+<div class="sheet" id="sheet-profile">
+  <h3 class="sheet-title">Profile</h3>
+  <div class="prof-head">
+    <div class="prof-level" id="prof-level">1</div>
+    <div class="prof-xp">
+      <b id="prof-title">Level 1</b>
+      <div class="xp-bar"><i id="prof-bar"></i></div>
+      <small id="prof-xp"></small>
+    </div>
+  </div>
+  <div class="prof-stats" id="prof-stats"></div>
+  <div class="history-heading detail-gap">Achievements <span id="prof-ach-count"></span></div>
+  <div class="ach-grid" id="prof-ach"></div>
+  <div class="history-heading detail-gap">Solo challenges</div>
+  <div class="ach-grid" id="prof-ch"></div>
+  <p class="hint">Kept on this device only. Finishing games earns XP; levels unlock dice and piece styles in Settings.</p>
+  <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
 
 <div class="sheet" id="sheet-colour">
@@ -884,7 +915,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.11.07.05"></script>
-<script type="module" src="app.js?v=2026.11.07.05"></script>
+<script src="iro.min.js?v=2026.11.07.06"></script>
+<script type="module" src="app.js?v=2026.11.07.06"></script>
 </body>
 </html>

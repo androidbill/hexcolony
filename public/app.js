@@ -33,6 +33,7 @@ import { resCard, devCard, cardRow, costRow, RES_NAME } from './cards.js';
 import * as R from './rules.js';
 import * as PT from './playtime.js';
 import * as CH from './chronicle.js';
+import * as PF from './profile.js';
 import { drawBoard as drawReplayBoard, drawGraph as drawReplayGraph } from './replay.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
@@ -2456,6 +2457,7 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
     targetVP, discardLimit, boardMode: 'random', layout, useRobber,
     turnSeconds: soloTurnSeconds, ...newSea(), discardSeconds: R.DISCARD_SECONDS,
     fog: soloFog,
+    ...(soloChallenge ? { challenge: soloChallenge } : {}),
   };
 
   // Straight to the map picker: solo has a host too, and it is you.
@@ -2509,6 +2511,7 @@ let soloRobber = localStorage.getItem('hexcolony_solo_robber') === 'on';
 let soloFog = localStorage.getItem('hexcolony_solo_fog') === 'on';
 let soloDiscard = Number(localStorage.getItem('hexcolony_solo_discard') || 7);
 let soloTurnSeconds = Number(localStorage.getItem('hexcolony_solo_timer') || 30);
+let soloChallenge = '';   // a key from profile.js, or none; chosen per game
 // The sea is a fresh random colour for every new game, unless somebody picked one by hand.
 // A hand-picked colour is remembered here and wins until "Random" is tapped again.
 const SEA_MANUAL_KEY = 'hexcolony_sea_manual';
@@ -2522,6 +2525,10 @@ function newSea() {
 let soloSea = manualSea() || randomSea();
 
 function drawSoloSheet() {
+  $('solo-challenges').innerHTML = [{ key: '', name: 'None' }, ...PF.CHALLENGES].map((c) =>
+    `<button class="seg${c.key === soloChallenge ? ' on' : ''}" data-challenge="${c.key}">${esc(c.name)}</button>`).join('');
+  $('solo-challenge-blurb').textContent = PF.CHALLENGES.find((c) => c.key === soloChallenge)?.blurb
+    || 'Play it your way.';
   for (const b of document.querySelectorAll('#solo-levels [data-level]')) {
     b.classList.toggle('on', b.dataset.level === soloLevel);
   }
@@ -2673,6 +2680,13 @@ for (const b of document.querySelectorAll('[data-solo]')) {
     drawSoloSheet();
   });
 }
+$('solo-challenges').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-challenge]');
+  if (!b) return;
+  soloChallenge = b.dataset.challenge;
+  sfx.tap();
+  drawSoloSheet();
+});
 $('btn-solo-start').addEventListener('click', () => {
   if (startSolo(soloLevel, soloBots, soloTarget, soloLayout, soloRobber, soloDiscard)) closeSheet();
 });
@@ -6493,6 +6507,39 @@ function myGameStats(g) {
 }
 
 /** Save one finished game once on every device that saw it finish. */
+// ---------------------------------------------------------------- XP, achievements, challenges
+let lastAward = null;   // what the game just finished earned, for the results sheet
+
+/** Score a finished game for this player, once, and save the profile. */
+function awardProfile(g, gameKey) {
+  const before = loadProfile();
+  const tl = g.tally?.[playerId] || {};
+  const mineBldg = Object.values(g.bldg).filter((b) => b.p === playerId);
+  const others = g.seats.filter((s) => s !== playerId).map((s) => R.totalVP(g, s));
+  const mine = R.totalVP(g, playerId);
+  const humans = g.seats.filter((pid) => !room.players?.[pid]?.bot).length;
+  const luck = chron?.gid === g.seed && chron.done && chron.rolls >= 8 && CH.luckOf(chron, playerId).exp >= 3
+    ? CH.luckOf(chron, playerId).pct : null;
+  const ctx = {
+    won: g.winner === playerId,
+    solo: !!room.solo,
+    botLevel: room.solo ? room.level : null,
+    humans,
+    mine: Math.max(1, Math.ceil(g.turn.num / g.seats.length)),
+    cities: mineBldg.filter((b) => b.t === 'c').length,
+    longRoad: g.award.road === playerId,
+    largestArmy: g.award.army === playerId,
+    margin: mine - Math.max(0, ...others),
+    luck,
+    tally: tl,
+    challenge: room.solo ? (room.settings?.challenge || '') : '',
+    now: Date.now(),
+  };
+  const res = PF.judge(before, ctx);
+  saveProfile(res.profile);
+  return { gid: g.seed, key: gameKey, ...res, from: before.xp, to: res.profile.xp };
+}
+
 function recordHistory(g) {
   if (!room || g?.phase !== 'over' || !g.winner) return;
   const started = stampMs(room.startedAt);
@@ -6535,6 +6582,7 @@ function recordHistory(g) {
     // device has nothing of its own to add to a career card.
     me: g.players[playerId] ? myGameStats(g) : null,
   });
+  lastAward = g.players[playerId] ? awardProfile(g, key) : null;
   // Replays are the bulky part, so only the newest few are kept; older games keep their stats.
   const kept = history.slice(0, HISTORY_KEEP).map((h, i) => {
     if (i < REPLAY_KEEP || !h.replay) return h;
@@ -6983,8 +7031,24 @@ function renderOverFacts(g) {
   el.innerHTML = rows.map(([i, t]) => `<div class="fact"><span>${i}</span><span>${esc(t)}</span></div>`).join('');
 }
 
+function renderAwardBox(g) {
+  const el = $('over-award');
+  const a = lastAward;
+  if (!a || a.gid !== g.seed) { el.hidden = true; return; }
+  const lv0 = levelOf(a.from), lv1 = levelOf(a.to);
+  const bits = [`<div class="xp-line">+${a.xp} XP</div>`];
+  if (lv1 > lv0) bits.push(`<div class="lv-up">Level up! You are now level ${lv1}</div>`);
+  if (a.challenge) {
+    bits.push(`<div class="got-line">${a.challenge.done ? '★ Challenge complete' : 'Challenge failed'}: ${esc(a.challenge.name)} — ${esc(a.challenge.blurb)}${a.challenge.first ? ' (+50 XP)' : ''}</div>`);
+  }
+  for (const x of a.newAch) bits.push(`<div class="got-line">★ ${esc(x.name)}: ${esc(x.desc)} (+${x.xp} XP)</div>`);
+  el.innerHTML = bits.join('');
+  el.hidden = false;
+}
+
 function renderOver(g) {
   recordHistory(g);
+  renderAwardBox(g);
   const win = g.winner;
   $('over-title').textContent = win === playerId ? 'You win!' : `${nameFor(win)} wins`;
 
@@ -7569,6 +7633,28 @@ function openAbout() {
 
 $('kebab-refresh').addEventListener('click', () => { closeKebab(); fullRefresh(); });
 $('kebab-history').addEventListener('click', () => { closeKebab(); openHistory(); });
+$('kebab-profile').addEventListener('click', () => { closeKebab(); openProfile(); });
+$('menu-profile').addEventListener('click', openProfile);
+$('btn-profile').addEventListener('click', openProfile);
+
+function openProfile() {
+  const p = loadProfile();
+  const lv = levelOf(p.xp);
+  const lo = xpForLevel(lv), hi = xpForLevel(lv + 1);
+  $('prof-level').textContent = String(lv);
+  $('prof-title').textContent = `Level ${lv}`;
+  $('prof-bar').style.width = `${Math.round(((p.xp - lo) / (hi - lo)) * 100)}%`;
+  $('prof-xp').textContent = `${p.xp - lo} / ${hi - lo} XP to level ${lv + 1}`;
+  const rate = p.games ? Math.round((p.wins / p.games) * 100) : 0;
+  $('prof-stats').innerHTML = `<div><b>${p.games}</b><span>games</span></div><div><b>${p.wins}</b><span>wins</span></div><div><b>${rate}%</b><span>win rate</span></div>`;
+  const got = PF.ACHIEVEMENTS.filter((a) => p.ach[a.key]).length;
+  $('prof-ach-count').textContent = `${got}/${PF.ACHIEVEMENTS.length}`;
+  $('prof-ach').innerHTML = PF.ACHIEVEMENTS.map((a) =>
+    `<div class="ach${p.ach[a.key] ? ' got' : ''}"><b>${esc(a.name)}</b><span>${esc(a.desc)}</span><small>+${a.xp} XP</small></div>`).join('');
+  $('prof-ch').innerHTML = PF.CHALLENGES.map((c) =>
+    `<div class="ach${p.challenges[c.key] ? ' got' : ''}"><b>${esc(c.name)}</b><span>${esc(c.blurb)}</span><small>${p.challenges[c.key] ? 'Complete' : `+${PF.XP_CHALLENGE} XP first time`}</small></div>`).join('');
+  sheet('sheet-profile');
+}
 $('kebab-share').addEventListener('click', () => { closeKebab(); shareApp(); });
 $('kebab-about').addEventListener('click', () => { closeKebab(); openAbout(); });
 $('menu-share').addEventListener('click', () => { closeSheet(); shareApp(); });
