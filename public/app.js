@@ -2538,6 +2538,7 @@ function drawSoloSheet() {
     sfx.tap();
     drawSoloSheet();
   }, !!manualSea());
+  $('solo-speed-btn').classList.toggle('on', soloTarget === SPEED.target && soloTurnSeconds === SPEED.seconds);
   $('solo-bots').textContent = String(soloBots);
   $('solo-target').textContent = String(soloTarget);
   soloDiscard = clampDiscard(soloDiscard);
@@ -2549,6 +2550,15 @@ function drawSoloSheet() {
   // else is looking, so it can simply go.
   $('solo-discard-row').hidden = !soloRobber;
 }
+
+$('solo-speed-btn').addEventListener('click', () => {
+  soloTarget = SPEED.target;
+  soloTurnSeconds = SPEED.seconds;
+  localStorage.setItem('hexcolony_solo_target', String(soloTarget));
+  localStorage.setItem('hexcolony_solo_timer', String(soloTurnSeconds));
+  sfx.tap();
+  drawSoloSheet();
+});
 
 for (const b of document.querySelectorAll('[data-solo-timer]')) {
   b.addEventListener('click', () => {
@@ -2767,6 +2777,13 @@ for (const b of document.querySelectorAll('[data-dynsize]')) {
 
 $('btn-start').addEventListener('click', beginMapChoice);
 
+// One tap for a quick game: fewer points to win and a short clock. It only sets the two
+// numbers that already exist, so anything it does can be undone from their own controls.
+const SPEED = { target: 8, seconds: 15 };
+$('speed-btn').addEventListener('click', () => {
+  if (setSetting({ 'settings.targetVP': SPEED.target, 'settings.turnSeconds': SPEED.seconds })) sfx.tap();
+});
+
 function renderLobby() {
   $('lobby-code').textContent = roomCode ? shownCode(roomCode) : '----';
   const ids = Object.keys(room.players || {})
@@ -2817,6 +2834,7 @@ function renderLobby() {
 
   const s = room.settings || {};
   $('set-target').textContent = String(s.targetVP || 12);
+  $('speed-btn').classList.toggle('on', (s.targetVP || 12) === SPEED.target && s.turnSeconds === SPEED.seconds);
   $('set-discard').textContent = String(clampDiscard(s.discardLimit));
   // Leave the thumb alone while the host is dragging it: a room update mid-drag would
   // otherwise snap it back to the last saved value under their finger.

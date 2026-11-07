@@ -2897,3 +2897,14 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
   border: 1px solid var(--line);
   font-size: 12px; font-weight: 700; color: var(--parch);
 }
+
+/* Speed mode: one tap for a short game. Lit while the two numbers it sets match it. */
+.speed-btn {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start; width: 100%;
+  margin: 4px 0 8px; padding: 10px 14px; border-radius: var(--r);
+  background: rgba(255, 255, 255, .05); border: 1px solid var(--line); color: var(--text); text-align: left;
+}
+.speed-btn b { font-size: 14px; }
+.speed-btn span { font-size: 12px; color: var(--dim); }
+.speed-btn.on { background: rgba(227, 186, 87, .16); border-color: rgba(227, 186, 87, .65); }
+.speed-btn.on b { color: var(--gold); }
