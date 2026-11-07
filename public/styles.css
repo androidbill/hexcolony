@@ -3026,3 +3026,14 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
 .bk-row { display: flex; gap: 8px; margin: 6px 0; }
 .bk-row .btn { flex: 1; }
 .bk-input { flex: 2; min-width: 0; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--line); background: rgba(0,0,0,.25); color: var(--text); font: 700 15px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .05em; text-transform: uppercase; }
+
+.goal-line {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--tray-h, 0px) + var(--float-h, 0px) + 44px);
+  z-index: 4; pointer-events: none; text-align: center;
+  max-width: 92%; padding: 3px 12px; border-radius: 14px;
+  background: rgba(5, 18, 32, .72); border: 1px solid rgba(227, 186, 87, .5);
+  font-size: 12px; font-weight: 700; color: var(--gold); line-height: 1.25;
+}
+.goal-line.done { color: #4cd48a; border-color: rgba(76, 212, 138, .5); }
+.goal-line[hidden] { display: none; }

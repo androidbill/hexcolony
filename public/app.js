@@ -4051,9 +4051,14 @@ function render() {
     $('rules-line').innerHTML = `<span>Points - ${esc(g.target || 10)}</span>`
       + `<span>Discard ${limit ? `On ${esc(g.discardLimit || 7)}` : 'Off'}</span>`;
     const goal = g.goals ? R.goalInfo(g.players[playerId]?.goal) : null;
+    // Your secret objective sits on its own line above, so a long one cannot push the
+    // points and discard off the screen.
+    const gl = $('goal-line');
+    gl.hidden = !goal;
     if (goal) {
-      $('rules-line').innerHTML += `<span class="goal-chip${g.players[playerId].goalDone ? ' done' : ''}" title="${esc(goal.blurb)}">`
-        + `${g.players[playerId].goalDone ? '✓' : '🎯'} ${esc(goal.name)}: ${esc(goal.blurb)}</span>`;
+      const done = g.players[playerId].goalDone;
+      gl.className = `goal-line${done ? ' done' : ''}`;
+      gl.textContent = `${done ? '✓' : '🎯'} ${goal.name}: ${goal.blurb}`;
     }
   }
   view.spinPieces = localStorage.getItem('hexcolony_spin_pieces') === 'on';
