@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.11.07.09">
+<link rel="stylesheet" href="styles.css?v=2026.11.07.10">
 </head>
 <body>
 
@@ -865,7 +865,24 @@
   <div class="rw-list" id="prof-rewards"></div>
   <div class="history-heading detail-gap">Solo challenges</div>
   <div class="ach-grid" id="prof-ch"></div>
-  <p class="hint">Kept on this device only. Finishing games earns XP; levels unlock dice and piece styles in Settings.</p>
+  <div class="history-heading detail-gap">Keep your progress safe</div>
+  <p class="hint">Your level, achievements and history are saved online under this secret code. If you change phone or reinstall, enter it under Restore. Keep it private: anyone with it can load your profile.</p>
+  <div class="bk-code" id="bk-code">&hellip;</div>
+  <div class="bk-row">
+    <button class="btn btn-ghost" id="bk-copy">Copy code</button>
+    <button class="btn btn-ghost" id="bk-share">Share</button>
+  </div>
+  <p class="hint" id="bk-status"></p>
+  <div class="bk-row">
+    <input class="bk-input" id="bk-input" placeholder="Restore code" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24">
+    <button class="btn btn-ghost" id="bk-restore">Restore</button>
+  </div>
+  <div class="bk-row">
+    <button class="btn btn-ghost" id="bk-export">Save to a file</button>
+    <button class="btn btn-ghost" id="bk-import">Load from a file</button>
+    <input type="file" id="bk-file" accept="application/json,.json" hidden>
+  </div>
+  <p class="hint">Levels and unlocks are stored on your device and in this backup. Levels are not checked against anything, so keep it honest.</p>
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
 
@@ -954,7 +971,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.11.07.09"></script>
-<script type="module" src="app.js?v=2026.11.07.09"></script>
+<script src="iro.min.js?v=2026.11.07.10"></script>
+<script type="module" src="app.js?v=2026.11.07.10"></script>
 </body>
 </html>

@@ -3020,3 +3020,9 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
 :root[data-dice="rainbow"] .tdie, :root[data-dice="rainbow"] .bigdie { background: linear-gradient(135deg, #ff5a5a, #ffb84a, #ffe94a, #55e08a, #4aa8ff, #b06cff); color: #1a1a1a; }
 :root[data-dice="rainbow"] .tdie i.on { background: #1a1a1a; box-shadow: none; }
 :root[data-dice="rainbow"] .die { background: linear-gradient(135deg, #ff5a5a, #ffe94a, #4aa8ff); color: #1a1a1a; }
+
+/* ------------------------------------------------------------ profile backup */
+.bk-code { font: 800 20px/1.2 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .08em; text-align: center; padding: 12px 8px; margin: 6px 0; border-radius: var(--r); background: rgba(255,255,255,.07); border: 1px dashed rgba(227,186,87,.6); user-select: all; }
+.bk-row { display: flex; gap: 8px; margin: 6px 0; }
+.bk-row .btn { flex: 1; }
+.bk-input { flex: 2; min-width: 0; padding: 10px 12px; border-radius: var(--r); border: 1px solid var(--line); background: rgba(0,0,0,.25); color: var(--text); font: 700 15px ui-monospace, Menlo, Consolas, monospace; letter-spacing: .05em; text-transform: uppercase; }

@@ -30,6 +30,7 @@ const CORE = [
   'chronicle.js',
   'replay.js',
   'profile.js',
+  'backup.js',
   'wordcodes.js',
   'version.js',
   'sfx/index.json',

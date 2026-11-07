@@ -34,6 +34,7 @@ import * as R from './rules.js';
 import * as PT from './playtime.js';
 import * as CH from './chronicle.js';
 import * as PF from './profile.js';
+import * as BK from './backup.js';
 import { drawBoard as drawReplayBoard, drawGraph as drawReplayGraph } from './replay.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
 
@@ -6622,6 +6623,7 @@ function awardProfile(g, gameKey) {
   };
   const res = PF.judge(before, ctx);
   saveProfile(res.profile);
+  scheduleBackup();
   return { gid: g.seed, key: gameKey, ...res, from: before.xp, to: res.profile.xp };
 }
 
@@ -7127,9 +7129,16 @@ function renderAwardBox(g) {
   if (a.challenge) {
     bits.push(`<div class="got-line">${a.challenge.done ? '★ Challenge complete' : 'Challenge failed'}: ${esc(a.challenge.name)} — ${esc(a.challenge.blurb)}${a.challenge.first ? ' (+50 XP)' : ''}</div>`);
   }
+  if (!localStorage.getItem('hexcolony_code_shown')) {
+    bits.push('<div class="got-line">Your progress is saved online. <button class="btn btn-ghost" id="award-code" style="padding:4px 10px;margin-left:6px">See my restore code</button></div>');
+  }
   for (const x of a.newAch) bits.push(`<div class="got-line">★ ${esc(x.name)}: ${esc(x.desc)} (+${x.xp} XP)</div>`);
   el.innerHTML = bits.join('');
   el.hidden = false;
+  $('award-code')?.addEventListener('click', () => {
+    localStorage.setItem('hexcolony_code_shown', '1');
+    openProfile();
+  });
 }
 
 function renderOver(g) {
@@ -7422,6 +7431,7 @@ document.addEventListener('click', (e) => {
   if (!b) return;
   if (Number(b.dataset.level) > profileLevel()) { toast(`Unlocks at level ${b.dataset.level}`); return; }
   localStorage.setItem(SKIN_KEY(b.dataset.kind), b.dataset.skin);
+  scheduleBackup(8000);
   sfx.tap();
   applySkins();
   drawSkinRows();
@@ -7736,7 +7746,104 @@ $('kebab-profile').addEventListener('click', () => { closeKebab(); openProfile()
 $('menu-profile').addEventListener('click', openProfile);
 $('btn-profile').addEventListener('click', openProfile);
 
+// ---------------------------------------------------------------- backup and restore
+function saveCode() {
+  let code = localStorage.getItem(BK.CODE_KEY);
+  if (!BK.normalise(code)) { code = BK.newCode(); localStorage.setItem(BK.CODE_KEY, code); }
+  return code;
+}
+let backupTimer = null;
+let backupState = '';
+
+/** Save the profile under the restore code a few seconds after the last change. */
+function scheduleBackup(delay = 4000) {
+  clearTimeout(backupTimer);
+  backupTimer = setTimeout(runBackup, delay);
+}
+async function runBackup() {
+  if (!NET_READY) return;
+  const code = saveCode();
+  try {
+    await withTimeout(setDoc(doc(db, 'profiles', code), {
+      v: 1, at: Date.now(), data: JSON.stringify(BK.gather(localStorage)),
+    }), 10000);
+    localStorage.setItem('hexcolony_backup_at', String(Date.now()));
+    backupState = 'ok';
+  } catch (e) {
+    backupState = 'failed';
+  }
+  if (openSheet === 'sheet-profile') drawBackupStatus();
+}
+function drawBackupStatus() {
+  const at = Number(localStorage.getItem('hexcolony_backup_at') || 0);
+  $('bk-status').textContent = at
+    ? `Last saved online ${new Date(at).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}.${backupState === 'failed' ? ' The latest save did not go through; it will retry.' : ''}`
+    : backupState === 'failed' ? 'Could not save online yet. It will retry when you are connected.' : 'Saving online...';
+}
+// A profile earned before backups existed is uploaded the first time, and refreshed daily.
+setTimeout(() => {
+  const at = Number(localStorage.getItem('hexcolony_backup_at') || 0);
+  if (Date.now() - at > 24 * 3600 * 1000) runBackup();
+}, 6000);
+
+async function restoreFromCode() {
+  const code = BK.normalise($('bk-input').value);
+  if (!code) { toast('That is not a valid code. It has 16 letters and numbers.'); return; }
+  if (!NET_READY) { toast('You need a connection to restore.'); return; }
+  let payload = null;
+  try {
+    const snap = await withTimeout(getDoc(doc(db, 'profiles', code)), 10000);
+    if (snap.exists()) payload = JSON.parse(snap.data().data);
+  } catch { toast('Could not reach the backup. Try again.'); return; }
+  if (!BK.valid(payload)) { toast('No profile found for that code.'); return; }
+  const mine = loadProfile();
+  if (mine.xp > (payload.profile?.xp || 0)
+      && !confirm('This phone already has more progress than that backup. Combine them? (Nothing earned on either is lost.)')) return;
+  const got = BK.apply(localStorage, payload);
+  localStorage.setItem(BK.CODE_KEY, code);   // from now on this phone keeps that backup up to date
+  toast(`Restored: ${got.xp} XP, ${got.games} games`);
+  sfx.gain();
+  setTimeout(() => location.reload(), 900);
+}
+$('bk-restore').addEventListener('click', restoreFromCode);
+$('bk-copy').addEventListener('click', async () => {
+  const text = BK.pretty(saveCode());
+  try { await navigator.clipboard.writeText(text); toast('Code copied'); } catch { toast(text); }
+});
+$('bk-share').addEventListener('click', async () => {
+  const text = `My HexColony restore code: ${BK.pretty(saveCode())}`;
+  try {
+    if (navigator.share) await navigator.share({ text });
+    else { await navigator.clipboard.writeText(text); toast('Copied'); }
+  } catch { /* cancelled */ }
+});
+$('bk-export').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(BK.gather(localStorage))], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `hexcolony-profile-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  toast('Saved to a file');
+});
+$('bk-import').addEventListener('click', () => $('bk-file').click());
+$('bk-file').addEventListener('change', async () => {
+  const f = $('bk-file').files?.[0];
+  $('bk-file').value = '';
+  if (!f) return;
+  try {
+    const payload = JSON.parse(await f.text());
+    if (!BK.valid(payload)) throw new Error('bad');
+    const got = BK.apply(localStorage, payload);
+    toast(`Loaded: ${got.xp} XP, ${got.games} games`);
+    scheduleBackup(1500);
+    setTimeout(() => location.reload(), 900);
+  } catch { toast('That file is not a HexColony profile.'); }
+});
+
 function openProfile() {
+  $('bk-code').textContent = BK.pretty(saveCode());
+  drawBackupStatus();
   const p = loadProfile();
   const lv = levelOf(p.xp);
   const lo = xpForLevel(lv), hi = xpForLevel(lv + 1);

@@ -102,6 +102,21 @@ service cloud.firestore {
                    && request.resource.data.version.size() <= 32;
     }
 
+    // Player profiles for the restore code. The document id IS the secret (16 random
+    // characters, about 80 bits), the same model as a room code, so get is open to anyone
+    // who knows it and list is closed so nobody can enumerate them. The data is a
+    // level, some achievements and a game history: nothing personal.
+    match /profiles/{code} {
+      allow get: if code.matches('^[A-Z0-9]{16}$');
+      allow list: if false;
+      allow create, update: if code.matches('^[A-Z0-9]{16}$')
+                            && request.resource.data.keys().hasOnly(['v', 'at', 'data'])
+                            && request.resource.data.v == 1
+                            && request.resource.data.data is string
+                            && request.resource.data.data.size() <= 600000;
+      allow delete: if false;
+    }
+
     // Everything else is closed.
     match /{document=**} {
       allow read, write: if false;
