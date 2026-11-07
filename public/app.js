@@ -510,6 +510,23 @@ function paletteFor(pid) {
   return R.PLAYER_COLORS[idx % R.PLAYER_COLORS.length];
 }
 const colorFor = (pid) => paletteFor(pid).hex;
+
+// ---------------------------------------------------------------- ranks
+// A title for how far a player has come, shown by their name. Each device writes its own
+// level into the room when it joins; at 30 the name goes gold.
+const RANKS = [
+  { level: 1, name: 'Settler' }, { level: 4, name: 'Trader' }, { level: 7, name: 'Pathfinder' },
+  { level: 10, name: 'Raider' }, { level: 14, name: 'Baron' }, { level: 18, name: 'Warlord' },
+  { level: 22, name: 'Sovereign' }, { level: 26, name: 'Overlord' }, { level: 30, name: 'Legend' },
+];
+const rankFor = (lv) => [...RANKS].reverse().find((r) => (lv || 1) >= r.level)?.name || 'Settler';
+/** A player's name with their rank beside it. Bots and old rooms carry no level: just the name. */
+function nameTag(pid) {
+  const lv = room?.players?.[pid]?.lv;
+  const name = esc(nameFor(pid));
+  if (!Number.isInteger(lv)) return name;
+  return `<span class="${lv >= 30 ? 'gold-name' : ''}">${name}</span> <small class="rank-title">${esc(rankFor(lv))}</small>`;
+}
 const inkFor = (pid) => paletteFor(pid).ink;
 const hasColour = (pid) => Number.isInteger(room?.players?.[pid]?.colorIdx);
 
@@ -576,8 +593,8 @@ function loadProfile() {
 function saveProfile(p) {
   try { localStorage.setItem(PROFILE_KEY, JSON.stringify(p)); } catch { /* cosmetic only */ }
 }
-/** XP needed to reach level n: 60, 180, 360, 600, 900... (a little more each level). */
-const xpForLevel = (n) => 30 * (n - 1) * n;
+/** XP needed to reach level n: 60, 180, 360, 600, 900, then a steady 340 more each level. */
+const xpForLevel = (n) => (n <= 6 ? 30 * (n - 1) * n : 900 + (n - 6) * 340);
 function levelOf(xp) {
   let n = 1;
   while (xp >= xpForLevel(n + 1)) n += 1;
@@ -601,12 +618,14 @@ function drawColourGrid() {
   $('colour-grid').innerHTML = R.PLAYER_COLORS.map((c, i) => {
     const by = taken.get(i);
     const cls = ['colour-cell'];
+    const locked = (c.level || 1) > profileLevel();
+    if (locked) cls.push('locked');
     if (by) cls.push('taken');
     if (i === mine) cls.push('mine');
     return `<button class="${cls.join(' ')}" data-colour="${i}"
       style="--c:${c.hex};--ink:${c.ink}"${by ? ' disabled' : ''}
       aria-label="${esc(c.name)}${by ? ` — taken by ${esc(by.name)}` : ''}">
-      ${by ? `<span class="taken-by">${esc((by.name || '?').slice(0, 2))}</span>` : (i === mine ? '✓' : '')}
+      ${by ? `<span class="taken-by">${esc((by.name || '?').slice(0, 2))}</span>` : locked ? `<span class="taken-by">L${c.level}</span>` : (i === mine ? '✓' : '')}
     </button>`;
   }).join('');
   // Scoped to the grid, not the document: the old selector was global, and the sea
@@ -629,6 +648,9 @@ function drawColourGrid() {
 
 async function pickColour(idx) {
   if (!R.PLAYER_COLORS[idx]) return;
+  if ((R.PLAYER_COLORS[idx].level || 1) > profileLevel()) {
+    return toast(`${R.PLAYER_COLORS[idx].name} unlocks at level ${R.PLAYER_COLORS[idx].level}`);
+  }
   if (room && room.state !== 'lobby') return toast('Colours are locked once the game starts.');
   if (takenColours().has(idx)) return toast('Somebody already has that colour.');
   sfx.tap();
@@ -783,7 +805,7 @@ function roomIsStale(data) {
  * see who else is in it.
  */
 function freshPlayer(name) {
-  return { name, colorIdx: null, joinedAt: Date.now() };
+  return { name, colorIdx: null, joinedAt: Date.now(), lv: profileLevel() };
 }
 
 async function createRoom() {
@@ -6181,7 +6203,7 @@ function openPlayers() {
     if (ports.length) stats.push(`<span class="pstat">${ports.map((k) => k === 'any' ? '3:1' : `2:1 ${k}`).join(' · ')}</span>`);
     return `<div class="pcard" style="--c:${esc(colorFor(pid))}">
       <div class="pcard-top">
-        <span class="pcard-name">${esc(nameFor(pid))}${pid === playerId ? ' (you)' : ''}</span>
+        <span class="pcard-name">${nameTag(pid)}${pid === playerId ? ' (you)' : ''}</span>
         <span class="pcard-vp">${g.phase === 'over' ? R.totalVP(g, pid) : R.publicVP(g, pid)}</span>
       </div>
       <div class="pcard-stats">${stats.join('')}</div>
@@ -7143,7 +7165,7 @@ function renderOver(g) {
     return `<div class="final-row${pid === win ? ' win' : ''}" style="--c:${esc(colorFor(pid))}">
       <div class="final-top">
         <span class="final-pos">${i + 1}</span>
-        <span class="final-name">${esc(nameFor(pid))}${titles[pid] ? `<span class="final-title">${esc(titles[pid])}</span>` : ''}</span>
+        <span class="final-name">${nameTag(pid)}${titles[pid] ? `<span class="final-title">${esc(titles[pid])}</span>` : ''}</span>
         <span class="final-vp">${R.totalVP(g, pid)}</span>
       </div>
       <div class="final-sources">${lines || '<span class="src-none">no points</span>'}</div>
@@ -7355,15 +7377,22 @@ const SKINS = {
     { key: 'classic', name: 'Classic', level: 1 }, { key: 'ruby', name: 'Ruby', level: 2 },
     { key: 'ice', name: 'Ice', level: 3 }, { key: 'obsidian', name: 'Obsidian', level: 4 },
     { key: 'gold', name: 'Gold', level: 5 }, { key: 'neon', name: 'Neon', level: 6 },
+    { key: 'emerald', name: 'Emerald', level: 8 }, { key: 'lava', name: 'Lava', level: 12 },
+    { key: 'galaxy', name: 'Galaxy', level: 17 }, { key: 'candy', name: 'Candy', level: 22 },
+    { key: 'rainbow', name: 'Rainbow', level: 27 },
   ],
   robber: [
     { key: 'classic', name: 'Hooded', level: 1 }, { key: 'bandit', name: 'Bandit', level: 1 },
     { key: 'skull', name: 'Skull', level: 2 }, { key: 'ghost', name: 'Ghost', level: 3 },
     { key: 'wolf', name: 'Wolf', level: 4 }, { key: 'crow', name: 'Crow', level: 5 },
+    { key: 'knight', name: 'Knight', level: 10 }, { key: 'pirate', name: 'Pirate', level: 15 },
+    { key: 'reaper', name: 'Reaper', level: 20 }, { key: 'dragon', name: 'Dragon', level: 25 },
   ],
   piece: [
     { key: 'classic', name: 'Classic', level: 1 }, { key: 'stone', name: 'Stone', level: 2 },
     { key: 'gold', name: 'Gold trim', level: 3 }, { key: 'neon', name: 'Neon', level: 5 },
+    { key: 'marble', name: 'Marble', level: 10 }, { key: 'wooden', name: 'Wooden', level: 14 },
+    { key: 'crystal', name: 'Crystal', level: 19 }, { key: 'magma', name: 'Magma', level: 24 },
   ],
 };
 const SKIN_KEY = (kind) => `hexcolony_skin_${kind}`;
@@ -7712,7 +7741,7 @@ function openProfile() {
   const lv = levelOf(p.xp);
   const lo = xpForLevel(lv), hi = xpForLevel(lv + 1);
   $('prof-level').textContent = String(lv);
-  $('prof-title').textContent = `Level ${lv}`;
+  $('prof-title').textContent = `Level ${lv} · ${rankFor(lv)}`;
   $('prof-bar').style.width = `${Math.round(((p.xp - lo) / (hi - lo)) * 100)}%`;
   $('prof-xp').textContent = `${p.xp - lo} / ${hi - lo} XP to level ${lv + 1}`;
   const rate = p.games ? Math.round((p.wins / p.games) * 100) : 0;
@@ -7721,6 +7750,16 @@ function openProfile() {
   $('prof-ach-count').textContent = `${got}/${PF.ACHIEVEMENTS.length}`;
   $('prof-ach').innerHTML = PF.ACHIEVEMENTS.map((a) =>
     `<div class="ach${p.ach[a.key] ? ' got' : ''}"><b>${esc(a.name)}</b><span>${esc(a.desc)}</span><small>+${a.xp} XP</small></div>`).join('');
+  const rewards = new Map();
+  const add = (l, text) => rewards.set(l, [...(rewards.get(l) || []), text]);
+  for (const kind of ['dice', 'piece', 'robber']) {
+    for (const s of SKINS[kind]) if (s.level > 1) add(s.level, `${s.name} ${kind === 'piece' ? 'pieces' : kind}`);
+  }
+  for (const c of R.PLAYER_COLORS) if (c.level) add(c.level, `${c.name} colour`);
+  for (const r of RANKS) if (r.level > 1) add(r.level, `Title: ${r.name}${r.level >= 30 ? ' + gold name' : ''}`);
+  const next = [...rewards.keys()].filter((l) => l > lv).sort((a, b) => a - b)[0];
+  $('prof-rewards').innerHTML = [...rewards.entries()].sort((a, b) => a[0] - b[0]).map(([l, list]) =>
+    `<div class="rw${l <= lv ? ' got' : ''}${l === next ? ' next' : ''}"><b>Level ${l}</b><span>${list.map(esc).join(' · ')}</span></div>`).join('');
   $('prof-ch').innerHTML = PF.CHALLENGES.map((c) =>
     `<div class="ach${p.challenges[c.key] ? ' got' : ''}"><b>${esc(c.name)}</b><span>${esc(c.blurb)}</span><small>${p.challenges[c.key] ? 'Complete' : `+${PF.XP_CHALLENGE} XP first time`}</small></div>`).join('');
   sheet('sheet-profile');

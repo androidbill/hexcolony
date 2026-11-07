@@ -159,6 +159,19 @@ export const PLAYER_COLORS = [
   { key: 'slate',  hex: '#93a7bd', ink: '#0d1b28', name: 'Slate' },
   { key: 'copper', hex: '#c8802e', ink: '#ffffff', name: 'Copper' },
   { key: 'black',  hex: '#2a3444', ink: '#ffffff', name: 'Black' },
+  // Earned with profile level. Appended, never reordered: a colour is stored as its index.
+  { key: 'orange',   hex: '#ff8a2b', ink: '#3a1a03', name: 'Orange',   level: 7 },
+  { key: 'mint',     hex: '#8af0c0', ink: '#06301f', name: 'Mint',     level: 9 },
+  { key: 'crimson',  hex: '#c4163a', ink: '#ffffff', name: 'Crimson',  level: 11 },
+  { key: 'navy',     hex: '#2b4dbd', ink: '#ffffff', name: 'Navy',     level: 13 },
+  { key: 'lavender', hex: '#c9b6ff', ink: '#1e1240', name: 'Lavender', level: 16 },
+  { key: 'bronze',   hex: '#b8743a', ink: '#ffffff', name: 'Bronze',   level: 18 },
+  { key: 'peach',    hex: '#ffb59a', ink: '#4a1d0c', name: 'Peach',    level: 21 },
+  { key: 'silver',   hex: '#c5ccd6', ink: '#0d1b28', name: 'Silver',   level: 23 },
+  { key: 'magenta',  hex: '#e0239b', ink: '#ffffff', name: 'Magenta',  level: 26 },
+  { key: 'gold',     hex: '#f0c030', ink: '#3a2a02', name: 'Gold',     level: 28 },
+  { key: 'ember',    hex: '#d9480f', ink: '#ffffff', name: 'Ember',    level: 29 },
+  { key: 'royal',    hex: '#6a1bb0', ink: '#ffffff', name: 'Royal',    level: 30 },
 ];
 
 /**

@@ -2993,3 +2993,30 @@ img.dev-front { border: 0; padding: 0; background: none; object-fit: cover; widt
 .goal-chip { color: var(--gold); font-weight: 700; }
 .goal-chip.done { color: #4cd48a; }
 .so-sub { font-size: 13px; opacity: .85; margin-top: 2px; text-align: center; }
+
+/* ------------------------------------------------------------ more unlocks */
+.colour-cell.locked { opacity: .4; }
+.rank-title { font-size: 10.5px; font-weight: 700; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+.gold-name { background: linear-gradient(90deg, #fff2b0, #e3ba57, #fff2b0); -webkit-background-clip: text; background-clip: text; color: transparent; font-weight: 900; }
+.rw-list { display: grid; gap: 4px; }
+.rw { display: flex; gap: 10px; align-items: baseline; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.04); opacity: .6; font-size: 13px; }
+.rw b { flex: 0 0 62px; }
+.rw span { color: var(--dim); }
+.rw.got { opacity: 1; border-left: 3px solid var(--gold); }
+.rw.next { opacity: 1; background: rgba(227,186,87,.14); }
+
+:root[data-dice="emerald"] .tdie, :root[data-dice="emerald"] .bigdie { background: linear-gradient(160deg, #54e39a, #0d7a45); color: #fff; }
+:root[data-dice="emerald"] .tdie i.on { background: #fff; box-shadow: none; }
+:root[data-dice="emerald"] .die { background: #0d7a45; color: #fff; }
+:root[data-dice="lava"] .tdie, :root[data-dice="lava"] .bigdie { background: linear-gradient(160deg, #ff7a1a, #7a1000); color: #fff3c4; box-shadow: 0 0 14px rgba(255,100,20,.55); }
+:root[data-dice="lava"] .tdie i.on { background: #fff3c4; box-shadow: 0 0 5px #ffb347; }
+:root[data-dice="lava"] .die { background: #7a1000; color: #fff3c4; }
+:root[data-dice="galaxy"] .tdie, :root[data-dice="galaxy"] .bigdie { background: radial-gradient(circle at 30% 25%, #6a4ad8, #1a1245 55%, #07041a); color: #e9e1ff; box-shadow: 0 0 12px rgba(120,90,255,.5); }
+:root[data-dice="galaxy"] .tdie i.on { background: #e9e1ff; box-shadow: 0 0 5px #b9a6ff; }
+:root[data-dice="galaxy"] .die { background: #1a1245; color: #e9e1ff; }
+:root[data-dice="candy"] .tdie, :root[data-dice="candy"] .bigdie { background: linear-gradient(160deg, #ffb3d9, #ff5fa8); color: #fff; }
+:root[data-dice="candy"] .tdie i.on { background: #fff; box-shadow: none; }
+:root[data-dice="candy"] .die { background: #ff5fa8; color: #fff; }
+:root[data-dice="rainbow"] .tdie, :root[data-dice="rainbow"] .bigdie { background: linear-gradient(135deg, #ff5a5a, #ffb84a, #ffe94a, #55e08a, #4aa8ff, #b06cff); color: #1a1a1a; }
+:root[data-dice="rainbow"] .tdie i.on { background: #1a1a1a; box-shadow: none; }
+:root[data-dice="rainbow"] .die { background: linear-gradient(135deg, #ff5a5a, #ffe94a, #4aa8ff); color: #1a1a1a; }

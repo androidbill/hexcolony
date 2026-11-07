@@ -103,6 +103,16 @@ function makeSea(key, name, a, b) {
 }
 
 
+// Piece looks that are a tint plus an edge: [blend colour, amount] and [edge, glow].
+const PIECE_FILL = {
+  stone: ['#b9bdc4', 0.6], marble: ['#f4f4f8', 0.62], wooden: ['#8a5a2b', 0.55],
+  crystal: ['#cfefff', 0.5], magma: ['#2b0d06', 0.55],
+};
+const PIECE_EDGE = {
+  marble: ['#e6e8ee', null], wooden: ['#4a2f14', null],
+  crystal: ['#e8fbff', '#8fe3ff'], magma: ['#ff7a1a', '#ff4d00'],
+};
+
 // ---------------------------------------------------------------- robber looks
 // Each draws a figure about 2s tall, feet at y = +s, centred on x = 0. `t` is the 0..1 pulse.
 const eye = (c, x, y, r, col = '#ffd23f') => {
@@ -214,6 +224,60 @@ const ROBBER_DRAW = {
     c.beginPath(); c.moveTo(s * 0.62, -s * 0.58); c.lineTo(s * 1.05, -s * 0.42); c.lineTo(s * 0.62, -s * 0.34); c.closePath(); c.fill();
     c.fillStyle = '#fff'; c.beginPath(); c.arc(s * 0.46, -s * 0.56, s * 0.07, 0, Math.PI * 2); c.fill();
     c.fillStyle = '#000'; c.beginPath(); c.arc(s * 0.48, -s * 0.56, s * 0.035, 0, Math.PI * 2); c.fill();
+  },
+  // Armour and a plumed helm.
+  knight(c, s, t) {
+    c.beginPath(); c.moveTo(-s * 0.75, s); c.lineTo(-s * 0.6, -s * 0.15); c.lineTo(s * 0.6, -s * 0.15); c.lineTo(s * 0.75, s); c.closePath();
+    c.fillStyle = '#8f99ab'; c.fill(); c.strokeStyle = '#1b2030'; c.lineWidth = Math.max(1, s * 0.09); c.stroke();
+    c.fillStyle = '#c62f2f'; c.fillRect(-s * 0.08, -s * 0.1, s * 0.16, s * 1.05);
+    c.beginPath(); c.moveTo(-s * 0.45, -s * 0.2); c.lineTo(-s * 0.45, -s * 0.95); c.quadraticCurveTo(0, -s * 1.35, s * 0.45, -s * 0.95); c.lineTo(s * 0.45, -s * 0.2); c.closePath();
+    c.fillStyle = '#b7c0d0'; c.fill(); c.stroke();
+    c.fillStyle = '#0c0f18'; c.fillRect(-s * 0.36, -s * 0.78, s * 0.72, s * 0.14);
+    c.fillRect(-s * 0.05, -s * 0.78, s * 0.1, s * 0.5);
+    c.beginPath(); c.moveTo(0, -s * 1.28); c.quadraticCurveTo(s * 0.5, -s * 1.7, s * 0.55, -s * 1.1);
+    c.quadraticCurveTo(s * 0.3, -s * 1.3, 0, -s * 1.2); c.closePath(); c.fillStyle = '#c62f2f'; c.fill();
+  },
+  // Tricorn hat, eye patch, beard.
+  pirate(c, s) {
+    cloak(c, s, '#5a1a1a', 'rgba(255,225,200,0.55)');
+    c.beginPath(); c.arc(0, -s * 0.6, s * 0.42, 0, Math.PI * 2); c.fillStyle = '#d9a77a'; c.fill();
+    c.beginPath(); c.moveTo(-s * 0.4, -s * 0.5); c.quadraticCurveTo(0, s * 0.2, s * 0.4, -s * 0.5); c.quadraticCurveTo(0, -s * 0.35, -s * 0.4, -s * 0.5);
+    c.fillStyle = '#1c1410'; c.fill();
+    c.fillStyle = '#111'; c.beginPath(); c.arc(-s * 0.15, -s * 0.7, s * 0.1, 0, Math.PI * 2); c.fill();
+    c.fillRect(s * 0.06, -s * 0.76, s * 0.16, s * 0.07);
+    c.strokeStyle = '#111'; c.lineWidth = Math.max(1, s * 0.05); c.beginPath(); c.moveTo(-s * 0.4, -s * 0.9); c.lineTo(s * 0.4, -s * 0.45); c.stroke();
+    c.beginPath(); c.moveTo(-s * 0.85, -s * 0.85); c.lineTo(0, -s * 1.5); c.lineTo(s * 0.85, -s * 0.85); c.quadraticCurveTo(0, -s * 0.7, -s * 0.85, -s * 0.85);
+    c.fillStyle = '#16120f'; c.fill(); c.strokeStyle = '#e3ba57'; c.lineWidth = Math.max(1, s * 0.07); c.stroke();
+    c.fillStyle = '#f1ecdc'; c.beginPath(); c.arc(0, -s * 1.0, s * 0.1, 0, Math.PI * 2); c.fill();
+  },
+  // Hooded skeleton with a scythe.
+  reaper(c, s, t) {
+    c.strokeStyle = '#6b5233'; c.lineWidth = Math.max(2, s * 0.1); c.lineCap = 'round';
+    c.beginPath(); c.moveTo(s * 0.85, s); c.lineTo(s * 0.75, -s * 1.3); c.stroke();
+    c.strokeStyle = '#c9d0dc'; c.lineWidth = Math.max(2, s * 0.12);
+    c.beginPath(); c.moveTo(s * 0.75, -s * 1.3); c.quadraticCurveTo(s * 0.1, -s * 1.5, -s * 0.15, -s * 0.9); c.stroke();
+    cloak(c, s, '#0b0c12', 'rgba(170,180,210,0.5)');
+    c.beginPath(); c.arc(0, -s * 0.78, s * 0.5, 0, Math.PI * 2); c.fillStyle = '#0b0c12'; c.fill();
+    c.beginPath(); c.ellipse(0, -s * 0.74, s * 0.3, s * 0.27, 0, 0, Math.PI * 2); c.fillStyle = '#e9e4d4'; c.fill();
+    c.fillStyle = '#05060a';
+    c.beginPath(); c.ellipse(-s * 0.12, -s * 0.78, s * 0.07, s * 0.09, 0, 0, Math.PI * 2); c.fill();
+    c.beginPath(); c.ellipse(s * 0.12, -s * 0.78, s * 0.07, s * 0.09, 0, 0, Math.PI * 2); c.fill();
+    eye(c, -s * 0.12, -s * 0.78, s * 0.035 * (0.8 + t * 0.5), '#ff3b30'); eye(c, s * 0.12, -s * 0.78, s * 0.035 * (0.8 + t * 0.5), '#ff3b30');
+  },
+  // A small dragon with wings and a flame.
+  dragon(c, s, t) {
+    c.fillStyle = '#7a1c1c'; c.strokeStyle = '#2b0a0a'; c.lineWidth = Math.max(1, s * 0.08);
+    c.beginPath(); c.moveTo(-s * 0.2, -s * 0.1); c.lineTo(-s * 1.1, -s * 0.9); c.lineTo(-s * 0.85, -s * 0.1); c.lineTo(-s * 0.9, s * 0.35); c.lineTo(-s * 0.3, s * 0.3); c.closePath(); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(s * 0.2, -s * 0.1); c.lineTo(s * 1.1, -s * 0.9); c.lineTo(s * 0.85, -s * 0.1); c.lineTo(s * 0.9, s * 0.35); c.lineTo(s * 0.3, s * 0.3); c.closePath(); c.fill(); c.stroke();
+    c.fillStyle = '#c0392b';
+    c.beginPath(); c.ellipse(0, s * 0.35, s * 0.55, s * 0.65, 0, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.fillStyle = '#e8b04a'; c.beginPath(); c.ellipse(0, s * 0.45, s * 0.28, s * 0.45, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#c0392b';
+    c.beginPath(); c.arc(0, -s * 0.5, s * 0.4, 0, Math.PI * 2); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(-s * 0.3, -s * 0.8); c.lineTo(-s * 0.4, -s * 1.3); c.lineTo(-s * 0.1, -s * 0.9); c.moveTo(s * 0.3, -s * 0.8); c.lineTo(s * 0.4, -s * 1.3); c.lineTo(s * 0.1, -s * 0.9); c.fillStyle = '#f1ecdc'; c.fill();
+    eye(c, -s * 0.15, -s * 0.55, s * 0.07, '#ffe14a'); eye(c, s * 0.15, -s * 0.55, s * 0.07, '#ffe14a');
+    const f = 0.8 + t * 0.4;
+    c.fillStyle = '#ff7a1a'; c.beginPath(); c.moveTo(-s * 0.1, -s * 0.3); c.quadraticCurveTo(0, -s * 0.05 * f, s * 0.1, -s * 0.3); c.closePath(); c.fill();
   },
 };
 
@@ -1536,7 +1600,7 @@ export class BoardView {
     c.shadowBlur = 7;
     c.shadowOffsetY = 3;
     // Stone walls keep a hint of their owner's colour so a piece is still readable at a glance.
-    c.fillStyle = skin === 'stone' ? mixHex(color, '#b9bdc4', 0.6) : color;
+    c.fillStyle = PIECE_FILL[skin] ? mixHex(color, PIECE_FILL[skin][0], PIECE_FILL[skin][1]) : color;
     c.fill(path);
 
     c.shadowColor = 'transparent';
@@ -1557,6 +1621,9 @@ export class BoardView {
     } else if (skin === 'neon') {
       c.strokeStyle = '#ffffff';
       c.shadowColor = color; c.shadowBlur = 14;
+    } else if (PIECE_EDGE[skin]) {
+      c.strokeStyle = PIECE_EDGE[skin][0];
+      if (PIECE_EDGE[skin][1]) { c.shadowColor = PIECE_EDGE[skin][1]; c.shadowBlur = 12; }
     } else {
       c.strokeStyle = OUTLINE;
     }
