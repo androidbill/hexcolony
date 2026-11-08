@@ -189,6 +189,12 @@ async function sendDebugReport() {
   catch { toast('Could not copy the report.'); }
 }
 
+document.addEventListener('click', (e) => {
+  const gl = document.getElementById('goal-line');
+  if (!gl) return;
+  if (e.target.closest('#goal-btn')) gl.hidden = !gl.hidden;
+  else gl.hidden = true;
+});
 function toast(msg) {
   const t = $('toast');
   t.textContent = msg;
@@ -4053,12 +4059,16 @@ function render() {
     const goal = g.goals ? R.goalInfo(g.players[playerId]?.goal) : null;
     // Your secret objective sits on its own line above, so a long one cannot push the
     // points and discard off the screen.
-    const gl = $('goal-line');
-    gl.hidden = !goal;
-    if (goal) {
+    // Just an icon in the bottom right corner; tapping it shows the objective.
+    const gl = $('goal-line'), gb = $('goal-btn');
+    gb.hidden = !goal;
+    if (!goal) gl.hidden = true;
+    else {
       const done = g.players[playerId].goalDone;
+      gb.textContent = done ? '✓' : '🎯';
+      gb.classList.toggle('done', !!done);
       gl.className = `goal-line${done ? ' done' : ''}`;
-      gl.textContent = `${done ? '✓' : '🎯'} ${goal.name}: ${goal.blurb}`;
+      gl.textContent = `${goal.name}: ${goal.blurb}${done ? ' (done, +1 point)' : ''}`;
     }
   }
   view.spinPieces = localStorage.getItem('hexcolony_spin_pieces') === 'on';
