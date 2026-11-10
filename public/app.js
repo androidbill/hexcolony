@@ -1474,6 +1474,11 @@ function healthCheck() {
     if (idleKillDue(room)) killIdleRoom();
   }
 
+  // Belt and braces: even when the stream says it is healthy, read the real state now and
+  // then while a game is on, so a listener that has silently gone deaf cannot keep a stale
+  // screen for long.
+  if (room?.state === 'playing' && Date.now() - lastPullAt > 25000) pullFromServer();
+
   const stale = Date.now() - lastFreshAt;
   if (stale > STALE_RESET_MS) hardReset();
   else if (stale > STALE_PULL_MS) pullFromServer();
@@ -1949,6 +1954,13 @@ async function postMove(move, opts, drew, era, context) {
     // Whatever was drawn for this move did not happen. Put the server's state back
     // before saying so, so the message and the board agree.
     if (drew) { sendEra += 1; dropGuess(); }
+    // The server is the one that is right. A refusal about the state of the game ("roll
+    // first", "you cannot roll now", "the game has moved on") means this screen is behind or
+    // ahead of it, so go and read the real state now instead of waiting for a stream that may
+    // have quietly stopped. This is what used to leave a phone stuck until it was relaunched.
+    if (!/connection|Not yet|room is gone/.test(rejected)) {
+      pullFromServer(true).then(() => { if (currentSession(context.session, ref)) resubscribe(); });
+    }
     // Automatic moves are sent by every device at once; all but the first are expected
     // to be refused, and saying so would be noise rather than news.
     if (!opts.quiet) { toast(rejected); sfx.error(); }
