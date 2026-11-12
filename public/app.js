@@ -3169,6 +3169,42 @@ function whyNotSettle(g, wx, wy) {
   return R.legalSettlements(g, playerId).includes(best.i) ? 'unexplained' : null;
 }
 
+/**
+ * Why a road cannot go on the edge the player just tapped. The board only offers legal
+ * edges, so a tap on any other one used to do nothing at all, which is exactly what "it
+ * kept telling her she could not" feels like from the table. Null when it is not a case
+ * worth a message.
+ */
+function whyNotRoad(g, wx, wy) {
+  if (!Number.isFinite(wx) || !g || g.phase === 'over' || !R.isTurn(g, playerId)) return null;
+  let best = null, bestD = 0.28;
+  for (const e of EDGES) {
+    const d = Math.hypot(e.x - wx, e.y - wy);
+    if (d < bestD) { bestD = d; best = e; }
+  }
+  if (!best) return null;
+  if (g.phase === 'robber') return 'Move the robber first: tap the hex you want it on.';
+  if (g.phase === 'take') return 'Choose a card to take from the player you robbed first.';
+  if (g.phase === 'discard') return 'Waiting for everyone to discard first.';
+  if (g.phase === 'roll') return 'Roll the dice first.';
+  if (g.phase !== 'build') return null;
+  const owner = g.roads[best.i];
+  if (owner !== undefined) return owner === playerId ? 'You already have a road there.' : 'There is already a road there.';
+  const me = g.players[playerId];
+  const free = g.turn.freeRoads > 0;
+  if (!free && !(R.COSTS && Object.entries(R.COSTS.road).every(([r, n]) => (me.res[r] || 0) >= n))) {
+    return 'A road costs 1 wood and 1 brick.';
+  }
+  if (me.left.road <= 0) return 'You have no roads left.';
+  if (!R.legalRoads(g, playerId).includes(best.i)) {
+    const sealed = [best.a, best.b].find((v) => g.bldg[v] && g.bldg[v].p !== playerId);
+    return sealed !== undefined
+      ? "Another player's settlement blocks your road at that corner. Roads cannot run through it."
+      : 'That road does not connect to any of your roads or settlements yet.';
+  }
+  return 'unexplained';
+}
+
 view.onPick = (hit) => {
   const g = game();
   if (!g) return;
@@ -3185,6 +3221,13 @@ view.onPick = (hit) => {
       return;
     }
     if (why) { toast(why); return; }
+    const whyRoad = whyNotRoad(g, hit.wx, hit.wy);
+    if (whyRoad === 'unexplained') {
+      diag('unexplained edge tap');
+      toast('The game says that road is fine but is not offering it. Menu → Send debug report.');
+      return;
+    }
+    if (whyRoad) { toast(whyRoad); return; }
     const t = board.tiles[hit.id];
     const tip = $('tile-tip');
     const robbed = g.robber === hit.id ? ' · robber here' : '';
