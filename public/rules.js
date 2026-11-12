@@ -419,6 +419,18 @@ function note(g, events, entry) {
   events.push(e);
 }
 
+/** What the table is actually waiting on, for a move that came at the wrong step. */
+function wrongStep(g) {
+  switch (g.phase) {
+    case 'roll': return 'Roll the dice first.';
+    case 'robber': return 'Move the robber first: tap the hex you want it on.';
+    case 'steal': return 'Choose who to rob first.';
+    case 'take': return 'Tap "Take a card" and choose who to take from first.';
+    case 'discard': return 'Waiting for everyone to discard first.';
+    default: return 'You cannot do that right now.';
+  }
+}
+
 // ---------------------------------------------------------------- placement legality
 
 /** Vertices where `pid` may put a settlement right now. */
@@ -1165,7 +1177,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
     case 'build': {
       if (!myTurn) return fail('Not your turn.');
       const free = move.what === 'road' && g.turn.freeRoads > 0;
-      if (g.phase !== 'build' && !(g.phase === 'roll' && free)) return fail('Roll the dice first.');
+      if (g.phase !== 'build' && !(g.phase === 'roll' && free)) return fail(wrongStep(g));
 
       if (move.what === 'road') {
         if (me.left.road <= 0) return fail('You are out of roads.');
@@ -1253,7 +1265,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
 
     case 'buyDev': {
       if (!myTurn) return fail('Not your turn.');
-      if (g.phase !== 'build') return fail('Roll the dice first.');
+      if (g.phase !== 'build') return fail(wrongStep(g));
       if (!g.deck.length) return fail('The development deck is empty.');
       if (!canAfford(me, COSTS.dev)) return fail('You need sheep, wheat and ore.');
       pay(g, me, COSTS.dev);
@@ -1351,7 +1363,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
      */
     case 'bankTrade': {
       if (!myTurn) return fail('Not your turn.');
-      if (g.phase !== 'build') return fail('Roll the dice first.');
+      if (g.phase !== 'build') return fail(wrongStep(g));
       const give = move.give || {}, want = move.want || {};
       const badBank = badBundle(give) || badBundle(want);
       if (badBank) return fail(badBank);
@@ -1387,7 +1399,7 @@ export function applyMove(state, pid, move, rng = Math.random) {
 
     case 'offerTrade': {
       if (!myTurn) return fail('Only the player whose turn it is can open a trade.');
-      if (g.phase !== 'build') return fail('Roll the dice first.');
+      if (g.phase !== 'build') return fail(wrongStep(g));
       const give = move.give || {}, want = move.want || {};
       const badGive = badBundle(give) || badBundle(want);
       if (badGive) return fail(badGive);

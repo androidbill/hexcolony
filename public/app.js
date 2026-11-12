@@ -3184,7 +3184,7 @@ function whyNotRoad(g, wx, wy) {
   }
   if (!best) return null;
   if (g.phase === 'robber') return 'Move the robber first: tap the hex you want it on.';
-  if (g.phase === 'take') return 'Choose a card to take from the player you robbed first.';
+  if (g.phase === 'take') return 'You rolled a 7: tap "Take a card" and choose who to take from first.';
   if (g.phase === 'discard') return 'Waiting for everyone to discard first.';
   if (g.phase === 'roll') return 'Roll the dice first.';
   if (g.phase !== 'build') return null;
