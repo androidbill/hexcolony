@@ -5,6 +5,7 @@
 
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { gameTimes, playerTimes } from '../public/playtime.js';
 
 const src = fs.readFileSync('public/app.js', 'utf8');
 
@@ -29,14 +30,13 @@ const ctx = vm.createContext({ esc: (s) => String(s), console });
 vm.runInContext(`
   let room = null, playerId = 'a';
   const nameFor = (id) => id;
+  const randomSea = () => 'test-sea';   // app.js picks a random sea colour per rematch
   ${shipped('rematchVoters')}
   ${shipped('planRematch')}
   ${shipped('rematchLine')}
   ${shipped('historyNameKey')}
   ${shippedConst('STAT_SOURCES')}
   ${shipped('buildPlayerStats')}
-  const stampMs = (v) => (typeof v === 'number' ? v : null);
-  ${shipped('turnPace')}
   ${shipped('diceFacts')}
   ${shippedConst('TITLES')}
   ${shipped('winTitles')}
@@ -119,15 +119,23 @@ ok('longest road and largest army are counted on top of the engine', bill.wonRoa
 ok('the table is sorted by wins', stats[0].name.toLowerCase() === 'bill');
 
 // ---- pace and dice
-const log = { t1: { at: 0, p: 'a' }, t2: { at: 20000, p: 'b', a: true }, t3: { at: 25000, p: 'a' }, t4: { at: 70000, p: 'b', a: true }, t0: { at: 0, p: 'c' } };
-ctx.__l = log;
-let pace = run('turnPace(__l, 76000)');
-ctx.__l2 = { t1: { at: 0, p: 'a', a: true }, t2: { at: 3000, p: 'b' }, t3: { at: 9000, p: 'a' } };
-const pace2 = run('turnPace(__l2, 20000)');
-ok('a turn with no action is never the fastest', pace2 === null || pace2.fast.pid === 'a');
-ok('slowest is the longest single turn', pace.slow.pid === 'a' && pace.slow.ms === 45000);
-ok('fastest is the shortest single turn', pace.fast.pid === 'b' && pace.fast.ms === 5000);
-ok('no pace without a log', run('turnPace(null, 5)') === null);
+// Turn timing lives in playtime.js now (it replaced turnPace in app.js), so it is imported directly.
+const clock = { gid: 'g', partial: false, done: true, turns: [
+  { k: 't1', pid: 'a', s: true, ms: 9000 },            // placement: counts toward total only
+  { k: 't2', pid: 'a', s: false, ms: 45000 },
+  { k: 't3', pid: 'b', s: false, ms: 5000 },
+  { k: 't4', pid: 'b', s: false, ms: 500 },            // under a second: an auto-skip, not a turn
+  { k: 't5', pid: 'a', s: false, ms: 12000, part: true }, // partly seen: total only
+  { k: 't6', pid: 'c', s: false, ms: 20000 },          // a bot, left out of gameTimes below
+] };
+const pa = playerTimes(clock, 'a');
+const pb = playerTimes(clock, 'b');
+ok('total time counts every turn, including placement and partial ones', pa.ms === 66000 && pb.ms === 5500);
+ok('slowest is the longest ordinary turn', pa.max === 45000 && pa.n === 1);
+ok('fastest ignores auto-skips under a second', pb.min === 5000 && pb.n === 1);
+ok('a player with no ordinary turns has a zero minimum', playerTimes(clock, 'nobody').min === 0);
+const gt = gameTimes(clock, ['a', 'b']);
+ok('table total includes everyone, per-player lists only the humans asked for', gt.total === 91500 && !('c' in gt.per) && gt.per.a.ms === 66000);
 const board = { byNumber: { 6: [0], 8: [1] } };
 ctx.__g = { seats: ['a', 'b'], bldg: { 0: { p: 'a', t: 's' }, 2: { p: 'b', t: 'c' } }, rolls: { 6: 5, 7: 2, 8: 1 } };
 ctx.__b = board;
