@@ -30,7 +30,7 @@
      leave new JavaScript laid out by old CSS. scripts/engine-tests.mjs fails if
      either of these drifts from APP_VERSION, because remembering to bump them by
      hand is exactly the kind of thing that gets forgotten. -->
-<link rel="stylesheet" href="styles.css?v=2026.11.11.02">
+<link rel="stylesheet" href="styles.css?v=2026.11.21.01">
 </head>
 <body>
 
@@ -135,6 +135,9 @@
       </button>
     </div>
 
+    <div class="home-row">
+      <button class="btn btn-ghost" id="btn-tutorial">Learn to Play: a quick guided game</button>
+    </div>
     <div class="home-row">
       <button class="btn btn-ghost" id="btn-how">How to Play</button>
       <button class="btn btn-ghost" id="btn-settings">Settings</button>
@@ -299,6 +302,24 @@
          across instead of sharing it with a 40px button. -->
     <div class="score-strip" id="score-strip"></div>
   </header>
+
+  <!-- The coach in the guided practice game: what to do now, and why. It sits above the
+       board rather than over it, so the board shrinks to fit and nothing is covered. -->
+  <div class="coach" id="coach" hidden>
+    <div class="coach-head">
+      <span class="coach-step" id="coach-step"></span>
+      <button class="coach-fold" id="coach-fold" type="button" aria-label="Hide or show the tip" aria-expanded="true">&ndash;</button>
+    </div>
+    <div class="coach-title" id="coach-title"></div>
+    <div class="coach-text" id="coach-text"></div>
+    <div class="coach-hint" id="coach-hint" hidden></div>
+    <div class="coach-actions">
+      <button class="coach-link" id="coach-exit" type="button">Exit</button>
+      <button class="coach-link" id="coach-skip" type="button" hidden>Skip step</button>
+      <button class="coach-next" id="coach-next" type="button" hidden>Next</button>
+      <button class="coach-next alt" id="coach-keep" type="button" hidden>Keep playing</button>
+    </div>
+  </div>
 
   <div class="board-wrap">
     <canvas id="board-cv"></canvas>
@@ -718,6 +739,19 @@
   <div class="sheet-actions"><button class="btn btn-ghost" data-close>Close</button></div>
 </div>
 
+<div class="sheet" id="sheet-tutorial-offer">
+  <h3 class="sheet-title">New to HexColony?</h3>
+  <div class="how-body">
+    <p>Take a five-minute guided game against a friendly bot. You will place settlements,
+      roll, collect cards, build, and meet the robber, and the coach explains each step and
+      why a move is not allowed. You can find it again any time on the home screen.</p>
+  </div>
+  <div class="sheet-actions">
+    <button class="btn btn-key" id="tutorial-offer-yes">Show me how</button>
+    <button class="btn btn-ghost" id="tutorial-offer-no">Not now</button>
+  </div>
+</div>
+
 <div class="sheet" id="sheet-how">
   <h3 class="sheet-title">How to Play</h3>
   <div class="how-body">
@@ -976,7 +1010,7 @@
   <button class="banner-x" id="install-dismiss" aria-label="Not now">&#10005;</button>
 </div>
 
-<script src="iro.min.js?v=2026.11.11.02"></script>
-<script type="module" src="app.js?v=2026.11.11.02"></script>
+<script src="iro.min.js?v=2026.11.21.01"></script>
+<script type="module" src="app.js?v=2026.11.21.01"></script>
 </body>
 </html>

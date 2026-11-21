@@ -34,6 +34,7 @@ import * as R from './rules.js';
 import * as PT from './playtime.js';
 import * as CH from './chronicle.js';
 import * as PF from './profile.js';
+import * as TUT from './tutorial.js';
 import * as BK from './backup.js';
 import { drawBoard as drawReplayBoard, drawGraph as drawReplayGraph } from './replay.js';
 import { botMove, makeBots, LEVELS as BOT_LEVELS } from './bot.js';
@@ -2211,6 +2212,7 @@ function clearUndo() {
 }
 
 function armUndo(label, prevGame) {
+  if (room?.tutorial) return;   // stepping back would leave the coach pointing at a finished step
   undoSnapshot = prevGame || null;
   undoArmed = true;
   clearTimeout(undoTimer);
@@ -2246,7 +2248,20 @@ function sendLocal(move, opts = {}) {
   const g = room?.game;
   if (!g) return false;
   move = clone(move);
-  const res = R.applyMove(g, playerId, move);
+  // In the practice game only the move the coach is asking for goes through; anything else
+  // is turned back with the reason.
+  let rng;
+  if (tut) {
+    const why = TUT.refusal(tut, move);
+    if (why) {
+      if (!opts.quiet) { toast(why); sfx.error(); }
+      return false;
+    }
+    // The practice game's rolls are chosen so the first one pays and the second is a 7.
+    const total = move.type === 'roll' ? TUT.forcedRoll(tut, g, playerId, ensureBoard(), VERTS) : null;
+    if (total) rng = TUT.diceRng(total);
+  }
+  const res = R.applyMove(g, playerId, move, rng);
   if (!res.ok) {
     if (!opts.quiet) { toast(res.error); sfx.error(); }
     return false;
@@ -2403,7 +2418,7 @@ function runBot(pid) {
 
 // ---- persistence: a solo game survives closing the app
 function saveSolo() {
-  if (!solo || !room || !room.game) return;
+  if (!solo || !room || !room.game || room.tutorial) return;
   try {
     localStorage.setItem(SOLO_KEY, JSON.stringify({
       players: room.players, order: room.order, game: room.game,
@@ -2521,13 +2536,134 @@ function startSolo(level, botCount, targetVP, layout = 'classic', useRobber = tr
 }
 
 function exitSolo() {
+  // The practice game is never saved, so leaving it must not wipe a real game that is.
+  const wasPractice = !!room?.tutorial;
+  tut = null;
   roomIntent += 1;
   resetRoomSession();
-  clearSolo();
+  if (!wasPractice) clearSolo();
   closeSheet();
   keepAwake(false);
   showScreen('screen-home');
   refreshResume();
+}
+
+// ---- guided practice game (see tutorial.js)
+let tut = null;   // the coach's progress; null when no practice game is being coached
+
+function startTutorial() {
+  const name = myName() || 'You';
+  roomIntent += 1;
+  resetRoomSession();
+  clearUndo();
+  try { localStorage.setItem(TUT.SEEN_KEY, '1'); } catch { /* fine */ }
+  const [bot] = makeBots(1, 'easy', myColorIdx, [], null);
+  const players = {
+    [playerId]: { name, colorIdx: myColorIdx, joinedAt: Date.now() },
+    [bot.id]: { name: bot.name, colorIdx: bot.colorIdx, joinedAt: Date.now(), bot: true, level: 'easy' },
+  };
+  // You place first and play first, every time.
+  const order = [playerId, bot.id];
+  const settings = { ...TUT.TUTORIAL_SETTINGS, ...newSea(), discardSeconds: R.DISCARD_SECONDS };
+  const game = R.newGame(order, { ...settings, seed: TUT.TUTORIAL_SEED });
+  game.turn.clockRestart = false;
+
+  solo = true;
+  roomCode = null; roomRef = null; pulseRef = null;
+  lastSeq = 0; lastPhaseKey = ''; payoutKey = null;
+  announcedUp = null;
+  resetGuess(); resetTrade();
+  boardSeed = null;
+  room = {
+    code: 'SOLO', hostId: playerId, state: 'playing', solo: true, tutorial: true,
+    players, order, game, settings, level: 'easy', bots: 1,
+    startedAt: Date.now(), endedAt: null, turnStartedAt: Date.now(),
+  };
+  tut = TUT.newRun();
+  sfx.yourTurn();
+  render();
+  scheduleBots(900);
+}
+
+/** Move the coach on over whatever the game has already done, and apply one-off effects. */
+function tutorialAdvance(g) {
+  for (const effect of TUT.advance(tut, g, playerId)) {
+    if (effect !== 'grant') continue;
+    // From the bank, so the cards in the game still add up.
+    for (const [r, n] of Object.entries(TUT.STARTER_PACK)) {
+      g.players[playerId].res[r] += n;
+      g.bank[r] -= n;
+    }
+  }
+}
+
+function renderCoach(g) {
+  const el = $('coach');
+  const step = tut ? TUT.current(tut) : null;
+  el.hidden = !step;
+  coachPulse();
+  if (!step) return;
+  $('coach-step').textContent = step.kind === 'finish' ? 'All done' : `Step ${tut.i + 1} of ${TUT.STEPS.length - 1}`;
+  $('coach-title').textContent = step.title;
+  $('coach-text').textContent = TUT.stepText(step, g);
+  const finish = step.kind === 'finish';
+  $('coach-next').hidden = !(step.kind === 'info' || finish);
+  $('coach-next').textContent = finish ? 'Finish' : 'Next';
+  $('coach-keep').hidden = !finish;
+  $('coach-skip').hidden = step.kind !== 'do';
+  // The one place a new player can get truly stuck: roads that do not reach an open corner.
+  const stuck = step.stuck && step.id === 'settle3' && R.isTurn(g, playerId) && g.phase === 'build'
+    && R.legalSettlements(g, playerId).length === 0;
+  $('coach-hint').hidden = !stuck;
+  if (stuck) $('coach-hint').textContent = step.stuck;
+}
+
+/** Make the button the current step points at pulse. Safe to call whenever the bar redraws. */
+function coachPulse() {
+  document.querySelectorAll('#actions .coach-pulse').forEach((b) => b.classList.remove('coach-pulse'));
+  const step = tut ? TUT.current(tut) : null;
+  if (!step?.target) return;
+  document.querySelector(`#actions [data-act="${step.target}"]`)?.classList.add('coach-pulse');
+}
+new MutationObserver(coachPulse).observe($('actions'), { childList: true });
+
+$('coach-next').addEventListener('click', () => {
+  unlock(); sfx.tap();
+  if (!tut) return;
+  if (TUT.current(tut)?.kind === 'finish') { exitSolo(); return; }
+  TUT.next(tut);
+  render();
+});
+$('coach-skip').addEventListener('click', () => {
+  unlock(); sfx.tap();
+  if (!tut) return;
+  TUT.next(tut);
+  render();
+});
+$('coach-keep').addEventListener('click', () => {
+  unlock(); sfx.tap();
+  // Carry on with this game for practice: the coach and its rules go, the guard that keeps
+  // it out of your saved games and XP stays.
+  tut = null;
+  render();
+});
+$('coach-exit').addEventListener('click', () => { unlock(); sfx.tap(); exitSolo(); });
+$('coach-fold').addEventListener('click', () => {
+  const folded = $('coach').classList.toggle('folded');
+  $('coach-fold').setAttribute('aria-expanded', String(!folded));
+  $('coach-fold').textContent = folded ? '+' : '–';
+});
+$('btn-tutorial').addEventListener('click', () => { unlock(); sfx.tap(); startTutorial(); });
+$('tutorial-offer-yes').addEventListener('click', () => { closeSheet(); startTutorial(); });
+$('tutorial-offer-no').addEventListener('click', () => closeSheet());
+
+/** Once, on a brand-new install: offer the guided game before anything else. */
+function maybeOfferTutorial() {
+  try {
+    if (localStorage.getItem(TUT.SEEN_KEY) || localStorage.getItem('hexcolony_name')) return;
+    localStorage.setItem(TUT.SEEN_KEY, '1');
+  } catch { return; }
+  sheet('sheet-tutorial-offer');
 }
 
 /** Offer to pick up an unfinished solo game. */
@@ -3147,13 +3283,21 @@ function ensureBoard() {
  * a message (not their build step, or the tap was nowhere near a corner).
  */
 function whyNotSettle(g, wx, wy) {
-  if (!Number.isFinite(wx) || !g || g.phase !== 'build' || !R.isTurn(g, playerId)) return null;
+  const setup = g?.phase === 'setup';
+  if (!Number.isFinite(wx) || !g || (g.phase !== 'build' && !setup) || !R.isTurn(g, playerId)) return null;
   let best = null, bestD = 0.3;
   for (const v of VERTS) {
     const d = Math.hypot(v.x - wx, v.y - wy);
     if (d < bestD) { bestD = d; best = v; }
   }
   if (!best) return null;
+  // Placing the opening pieces: say why a corner is not offered, in the same plain words.
+  if (setup) {
+    if (g.setup.need !== 's') return 'Now place your road: tap one of the glowing edges next to your new settlement.';
+    if (g.bldg[best.i]) return 'There is already a building there.';
+    if (best.adj.some((n) => g.bldg[n])) return 'Too close to another settlement. Settlements need at least one empty corner between them.';
+    return null;
+  }
   const me = g.players[playerId];
   const at = g.bldg[best.i];
   if (at) return at.p === playerId && at.t === 's' ? null : 'There is already a building there.';
@@ -3183,6 +3327,11 @@ function whyNotRoad(g, wx, wy) {
     if (d < bestD) { bestD = d; best = e; }
   }
   if (!best) return null;
+  if (g.phase === 'setup') {
+    if (g.setup.need !== 'r') return null;   // a settlement is due; the corner explainer covers it
+    if (g.roads[best.i] !== undefined) return 'There is already a road there.';
+    return 'Your road has to touch the settlement you just placed: tap one of the glowing edges.';
+  }
   if (g.phase === 'robber') return 'Move the robber first: tap the hex you want it on.';
   if (g.phase === 'take') return 'You rolled a 7: tap "Take a card" and choose who to take from first.';
   if (g.phase === 'discard') return 'Waiting for everyone to discard first.';
@@ -3834,6 +3983,7 @@ function secondsLeft(g) {
   // choose a victim could hold the entire table up for as long as they liked, timer
   // setting or not.
   if (!g || !g.turn.allowMs) return null;
+  if (room?.tutorial) return null;            // nobody learns anything with a clock running
   const started = stampMs(room?.turnStartedAt);
   if (started === null) return null;          // the server has not stamped it yet
   if (!clockTrusted()) return null;           // this device cannot be trusted to judge
@@ -4025,7 +4175,7 @@ let clockSavedAt = 0;
 let clockSavedKey = '';
 
 function trackClock(g) {
-  if (!g || !room) return;
+  if (!g || !room || room.tutorial) return;   // the practice game must not overwrite a real game's clock
   const setup = g.phase === 'setup';
   const key = setup ? `s${g.setup.at}` : `t${g.turn.num}`;
   const now = Date.now();
@@ -4049,7 +4199,7 @@ let chron = CH.loadChron();
 let chronSavedAt = -1;
 
 function trackChron(g) {
-  if (!g || !room || !board) return;
+  if (!g || !room || room.tutorial || !board) return;   // same for the replay record
   const setup = g.phase === 'setup';
   if (!chron || chron.gid !== g.seed) {
     chron = CH.newChron(g.seed, g.seats, !(setup && (g.setup?.at ?? 0) === 0));
@@ -4098,6 +4248,8 @@ function render() {
 
   const g = game();
   if (!g) return;
+  if (tut && !room.tutorial) tut = null;
+  if (tut) tutorialAdvance(g);
   trackClock(g);
   ensureBoard();
   trackChron(g);
@@ -4130,7 +4282,9 @@ function render() {
   // Whatever ended the moment you were in — the timer running out, a 7, someone
   // leaving — the pending "tap the board" is over with it. Clearing it here covers
   // every route out of your turn instead of each one having to remember.
-  view.setHighlights(R.highlightsFor(g, playerId));
+  view.setHighlights(tut
+    ? TUT.trimHighlights(tut, R.highlightsFor(g, playerId), g, playerId)
+    : R.highlightsFor(g, playerId));
 
   // A new game showing up here is either one just dealt (log still empty — nothing to
   // catch up on, so its audio should play from move one) or one this device is only now
@@ -4172,6 +4326,7 @@ function render() {
   renderTrade(g);
   renderChatButton();
   syncSheets(g);
+  renderCoach(g);
 
   if (g.phase === 'over') renderOver(g);
 }
@@ -6698,7 +6853,8 @@ function awardProfile(g, gameKey) {
 }
 
 function recordHistory(g) {
-  if (!room || g?.phase !== 'over' || !g.winner) return;
+  // A practice game earns no XP and leaves no history, so it cannot be farmed.
+  if (!room || room.tutorial || g?.phase !== 'over' || !g.winner) return;
   const started = stampMs(room.startedAt);
   const key = [room.code || 'unknown', started || g.seed || 'unknown', g.winner, g.turn.num].join(':');
   const history = loadHistory();
@@ -8227,5 +8383,6 @@ async function resumeOnlineRoom() {
   if (!rejoinedOnline) {
     const saved = loadSolo();
     if (saved?.game && saved.game.phase !== 'over' && myName()) enterSolo(saved);
+    else maybeOfferTutorial();
   }
 })();

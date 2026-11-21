@@ -27,6 +27,7 @@ const CORE = [
   'fireworks.js',
   'audio.js',
   'playtime.js',
+  'tutorial.js',
   'chronicle.js',
   'replay.js',
   'profile.js',
